@@ -1,0 +1,636 @@
+{
+  "favorites": [],
+  "playlists": [
+    {
+      "id": "pl_favorites",
+      "name": "Beğenilen Şarkılar",
+      "description": "Favorilerinize eklediğiniz şarkılar",
+      "songs": []
+    },
+    {
+      "id": "pl_chill",
+      "name": "Rahatlatıcı Parçalar",
+      "description": "Dinlenirken veya odaklanırken dinlenecek müzikler",
+      "songs": []
+    },
+    {
+      "id": "sp_pl_1791648172418",
+      "name": "Today’s Top Hits",
+      "description": "Spotify",
+      "cover": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+      "isSpotify": true,
+      "spotifyId": "37i9dQZF1DXcBWIGoYBM5M",
+      "songs": [
+        {
+          "id": "DLV8FpyxZPQ",
+          "title": "Stop The Wedding!",
+          "channel": "Ashe",
+          "duration": "3:29",
+          "thumbnail": "https://i.ytimg.com/vi/DLV8FpyxZPQ/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDV40mUJKJj91EPnxKiiYCj4PSycw",
+          "spotifyResolved": true
+        },
+        {
+          "id": "3sB4Iv_tM7U",
+          "title": "Nicole Kidman",
+          "channel": "ADÉLA",
+          "duration": "3:42",
+          "thumbnail": "https://i.ytimg.com/vi/3sB4Iv_tM7U/hq2.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLBqIoznXOWEzxu8xFSFPRxvB40Jkw",
+          "spotifyResolved": true
+        },
+        {
+          "id": "B402rKl4bUg",
+          "title": "the cure",
+          "channel": "Olivia Rodrigo",
+          "duration": "5:15",
+          "thumbnail": "https://i.ytimg.com/vi/B402rKl4bUg/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLChUGHDoInlGk-_RdcHRumlm8GIbw",
+          "spotifyResolved": true
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_3",
+          "title": "Patient Zero",
+          "channel": "Taylor Swift",
+          "duration": "3:45",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Patient Zero Taylor Swift",
+          "spotifyResolved": false
+        },
+        {
+          "id": "S02J3QifNog",
+          "title": "Earrings",
+          "channel": "Malcolm Todd",
+          "duration": "2:32",
+          "thumbnail": "https://i.ytimg.com/vi/S02J3QifNog/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDLQwNnuC1xiejJxEvvADohAVrT0w",
+          "spotifyResolved": true
+        },
+        {
+          "id": "fRIhCiUVaKs",
+          "title": "BbY WOW",
+          "channel": "KAROL G, Judeline, rusowsky",
+          "duration": "3:46",
+          "thumbnail": "https://i.ytimg.com/vi/fRIhCiUVaKs/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLCkRiFGxkneYkgSUTpj5LRazeIV2Q",
+          "spotifyResolved": true
+        },
+        {
+          "id": "s3a4OQR-10M",
+          "title": "Loser",
+          "channel": "Tame Impala",
+          "duration": "4:28",
+          "thumbnail": "https://i.ytimg.com/vi/s3a4OQR-10M/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLAEA5DZYoLzRDAt_2deYwvBS-Nz6Q",
+          "spotifyResolved": true
+        },
+        {
+          "id": "82-jTNka3uc",
+          "title": "hate that i made you love me",
+          "channel": "Ariana Grande",
+          "duration": "5:01",
+          "thumbnail": "https://i.ytimg.com/vi/82-jTNka3uc/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDe6G907aSMQiwLY385BeMP0KxUxA",
+          "spotifyResolved": true
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_8",
+          "title": "Dai Dai",
+          "channel": "Shakira, Burna Boy",
+          "duration": "3:43",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Dai Dai Shakira, Burna Boy",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_9",
+          "title": "Animal",
+          "channel": "KATSEYE",
+          "duration": "2:38",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Animal KATSEYE",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_10",
+          "title": "Self Aware",
+          "channel": "Temper City",
+          "duration": "3:00",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Self Aware Temper City",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_11",
+          "title": "Ain't In LA",
+          "channel": "ADÉLA",
+          "duration": "3:04",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Ain't In LA ADÉLA",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_12",
+          "title": "Choosin' Texas",
+          "channel": "Ella Langley",
+          "duration": "3:52",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Choosin' Texas Ella Langley",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_13",
+          "title": "Babydoll",
+          "channel": "Dominic Fike",
+          "duration": "1:37",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Babydoll Dominic Fike",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_14",
+          "title": "Man I Need",
+          "channel": "Olivia Dean",
+          "duration": "3:04",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Man I Need Olivia Dean",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_15",
+          "title": "stupid song",
+          "channel": "Olivia Rodrigo",
+          "duration": "3:29",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "stupid song Olivia Rodrigo",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_16",
+          "title": "Draw You Out - From The Hunger Games: Sunrise on the Reaping - The Album",
+          "channel": "Noah Kahan, The Hunger Games",
+          "duration": "4:15",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Draw You Out - From The Hunger Games: Sunrise on the Reaping - The Album Noah Kahan, The Hunger Games",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_17",
+          "title": "oh yeah?",
+          "channel": "Steve Lacy",
+          "duration": "2:50",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "oh yeah? Steve Lacy",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_18",
+          "title": "Rein Me In (with Olivia Dean)",
+          "channel": "Sam Fender, Olivia Dean",
+          "duration": "5:39",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Rein Me In (with Olivia Dean) Sam Fender, Olivia Dean",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_19",
+          "title": "DtMF",
+          "channel": "Bad Bunny",
+          "duration": "3:57",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "DtMF Bad Bunny",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_20",
+          "title": "Janice STFU",
+          "channel": "Drake",
+          "duration": "3:57",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Janice STFU Drake",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_21",
+          "title": "WHERE IS MY HUSBAND!",
+          "channel": "RAYE",
+          "duration": "3:17",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "WHERE IS MY HUSBAND! RAYE",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_22",
+          "title": "Talk To You (ft. 54 Ultra)",
+          "channel": "ANOTR, 54 Ultra",
+          "duration": "3:11",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Talk To You (ft. 54 Ultra) ANOTR, 54 Ultra",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_23",
+          "title": "STORM II",
+          "channel": "GENER8ION, Yung Lean",
+          "duration": "2:53",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "STORM II GENER8ION, Yung Lean",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_24",
+          "title": "bloodstream",
+          "channel": "Alyssa Grace",
+          "duration": "2:57",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "bloodstream Alyssa Grace",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_25",
+          "title": "petal",
+          "channel": "Ariana Grande",
+          "duration": "3:04",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "petal Ariana Grande",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_26",
+          "title": "Orbiter",
+          "channel": "Noah Kahan",
+          "duration": "4:46",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Orbiter Noah Kahan",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_27",
+          "title": "Risk It All",
+          "channel": "Bruno Mars",
+          "duration": "3:24",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Risk It All Bruno Mars",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_28",
+          "title": "Raindance (feat. Tems)",
+          "channel": "Dave, Tems",
+          "duration": "3:39",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Raindance (feat. Tems) Dave, Tems",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_29",
+          "title": "Solar Eclipse (feat. Don Toliver)",
+          "channel": "Drake, Don Toliver",
+          "duration": "3:38",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Solar Eclipse (feat. Don Toliver) Drake, Don Toliver",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_30",
+          "title": "DAISIES",
+          "channel": "Justin Bieber",
+          "duration": "2:56",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "DAISIES Justin Bieber",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_31",
+          "title": "Midnight Sun",
+          "channel": "Zara Larsson",
+          "duration": "3:09",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Midnight Sun Zara Larsson",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_32",
+          "title": "SaWaDiKa",
+          "channel": "LISA",
+          "duration": "3:08",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "SaWaDiKa LISA",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_33",
+          "title": "So Easy (To Fall In Love)",
+          "channel": "Olivia Dean",
+          "duration": "2:49",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "So Easy (To Fall In Love) Olivia Dean",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_34",
+          "title": "Great Expectation",
+          "channel": "SIENNA SPIRO",
+          "duration": "2:53",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Great Expectation SIENNA SPIRO",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_35",
+          "title": "I Knew It, I Knew You - From \"Toy Story 5\"",
+          "channel": "Taylor Swift",
+          "duration": "2:58",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "I Knew It, I Knew You - From \"Toy Story 5\" Taylor Swift",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_36",
+          "title": "UNETHICAL",
+          "channel": "Faouzia",
+          "duration": "3:39",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "UNETHICAL Faouzia",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_37",
+          "title": "Boston",
+          "channel": "STELLA LEFTY",
+          "duration": "2:50",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Boston STELLA LEFTY",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_38",
+          "title": "Manchild",
+          "channel": "Sabrina Carpenter",
+          "duration": "3:33",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Manchild Sabrina Carpenter",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_39",
+          "title": "Jamaican (Bam Bam)",
+          "channel": "HUGEL, SOLTO (FR)",
+          "duration": "2:36",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Jamaican (Bam Bam) HUGEL, SOLTO (FR)",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_40",
+          "title": "Stateside + Zara Larsson",
+          "channel": "PinkPantheress, Zara Larsson",
+          "duration": "3:04",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Stateside + Zara Larsson PinkPantheress, Zara Larsson",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_41",
+          "title": "Homewrecker",
+          "channel": "sombr",
+          "duration": "3:29",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Homewrecker sombr",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_42",
+          "title": "Babydoll",
+          "channel": "Jamie Miller",
+          "duration": "2:58",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Babydoll Jamie Miller",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_43",
+          "title": "NOBLE",
+          "channel": "F3miii",
+          "duration": "3:05",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "NOBLE F3miii",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_44",
+          "title": "I Just Might",
+          "channel": "Bruno Mars",
+          "duration": "3:32",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "I Just Might Bruno Mars",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_45",
+          "title": "Hootie Frutti",
+          "channel": "KATSEYE",
+          "duration": "2:20",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Hootie Frutti KATSEYE",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_46",
+          "title": "White Keys",
+          "channel": "Dominic Fike",
+          "duration": "2:24",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "White Keys Dominic Fike",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_47",
+          "title": "Be Her",
+          "channel": "Ella Langley",
+          "duration": "3:37",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "Be Her Ella Langley",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_48",
+          "title": "iloveitiloveitiloveit",
+          "channel": "Bella Kay",
+          "duration": "3:03",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "iloveitiloveitiloveit Bella Kay",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_37i9dQZF1DXcBWIGoYBM5M_49",
+          "title": "SWIM",
+          "channel": "BTS",
+          "duration": "2:39",
+          "thumbnail": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+          "spotifySearchQuery": "SWIM BTS",
+          "spotifyResolved": false
+        }
+      ]
+    },
+    {
+      "id": "pl_1791648293857",
+      "name": "dream",
+      "description": "",
+      "songs": []
+    },
+    {
+      "id": "sp_pl_1791648324655",
+      "name": "My Dreams",
+      "description": "Eymen Ertem",
+      "cover": "https://mosaic.scdn.co/640/ab67616d00001e026871126471897b1f6b1c21d7ab67616d00001e026979f46f0767f0aa85672d19ab67616d00001e02a6b37fcf6c61fa2a742540e9ab67616d00001e02d84bb51d4153c401b8562c9f",
+      "isSpotify": true,
+      "spotifyId": "6N1QTQHk6AZ7eqWhBf5RhA",
+      "songs": [
+        {
+          "id": "sp_6N1QTQHk6AZ7eqWhBf5RhA_0",
+          "title": "Biraz Delisin",
+          "channel": "Dolu Kadehi Ters Tut",
+          "duration": "3:52",
+          "thumbnail": "https://mosaic.scdn.co/640/ab67616d00001e026871126471897b1f6b1c21d7ab67616d00001e026979f46f0767f0aa85672d19ab67616d00001e02a6b37fcf6c61fa2a742540e9ab67616d00001e02d84bb51d4153c401b8562c9f",
+          "spotifySearchQuery": "Biraz Delisin Dolu Kadehi Ters Tut",
+          "spotifyResolved": false
+        },
+        {
+          "id": "E6lNDqIcbNU",
+          "title": "Yakamoz Güzeli",
+          "channel": "Yaşlı Amca",
+          "duration": "4:29",
+          "thumbnail": "https://i.ytimg.com/vi/E6lNDqIcbNU/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLALvSa-JOca5iWBcI-YbPsyt59oyw",
+          "spotifyResolved": true
+        },
+        {
+          "id": "sp_6N1QTQHk6AZ7eqWhBf5RhA_2",
+          "title": "KADIKÖY",
+          "channel": "Göksel İpekçi",
+          "duration": "2:27",
+          "thumbnail": "https://mosaic.scdn.co/640/ab67616d00001e026871126471897b1f6b1c21d7ab67616d00001e026979f46f0767f0aa85672d19ab67616d00001e02a6b37fcf6c61fa2a742540e9ab67616d00001e02d84bb51d4153c401b8562c9f",
+          "spotifySearchQuery": "KADIKÖY Göksel İpekçi",
+          "spotifyResolved": false
+        },
+        {
+          "id": "HK9-VEdeP8E",
+          "title": "MECBURUM",
+          "channel": "Göksel İpekçi",
+          "duration": "2:48",
+          "thumbnail": "https://i.ytimg.com/vi/HK9-VEdeP8E/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDkykW2pjt0MDKM4xX5g2Ta3sYQzA",
+          "spotifyResolved": true
+        },
+        {
+          "id": "UHqAMvIvg3o",
+          "title": "O Ben Olamam",
+          "channel": "Mavi Gri",
+          "duration": "5:20",
+          "thumbnail": "https://i.ytimg.com/vi/UHqAMvIvg3o/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDnrYBUkZNn6VEZmsCXKEQyUPiChg",
+          "spotifyResolved": true
+        },
+        {
+          "id": "a8-HHix9r7Y",
+          "title": "Benimle",
+          "channel": "Yaşlı Amca",
+          "duration": "4:02",
+          "thumbnail": "https://i.ytimg.com/vi/a8-HHix9r7Y/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDWWiycNtZuDWz0YQk5Zf1vaxZ_2Q",
+          "spotifyResolved": true
+        },
+        {
+          "id": "Z_J1rAjI0lM",
+          "title": "Yaralarını Ben Sarayım",
+          "channel": "Berk Baysal",
+          "duration": "3:59",
+          "thumbnail": "https://i.ytimg.com/vi/Z_J1rAjI0lM/hq720.jpg?sqp=-oaymwE2CNAFEJQDSFXyq4qpAygIARUAAIhCGAFwAcABBvABAfgB_gmAAtAFigIMCAAQARhsIGwobDAP&rs=AOn4CLDo4GNj8XlIsAvuiV8nSXpTErnkeQ",
+          "spotifyResolved": true
+        },
+        {
+          "id": "xlaETZ1SNE4",
+          "title": "Gece",
+          "channel": "Son Feci Bisiklet",
+          "duration": "3:09",
+          "thumbnail": "https://i.ytimg.com/vi/xlaETZ1SNE4/hq720.jpg?sqp=-oaymwE2CNAFEJQDSFXyq4qpAygIARUAAIhCGAFwAcABBvABAfgB_gmAAtAFigIMCAAQARhlIEQoYjAP&rs=AOn4CLDWsCwxP_B6Duk5ST6JM2qpRD9ADA",
+          "spotifyResolved": true
+        },
+        {
+          "id": "sp_6N1QTQHk6AZ7eqWhBf5RhA_8",
+          "title": "Lafını Balla",
+          "channel": "Dolu Kadehi Ters Tut",
+          "duration": "2:34",
+          "thumbnail": "https://mosaic.scdn.co/640/ab67616d00001e026871126471897b1f6b1c21d7ab67616d00001e026979f46f0767f0aa85672d19ab67616d00001e02a6b37fcf6c61fa2a742540e9ab67616d00001e02d84bb51d4153c401b8562c9f",
+          "spotifySearchQuery": "Lafını Balla Dolu Kadehi Ters Tut",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_6N1QTQHk6AZ7eqWhBf5RhA_9",
+          "title": "KADIN",
+          "channel": "Rafat Hasanlı",
+          "duration": "3:06",
+          "thumbnail": "https://mosaic.scdn.co/640/ab67616d00001e026871126471897b1f6b1c21d7ab67616d00001e026979f46f0767f0aa85672d19ab67616d00001e02a6b37fcf6c61fa2a742540e9ab67616d00001e02d84bb51d4153c401b8562c9f",
+          "spotifySearchQuery": "KADIN Rafat Hasanlı",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_6N1QTQHk6AZ7eqWhBf5RhA_10",
+          "title": "Aldattım",
+          "channel": "Dolu Kadehi Ters Tut",
+          "duration": "3:28",
+          "thumbnail": "https://mosaic.scdn.co/640/ab67616d00001e026871126471897b1f6b1c21d7ab67616d00001e026979f46f0767f0aa85672d19ab67616d00001e02a6b37fcf6c61fa2a742540e9ab67616d00001e02d84bb51d4153c401b8562c9f",
+          "spotifySearchQuery": "Aldattım Dolu Kadehi Ters Tut",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_6N1QTQHk6AZ7eqWhBf5RhA_11",
+          "title": "pVg - Manifest Live Remix",
+          "channel": "manifest, Motive, Pango",
+          "duration": "4:05",
+          "thumbnail": "https://mosaic.scdn.co/640/ab67616d00001e026871126471897b1f6b1c21d7ab67616d00001e026979f46f0767f0aa85672d19ab67616d00001e02a6b37fcf6c61fa2a742540e9ab67616d00001e02d84bb51d4153c401b8562c9f",
+          "spotifySearchQuery": "pVg - Manifest Live Remix manifest, Motive, Pango",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_6N1QTQHk6AZ7eqWhBf5RhA_12",
+          "title": "Enemy (with JID) - from the series Arcane League of Legends",
+          "channel": "Imagine Dragons, JID, Arcane, League of Legends",
+          "duration": "2:53",
+          "thumbnail": "https://mosaic.scdn.co/640/ab67616d00001e026871126471897b1f6b1c21d7ab67616d00001e026979f46f0767f0aa85672d19ab67616d00001e02a6b37fcf6c61fa2a742540e9ab67616d00001e02d84bb51d4153c401b8562c9f",
+          "spotifySearchQuery": "Enemy (with JID) - from the series Arcane League of Legends Imagine Dragons, JID, Arcane, League of Legends",
+          "spotifyResolved": false
+        },
+        {
+          "id": "sp_6N1QTQHk6AZ7eqWhBf5RhA_13",
+          "title": "Warriors",
+          "channel": "Imagine Dragons",
+          "duration": "2:51",
+          "thumbnail": "https://mosaic.scdn.co/640/ab67616d00001e026871126471897b1f6b1c21d7ab67616d00001e026979f46f0767f0aa85672d19ab67616d00001e02a6b37fcf6c61fa2a742540e9ab67616d00001e02d84bb51d4153c401b8562c9f",
+          "spotifySearchQuery": "Warriors Imagine Dragons",
+          "spotifyResolved": false
+        }
+      ]
+    }
+  ],
+  "history": [
+    {
+      "id": "cLygvXtuklI",
+      "title": "Semicenk - Çıkmaz Bir Sokakta",
+      "channel": "Eva Records",
+      "duration": "2:43",
+      "thumbnail": "https://i.ytimg.com/vi/cLygvXtuklI/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDy0tOi7IZvcR8GEYOZHuL9U9EklA"
+    },
+    {
+      "id": "oU7Kjgyu4Ik",
+      "title": "İndirilen Parça (oU7Kjgyu4Ik)",
+      "channel": "Çevrimdışı Ses",
+      "duration": "",
+      "thumbnail": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=240"
+    },
+    {
+      "id": "5NV6Rdv1a3I",
+      "title": "İndirilen Parça (5NV6Rdv1a3I)",
+      "channel": "Çevrimdışı Ses",
+      "duration": "",
+      "thumbnail": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=240"
+    },
+    {
+      "id": "IcXsGn_iFUA",
+      "title": "Türkçe Pop Müzik 2025 Mix 🎶 En Çok Dinlenen Pop Müzik 2024 ️️🎧 En Güzel Şarkılar 2025 🔊",
+      "channel": "Best Club Remix",
+      "duration": "1:24:01",
+      "thumbnail": "https://i.ytimg.com/vi/IcXsGn_iFUA/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBqLzl_8DDgjbl6y9Bhjg6gQg4KgB&rs=AOn4CLCqisB-6EGYAlBDo6n7JtdqgbfP2w&usqp=CBU"
+    }
+  ]
+}

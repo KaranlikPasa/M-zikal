@@ -1,0 +1,10 @@
+# Temporary & Binary files
+bin/
+downloads/
+server.log
+*.tmp
+*.zip
+*.log
+
+# User local data
+data/history.json

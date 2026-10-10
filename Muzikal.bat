@@ -1,0 +1,13 @@
+@echo off
+cd /d "%~dp0"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { if ((Invoke-WebRequest -Uri 'http://127.0.0.1:3456/' -TimeoutSec 1 -UseBasicParsing).StatusCode -eq 200) { exit 0 } } catch { exit 1 }"
+if %errorlevel% neq 0 (
+    powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Start-Process 'C:\Users\Eymen\AppData\Roaming\Antigravity\bin\agy-node.cmd' -ArgumentList 'server.js' -WorkingDirectory '%~dp0' -WindowStyle Hidden"
+    ping 127.0.0.1 -n 3 >nul
+)
+if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" (
+    start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --app="http://127.0.0.1:3456" --window-size=1280,820
+) else (
+    start "" "http://127.0.0.1:3456"
+)
+exit

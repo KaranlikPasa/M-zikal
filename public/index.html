@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Müzikal - Müzik Dinleme Uygulaması</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- SOL YAN MENÜ (SIDEBAR) -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Müzikal</span>
+          <span class="brand-badge">PRO</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <div class="nav-section-label">KEŞFET</div>
+        <button class="nav-item active" data-view="home">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <span>Ana Sayfa</span>
+        </button>
+        <button class="nav-item" data-view="explore">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+          </svg>
+          <span>Trendler & Keşif</span>
+        </button>
+
+        <div class="nav-section-label">KİTAPLIĞIM</div>
+        <button class="nav-item" data-view="favorites">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" class="fav-icon-color">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+          </svg>
+          <span>Beğenilen Şarkılar</span>
+          <span class="badge" id="fav-count-badge">0</span>
+        </button>
+        <button class="nav-item" data-view="downloads">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" class="download-icon-color">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>İndirilenler (Çevrimdışı)</span>
+          <span class="badge" id="downloads-count-badge">0</span>
+        </button>
+        <button class="nav-item" data-view="history">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>Geçmiş</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-playlists">
+        <div class="playlists-header">
+          <span>ÇALMA LİSTELERİ</span>
+          <div class="playlist-header-btns">
+            <button class="btn-icon-subtle btn-sp-small" id="btn-sidebar-spotify" title="Spotify Listesi Aktar">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M12 2C6.477 2 2 6.477 2 12c0 5.524 4.477 10 10 10s10-4.476 10-10c0-5.523-4.477-10-10-10zm4.586 14.424a.625.625 0 0 1-.86.208c-2.355-1.439-5.32-1.764-8.812-.966a.626.626 0 1 1-.278-1.22c3.824-.875 7.1-.508 9.742 1.117a.626.626 0 0 1 .208.861zm1.226-2.723a.782.782 0 0 1-1.077.257c-2.695-1.657-6.805-2.138-9.993-1.17a.783.783 0 1 1-.453-1.498c3.642-1.106 8.19-.57 11.266 1.334a.783.783 0 0 1 .257 1.077zm.106-2.837C14.69 9.07 9.38 8.9 6.295 9.835a.939.939 0 1 1-.546-1.796c3.542-1.076 9.42-.876 13.14 1.334a.94.94 0 0 1-3.971 1.491z"/>
+              </svg>
+            </button>
+            <button class="btn-icon-subtle" id="btn-new-playlist" title="Yeni Liste Oluştur">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="playlists-list" id="sidebar-playlist-items">
+          <!-- Dynamic Playlists -->
+        </div>
+      </div>
+
+      <!-- DISK D STORAGE INFO BADGE -->
+      <div class="storage-info-box">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+          <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+          <line x1="6" y1="6" x2="6.01" y2="6"></line>
+          <line x1="6" y1="18" x2="6.01" y2="18"></line>
+        </svg>
+        <span>Konum: D:\müzikal (236 GB Boş)</span>
+      </div>
+
+      <!-- MINI NOW PLAYING CARD IN SIDEBAR -->
+      <div class="sidebar-now-playing" id="sidebar-now-playing" style="display: none;">
+        <img src="" id="sidebar-np-thumb" alt="Artwork" class="sidebar-np-thumb">
+        <div class="sidebar-np-info">
+          <div class="sidebar-np-title" id="sidebar-np-title">Şarkı Başlığı</div>
+          <div class="sidebar-np-artist" id="sidebar-np-artist">Sanatçı</div>
+        </div>
+        <div class="audio-wave-mini">
+          <span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ANA İÇERİK ALANI (MAIN CONTENT) -->
+    <main class="main-content">
+      <!-- ÜST BAŞLIK VE ARAMA ÇUBUĞU -->
+      <header class="topbar">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" class="search-icon">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="search-input" placeholder="Şarkı, sanatçı, albüm veya video ara..." autocomplete="off">
+          <button class="btn-clear-search" id="btn-clear-search" style="display: none;">✕</button>
+        </div>
+
+        <div class="topbar-actions">
+          <button class="btn-pill btn-spotify-action" id="btn-open-spotify-modal" title="Spotify'dan Liste Aktar">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <path d="M12 2C6.477 2 2 6.477 2 12c0 5.524 4.477 10 10 10s10-4.476 10-10c0-5.523-4.477-10-10-10zm4.586 14.424a.625.625 0 0 1-.86.208c-2.355-1.439-5.32-1.764-8.812-.966a.626.626 0 1 1-.278-1.22c3.824-.875 7.1-.508 9.742 1.117a.626.626 0 0 1 .208.861zm1.226-2.723a.782.782 0 0 1-1.077.257c-2.695-1.657-6.805-2.138-9.993-1.17a.783.783 0 1 1-.453-1.498c3.642-1.106 8.19-.57 11.266 1.334a.783.783 0 0 1 .257 1.077zm.106-2.837C14.69 9.07 9.38 8.9 6.295 9.835a.939.939 0 1 1-.546-1.796c3.542-1.076 9.42-.876 13.14 1.334a.94.94 0 0 1-3.971 1.491z"/>
+            </svg>
+            <span>Spotify'dan Aktar</span>
+          </button>
+          <button class="btn-pill" id="btn-open-queue" title="Çalma Sırası">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line>
+              <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+            <span>Sıra</span>
+            <span class="queue-badge" id="queue-badge">0</span>
+          </button>
+          <button class="btn-pill" id="btn-toggle-video-view" title="Klip / Video Modu">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="23 7 16 12 23 17 23 7"></polygon>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+            </svg>
+            <span id="btn-video-text">Klip Modu</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- KATEGORİ ETİKETLERİ (GENRE CHIPS) -->
+      <div class="category-chips" id="category-chips">
+        <button class="chip active" data-genre="trendler">🔥 Trendler</button>
+        <button class="chip" data-genre="turkce-pop">🇹🇷 Türkçe Pop</button>
+        <button class="chip" data-genre="turkce-rap">🎤 Türkçe Rap</button>
+        <button class="chip" data-genre="rock">🎸 Rock & Metal</button>
+        <button class="chip" data-genre="akustik">☕ Akustik & Chill</button>
+        <button class="chip" data-genre="lofi">🎧 Lofi Beats</button>
+        <button class="chip" data-genre="global">🌍 Global Top 50</button>
+      </div>
+
+      <!-- İÇERİK GÖRÜNÜMÜ (SCROLLABLE VIEW) -->
+      <div class="content-scroll" id="content-scroll">
+        <!-- VİDEO MODU POPUP / FLOAT ALANI -->
+        <div class="video-container" id="video-container">
+          <div class="video-header">
+            <span class="video-title" id="video-now-title">Oynatılıyor</span>
+            <button class="btn-icon-subtle" id="btn-close-video" title="Gizle">✕</button>
+          </div>
+          <div class="video-wrapper">
+            <div id="yt-player"></div>
+          </div>
+        </div>
+
+        <!-- HERO BANNER -->
+        <section class="hero-banner" id="hero-banner">
+          <div class="hero-content">
+            <span class="hero-tag">MÜZİKAL ÇALAR</span>
+            <h1 class="hero-title" id="hero-title">Müziğin Ritmini Yakala</h1>
+            <p class="hero-subtitle">Milyonlarca şarkıyı doğrudan ara, Spotify listelerini aktar ve çevrimdışı dinlemek için D diskine indir.</p>
+            <div class="hero-buttons">
+              <button class="btn-primary" id="btn-hero-play">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <span>Hemen Başlat</span>
+              </button>
+              <button class="btn-secondary" id="btn-hero-spotify">
+                <span>Spotify Listesi Aktar</span>
+              </button>
+            </div>
+          </div>
+          <div class="hero-art">
+            <div class="vinyl-disc" id="hero-vinyl">
+              <div class="vinyl-groove"></div>
+              <div class="vinyl-center"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- BÖLÜM BAŞLIĞI -->
+        <div class="section-header">
+          <div>
+            <h2 class="section-title" id="current-section-title">En Popüler Şarkılar</h2>
+            <p class="section-subtitle" id="current-section-desc">Günün en çok dinlenen hit parçaları</p>
+          </div>
+          <div class="section-actions" id="section-actions"></div>
+        </div>
+
+        <!-- ŞARKI LİSTESİ / IZGARASI -->
+        <div class="songs-grid" id="songs-grid">
+          <!-- Dynamic Song Cards -->
+        </div>
+
+        <!-- YÜKLENİYOR VE BOŞ DURUM -->
+        <div class="state-container" id="loading-state" style="display: none;">
+          <div class="spinner"></div>
+          <p id="loading-text">Müzikler aranıyor ve yükleniyor...</p>
+        </div>
+
+        <div class="state-container" id="empty-state" style="display: none;">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 8v4"></path>
+            <path d="M12 16h.01"></path>
+          </svg>
+          <h3 id="empty-title">Henüz şarkı bulunamadı</h3>
+          <p id="empty-desc">Farklı bir arama terimi deneyebilir veya kategorileri gezinebilirsiniz.</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- SAĞ YAN PANEL: ÇALMA SIRASI (QUEUE DRAWER) -->
+    <aside class="queue-drawer" id="queue-drawer">
+      <div class="queue-header">
+        <h3>Çalma Sırası</h3>
+        <button class="btn-icon-subtle" id="btn-close-queue">✕</button>
+      </div>
+      <div class="queue-now-playing" id="queue-np-box">
+        <span class="queue-subhead">ŞU ANDA ÇALINIYOR</span>
+        <div class="queue-np-item" id="queue-np-item">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+      <div class="queue-list-section">
+        <div class="queue-subhead-row">
+          <span class="queue-subhead">SIRADAKİLER</span>
+          <button class="btn-text-subtle" id="btn-clear-queue">Temizle</button>
+        </div>
+        <div class="queue-items" id="queue-items">
+          <!-- Queued songs -->
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ALT MÜZİK ÇALAR ÇUBUĞU (PLAYER BAR) -->
+  <footer class="player-bar">
+    <!-- SOL: ÇALAN ŞARKI BİLGİSİ -->
+    <div class="player-track-info">
+      <div class="player-thumb-wrapper" id="player-thumb-wrapper">
+        <img src="https://via.placeholder.com/60" id="player-thumb" alt="Albüm Kapağı">
+        <div class="playing-indicator" id="playing-indicator">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="player-text">
+        <div class="player-title" id="player-title">Bir şarkı seçin</div>
+        <div class="player-artist" id="player-artist">Müzikal Hazır</div>
+        <span class="offline-badge" id="player-offline-badge" style="display: none;">💾 Çevrimdışı (D Diskinde)</span>
+      </div>
+      <button class="btn-icon-subtle btn-heart" id="player-fav-btn" title="Favorilere Ekle">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" id="player-fav-icon">
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- ORTA: OYNATMA KONTROLLERİ VE İLERLEME ÇUBUĞU -->
+    <div class="player-controls-center">
+      <div class="player-buttons">
+        <button class="btn-ctrl" id="btn-shuffle" title="Karışık Çal">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 3 21 3 21 8"></polyline>
+            <line x1="4" y1="20" x2="21" y2="3"></line>
+            <polyline points="21 16 21 21 16 21"></polyline>
+            <line x1="15" y1="15" x2="21" y2="21"></line>
+            <line x1="4" y1="4" x2="9" y2="9"></line>
+          </svg>
+        </button>
+        <button class="btn-ctrl" id="btn-prev" title="Önceki Şarkı">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <polygon points="19 20 9 12 19 4 19 20"></polygon>
+            <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5"></line>
+          </svg>
+        </button>
+        <button class="btn-play-pause" id="btn-play-pause" title="Oynat / Duraklat">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" id="play-pause-icon">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+        </button>
+        <button class="btn-ctrl" id="btn-next" title="Sonraki Şarkı">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <polygon points="5 4 15 12 5 20 5 4"></polygon>
+            <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5"></line>
+          </svg>
+        </button>
+        <button class="btn-ctrl" id="btn-repeat" title="Tekrar Çal">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="17 1 21 5 17 9"></polyline>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+            <polyline points="7 23 3 19 7 15"></polyline>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="progress-bar-container">
+        <span class="time-label" id="current-time">0:00</span>
+        <div class="progress-bar-track" id="progress-bar-track">
+          <div class="progress-bar-fill" id="progress-bar-fill"></div>
+          <div class="progress-bar-handle" id="progress-bar-handle"></div>
+        </div>
+        <span class="time-label" id="total-duration">0:00</span>
+      </div>
+    </div>
+
+    <!-- SAĞ: SES SEVİYESİ VE DİĞER KONTROLLER -->
+    <div class="player-controls-right">
+      <div class="volume-container">
+        <button class="btn-ctrl-sm" id="btn-volume-icon" title="Sesi Kapat / Aç">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" id="volume-svg">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+        </button>
+        <div class="volume-slider-track" id="volume-slider-track">
+          <div class="volume-slider-fill" id="volume-slider-fill" style="width: 80%;"></div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- YENİ ÇALMA LİSTESİ MODAL -->
+  <div class="modal-overlay" id="playlist-modal" style="display: none;">
+    <div class="modal-box">
+      <h3>Yeni Çalma Listesi</h3>
+      <p>Yeni bir müzik koleksiyonu oluşturun.</p>
+      <input type="text" id="modal-pl-name" placeholder="Çalma listesi adı (Örn: Favori Şarkılarım)" maxlength="50">
+      <textarea id="modal-pl-desc" placeholder="Açıklama (isteğe bağlı)" rows="2"></textarea>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btn-cancel-modal">İptal</button>
+        <button class="btn-primary" id="btn-save-modal">Oluştur</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SPOTIFY LİSTESİ AKTARMA MODAL -->
+  <div class="modal-overlay" id="spotify-modal" style="display: none;">
+    <div class="modal-box modal-box-spotify">
+      <div class="modal-spotify-header">
+        <div class="spotify-logo-badge">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="#1ed760">
+            <path d="M12 2C6.477 2 2 6.477 2 12c0 5.524 4.477 10 10 10s10-4.476 10-10c0-5.523-4.477-10-10-10zm4.586 14.424a.625.625 0 0 1-.86.208c-2.355-1.439-5.32-1.764-8.812-.966a.626.626 0 1 1-.278-1.22c3.824-.875 7.1-.508 9.742 1.117a.626.626 0 0 1 .208.861zm1.226-2.723a.782.782 0 0 1-1.077.257c-2.695-1.657-6.805-2.138-9.993-1.17a.783.783 0 1 1-.453-1.498c3.642-1.106 8.19-.57 11.266 1.334a.783.783 0 0 1 .257 1.077zm.106-2.837C14.69 9.07 9.38 8.9 6.295 9.835a.939.939 0 1 1-.546-1.796c3.542-1.076 9.42-.876 13.14 1.334a.94.94 0 0 1-3.971 1.491z"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Spotify Çalma Listesi Aktar</h3>
+          <p>Spotify'daki çalma listesi bağlantınızı yapıştırın, Müzikal'e anında aktarılsın.</p>
+        </div>
+      </div>
+      <input type="text" id="modal-sp-url" placeholder="https://open.spotify.com/playlist/... veya bağlantıyı yapıştırın" autocomplete="off">
+      <div class="storage-tip">
+        💡 İçe aktarılan şarkılar doğrudan dinlenebilir ve tek tıkla <strong>D:\müzikal\downloads</strong> klasörüne çevrimdışı indirilebilir.
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btn-cancel-sp-modal">İptal</button>
+        <button class="btn-primary btn-spotify-green" id="btn-import-sp-modal">
+          <span id="sp-btn-text">Listeyi İçe Aktar</span>
+          <div class="spinner-sm" id="sp-spinner" style="display: none;"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NATIVE HTML5 AUDIO ELEMENT FOR OFFLINE DOWNLOADED TRACKS -->
+  <audio id="local-audio-player" preload="metadata"></audio>
+
+  <!-- BİLDİRİM TOAST MESAJI -->
+  <div class="toast-notification" id="toast-notification"></div>
+
+  <!-- YOUTUBE IFRAME API SCRIPT -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="app.js"></script>
+</body>
+</html>
