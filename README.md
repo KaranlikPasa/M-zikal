@@ -7,15 +7,16 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1ed760?style=for-the-badge&logo=android)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.2.9-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.3.0-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
-- 📦 **Windows Otomatik Kurulum & Güncelleme Programı (v1.2.9):** Artık zip açmakla uğraşmak istemeyenler için tek tıkla kurulan `Muzikal-Setup.exe`! Masaüstü ve Başlat Menüsü kısayollarını otomatik oluşturur, Windows Denetim Masası / Program Ekle-Kaldır'a entegre olur. Uygulama içi tek tıkla sessiz güncelleme alabilir ve çalma listeleriniz ile indirdiğiniz şarkıları her zaman güvende tutar.
-- 🎧 **Android Kesintisiz Arka Planda Çalma & Kilit Ekranı Kumandası (v1.2.9):** Uygulama simge durumuna küçültüldüğünde, ekran kilitlendiğinde veya başka uygulamalara geçildiğinde müzik kesilmeden çalmaya devam eder. Bildirim çubuğunda ve kilit ekranında şarkı kapağı, parça bilgisi, Önceki, Oynat/Duraklat, Sonraki ve Kapat kumandaları yer alır.
+- 🎤 **Spotify Tarzı Canlı Şarkı Sözleri (v1.3.0):** Şarkı çalarken tek tıkla açılan şık koyu cam panelde gerçek zamanlı karaoke şarkı sözleri! Şarkı aktıkça okunan satır parıldayarak beyaz renkte öne çıkar ve ekran otomatik kayar. Dilediğiniz söz satırına dokunarak şarkıyı doğrudan o saniyeye atlatabilirsiniz. (Sözü bulunmayan şarkılarda gereksiz kalabalık yapmaz).
+- 🎧 **Android Kusursuz Arka Planda Çalma & Kilit Ekranı Kumandası (v1.3.0):** Uygulama simge durumuna küçültüldüğünde, ekran kilitlendiğinde veya başka uygulamalara geçildiğinde müzik asla kesilmez. Yerel `MediaSession` ve `MediaWebView` mimarisiyle telefonun uyku moduna geçmesi engellenir. Kilit ekranında ve bildirim çubuğunda şarkı kapağı ile Önceki, Oynat/Duraklat, Sonraki, Kapat kumandaları yer alır.
+- 📦 **Windows Otomatik Kurulum & Güncelleme Programı:** Artık zip açmakla uğraşmak istemeyenler için tek tıkla kurulan `Muzikal-Setup.exe`! Masaüstü ve Başlat Menüsü kısayollarını otomatik oluşturur, Windows Denetim Masası / Program Ekle-Kaldır'a entegre olur. Uygulama içi tek tıkla sessiz güncelleme alabilir ve çalma listeleriniz ile indirdiğiniz şarkıları her zaman güvende tutar.
 - 🚀 **Akıllı Hibrit Bağlantı & Evrensel Destek:** Uygulama evdeki PC'ye bağlıyken anlık canlı senkronizasyonla çalışır; ev dışındayken, mobil veride veya farklı cihazlarda (Huawei, Samsung, Xiaomi) yerel InnerTube motoru ve gömülü trend parçalarla 100% bağımsız çalışır. Boş ekran ve yükleme sorunları kökten çözüldü.
 - 📱 **Yan Menü Çalar Kartı & Güvenli Alan İyileştirmesi:** Menü açıldığında en altta çalan şarkı kartının telefonun sistem tuşlarına (`||| O <`) sıkışması engellendi; 90px güvenli alt boşlukla ferah konuma getirildi.
 - 🔎 **Akıllı Arama Görünümü & Kategori Filtresi Optimizasyonu:** Arama yapıldığında üstteki kategori/trend etiketleri otomatik olarak gizlenerek arama sonuçlarına maksimum alan açılır; kategori etiketleri sadece ana ekranda görünür.
@@ -40,26 +41,26 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 
 | Platform | Dosya | Açıklama |
 | :--- | :--- | :--- |
-| **Windows (Kurulumlu - Önerilen)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.9/Muzikal-Setup.exe) | **Kolay Kurulum:** Masaüstü ve başlat simgeleri, otomatik güncelleme desteği, Denetim Masası kaldırma kaydı. |
-| **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.9/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.9/Muzikal.apk) | Arka planda çalma, bildirim kumandası, evrensel cihaz desteği (Huawei, Samsung vb.) içeren en güncel APK. |
+| **Windows (Kurulumlu - Önerilen)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.3.0/Muzikal-Setup.exe) | **Kolay Kurulum:** Masaüstü ve başlat simgeleri, otomatik güncelleme desteği, Denetim Masası kaldırma kaydı. |
+| **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.3.0/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.3.0/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, Spotify tarzı canlı şarkı sözleri içeren en güncel APK. |
 
 ---
 
 ## 🚀 Başlangıç & Kullanım
 
 ### 🪟 Windows (Kurulum Dosyası ile - En Kolay)
-1. [`Muzikal-Setup.exe`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.9/Muzikal-Setup.exe) dosyasını indirin ve çalıştırın.
+1. [`Muzikal-Setup.exe`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.3.0/Muzikal-Setup.exe) dosyasını indirin ve çalıştırın.
 2. "Kur" butonuna tıklayın. Masaüstünüze ve Başlat menünüze Müzikal simgesi otomatik eklenir.
 3. Yeni güncellemeler çıktığında uygulama içinden tek tıkla arka planda sessizce güncellenir; şarkılarınız ve listeleriniz korunur.
 
 ### 🪟 Windows (Taşınabilir / Portable Zip)
-1. [`Muzikal-Windows-x64.zip`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.9/Muzikal-Windows-x64.zip) dosyasını indirin ve bir klasöre çıkartın.
+1. [`Muzikal-Windows-x64.zip`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.3.0/Muzikal-Windows-x64.zip) dosyasını indirin ve bir klasöre çıkartın.
 2. Klasör içindeki **`Muzikal.bat`** (veya arka planda sessiz açılması için **`Muzikal.vbs`**) dosyasına çift tıklayın.
 
 ### 📱 Android
-1. [`Muzikal.apk`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.9/Muzikal.apk) dosyasını telefonunuza indirip yükleyin.
-2. Müzik dinlerken uygulamadan çıksanız veya ekranı kapatsanız bile müzik arka planda çalmaya devam eder; bildirim panelinden şarkıyı kontrol edebilirsiniz.
+1. [`Muzikal.apk`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.3.0/Muzikal.apk) dosyasını telefonunuza indirip yükleyin.
+2. Müzik dinlerken uygulamadan çıksanız veya ekranı kapatsanız bile müzik arka planda kesintisiz çalar; bildirim panelinden veya kilit ekranından şarkıyı kumanda edebilir, şarkı sözlerini canlı karaoke olarak takip edebilirsiniz.
 
 ---
 

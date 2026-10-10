@@ -10,8 +10,8 @@ const { spawn } = require('child_process');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = 3456;
-const APP_VERSION = '1.2.9';
-const APP_VERSION_CODE = 11;
+const APP_VERSION = '1.3.0';
+const APP_VERSION_CODE = 12;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -452,6 +452,62 @@ const server = http.createServer(async (req, res) => {
       const results = await searchYouTube(query);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ genre, results }));
+      return;
+    }
+
+    // 2.1 Lyrics API (Spotify-style synchronized & plain lyrics via LRCLIB)
+    if (pathname === '/api/lyrics' && req.method === 'GET') {
+      const rawTitle = (parsedUrl.searchParams.get('title') || '').trim();
+      const rawArtist = (parsedUrl.searchParams.get('artist') || '').trim();
+
+      // Clean up common video/clutter suffixes
+      let cleanTitle = rawTitle
+        .replace(/\s*[\[\(](official|video|klip|audio|lyric|remix|feat|ft\.|prod|hd|4k|hq|remastered|video klip)[^\)\]]*[\)\]]/gi, '')
+        .replace(/[-–—]\s*(official|video|klip|audio|lyric).*/gi, '')
+        .trim();
+
+      let searchArtist = rawArtist;
+      if (cleanTitle.includes(' - ')) {
+        const parts = cleanTitle.split(' - ');
+        if (!searchArtist || searchArtist === 'Bilinmeyen Sanatçı' || searchArtist.toLowerCase().includes('topic')) {
+          searchArtist = parts[0].trim();
+        }
+        cleanTitle = parts.slice(1).join(' - ').trim();
+      }
+
+      const q = `${searchArtist} ${cleanTitle}`.trim();
+      if (!q) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Başlık belirtilmedi' }));
+        return;
+      }
+
+      try {
+        const lrclibUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(q)}`;
+        const fetchRes = await fetch(lrclibUrl, {
+          headers: { 'User-Agent': 'Muzikal/1.3.0 (https://github.com/KaranlikPasa/M-zikal)' }
+        });
+        const items = await fetchRes.json();
+        if (Array.isArray(items) && items.length > 0) {
+          const item = items[0];
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            trackName: item.trackName,
+            artistName: item.artistName,
+            albumName: item.albumName,
+            duration: item.duration,
+            plainLyrics: item.plainLyrics || null,
+            syncedLyrics: item.syncedLyrics || null
+          }));
+          return;
+        }
+      } catch (e) {
+        console.warn('Lyrics fetch error:', e.message);
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, message: 'Şarkı sözü bulunamadı' }));
       return;
     }
 

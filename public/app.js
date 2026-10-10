@@ -1,5 +1,24 @@
 // --- MÜZİKAL CLIENT APPLICATION WITH SPOTIFY & OFFLINE DOWNLOADS ---
 
+// --- BACKGROUND PLAYBACK PROTECTION & VISIBILITY SPOOFING ---
+let userRequestedPause = false;
+try {
+  Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+  Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+  Object.defineProperty(document, 'webkitVisibilityState', { get: () => 'visible', configurable: true });
+} catch (e) {}
+
+['visibilitychange', 'webkitvisibilitychange', 'blur'].forEach(evtName => {
+  window.addEventListener(evtName, (e) => {
+    if (e.target === window || e.target === document) {
+      e.stopImmediatePropagation();
+    }
+  }, true);
+  document.addEventListener(evtName, (e) => {
+    e.stopImmediatePropagation();
+  }, true);
+});
+
 const state = {
   currentSong: null,
   currentPlaylist: [],
@@ -16,6 +35,10 @@ const state = {
   isOfflinePlaying: false,
   downloadedIds: new Set(),
   activeDownloads: new Map(),
+  lyrics: null,
+  syncedLyrics: [],
+  isLyricsOpen: false,
+  currentLyricIndex: -1,
   library: {
     favorites: [],
     playlists: [],
@@ -165,7 +188,22 @@ const elements = {
   mfpBtnRepeat: document.getElementById('mfp-btn-repeat'),
   mfpBtnDownload: document.getElementById('mfp-btn-download'),
   mfpDownloadLabel: document.getElementById('mfp-download-label'),
-  mfpBtnQueueToggle: document.getElementById('mfp-btn-queue-toggle')
+  mfpBtnQueueToggle: document.getElementById('mfp-btn-queue-toggle'),
+  mfpBtnLyrics: document.getElementById('mfp-btn-lyrics'),
+
+  // Lyrics Elements
+  btnLyrics: document.getElementById('btn-lyrics'),
+  btnQueueToggle: document.getElementById('btn-queue-toggle'),
+  lyricsOverlay: document.getElementById('lyrics-overlay'),
+  lyricsTitle: document.getElementById('lyrics-title'),
+  lyricsArtist: document.getElementById('lyrics-artist'),
+  lyricsBadge: document.getElementById('lyrics-badge'),
+  btnCloseLyrics: document.getElementById('btn-close-lyrics'),
+  lyricsBody: document.getElementById('lyrics-body'),
+  lyricsLines: document.getElementById('lyrics-lines'),
+  lyricsEmpty: document.getElementById('lyrics-empty'),
+  lyricsLoading: document.getElementById('lyrics-loading'),
+  sidebarAppVer: document.getElementById('sidebar-app-ver')
 };
 
 // --- YOUTUBE IFRAME API INITIALIZATION ---
@@ -241,6 +279,13 @@ async function apiFetch(endpoint, options = {}) {
       }
       if (endpoint.startsWith('/api/library') && (!options.method || options.method === 'GET')) {
         const resStr = window.MuzikalNative.getLibrary();
+        if (resStr) return JSON.parse(resStr);
+      }
+      if (endpoint.startsWith('/api/lyrics') && typeof window.MuzikalNative.getLyrics === 'function') {
+        const dummy = new URL('http://local' + endpoint);
+        const title = dummy.searchParams.get('title') || '';
+        const artist = dummy.searchParams.get('artist') || '';
+        const resStr = window.MuzikalNative.getLyrics(title, artist);
         if (resStr) return JSON.parse(resStr);
       }
     } catch (err) {
@@ -329,6 +374,7 @@ function onPlayerStateChange(event) {
   if (state.isOfflinePlaying) return; // Managed by localAudio
 
   if (event.data === YT.PlayerState.PLAYING) {
+    userRequestedPause = false;
     state.isPlaying = true;
     updatePlayPauseButton();
     startProgressTracker();
@@ -336,6 +382,17 @@ function onPlayerStateChange(event) {
     elements.playingIndicator.classList.add('active');
     updateNativePlaybackState(state.currentSong, true);
   } else if (event.data === YT.PlayerState.PAUSED) {
+    // If YouTube paused itself due to backgrounding/screen lock, keep playing!
+    if (!userRequestedPause && state.currentSong && state.isPlaying) {
+      console.log('Background auto-pause intercepted! Resuming playback...');
+      setTimeout(() => {
+        if (!userRequestedPause && ytReady && ytPlayer && ytPlayer.playVideo) {
+          ytPlayer.playVideo();
+        }
+      }, 50);
+      return;
+    }
+
     state.isPlaying = false;
     updatePlayPauseButton();
     elements.heroVinyl.classList.add('paused');
@@ -425,6 +482,7 @@ if (localAudio) {
     elements.totalDuration.textContent = formatTime(duration);
 
     if (duration > 0) {
+      syncLyricsWithTime(current);
       const pct = (current / duration) * 100;
       elements.progressBarFill.style.width = `${pct}%`;
       elements.progressBarHandle.style.left = `${pct}%`;
@@ -557,6 +615,7 @@ async function playSong(song, playlist = null, index = -1) {
 
   updateNativePlaybackState(song, true);
   updateQueueDrawer();
+  fetchLyricsForSong(song);
 }
 
 function togglePlayPause() {
@@ -569,15 +628,19 @@ function togglePlayPause() {
 
   if (state.isOfflinePlaying) {
     if (localAudio.paused) {
+      userRequestedPause = false;
       localAudio.play();
     } else {
+      userRequestedPause = true;
       localAudio.pause();
     }
   } else {
     if (!ytReady || !ytPlayer) return;
     if (state.isPlaying) {
+      userRequestedPause = true;
       ytPlayer.pauseVideo();
     } else {
+      userRequestedPause = false;
       ytPlayer.playVideo();
     }
   }
@@ -768,6 +831,7 @@ function startProgressTracker() {
       elements.totalDuration.textContent = formatTime(duration);
 
       if (duration > 0) {
+        syncLyricsWithTime(current);
         const pct = (current / duration) * 100;
         elements.progressBarFill.style.width = `${pct}%`;
         elements.progressBarHandle.style.left = `${pct}%`;
@@ -1675,12 +1739,46 @@ function setupEventListeners() {
     if (state.currentSong) toggleFavorite(state.currentSong);
   });
 
+  // Lyrics toggle
+  const toggleLyrics = () => {
+    state.isLyricsOpen = !state.isLyricsOpen;
+    if (elements.lyricsOverlay) {
+      elements.lyricsOverlay.classList.toggle('active', state.isLyricsOpen);
+    }
+    if (elements.btnLyrics) {
+      elements.btnLyrics.classList.toggle('active-accent', state.isLyricsOpen);
+    }
+    if (elements.mfpBtnLyrics) {
+      elements.mfpBtnLyrics.classList.toggle('active-accent', state.isLyricsOpen);
+    }
+    if (state.isLyricsOpen && state.currentSong) {
+      renderLyricsForCurrentSong();
+    }
+  };
+
+  if (elements.btnLyrics) elements.btnLyrics.addEventListener('click', toggleLyrics);
+  if (elements.mfpBtnLyrics) elements.mfpBtnLyrics.addEventListener('click', toggleLyrics);
+  if (elements.btnCloseLyrics) {
+    elements.btnCloseLyrics.addEventListener('click', () => {
+      state.isLyricsOpen = false;
+      if (elements.lyricsOverlay) elements.lyricsOverlay.classList.remove('active');
+      if (elements.btnLyrics) elements.btnLyrics.classList.remove('active-accent');
+      if (elements.mfpBtnLyrics) elements.mfpBtnLyrics.classList.remove('active-accent');
+    });
+  }
+
   // Queue drawer toggle
   elements.btnOpenQueue.addEventListener('click', () => {
     elements.queueDrawer.classList.toggle('open');
     elements.btnOpenQueue.classList.toggle('active');
     updateQueueDrawer();
   });
+  if (elements.btnQueueToggle) {
+    elements.btnQueueToggle.addEventListener('click', () => {
+      elements.queueDrawer.classList.toggle('open');
+      updateQueueDrawer();
+    });
+  }
   elements.btnCloseQueue.addEventListener('click', () => {
     elements.queueDrawer.classList.remove('open');
     elements.btnOpenQueue.classList.remove('active');
@@ -1821,8 +1919,170 @@ function showToast(msg) {
   }, 2600);
 }
 
+// --- SPOTIFY-STYLE LYRICS LOGIC ---
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>'"]/g, tag => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;'
+  }[tag] || tag));
+}
+
+function parseLrc(lrcText) {
+  if (!lrcText) return [];
+  const lines = lrcText.split('\n');
+  const result = [];
+  const timeRegex = /\[(\d{2}):(\d{2}(?:\.\d{2,3})?)\](.*)/;
+
+  for (const line of lines) {
+    const match = timeRegex.exec(line.trim());
+    if (match) {
+      const min = parseInt(match[1], 10);
+      const sec = parseFloat(match[2]);
+      const text = match[3].trim();
+      if (text) {
+        result.push({ time: (min * 60) + sec, text });
+      }
+    }
+  }
+  return result.sort((a, b) => a.time - b.time);
+}
+
+async function fetchLyricsForSong(song) {
+  if (!song) return;
+  state.lyrics = null;
+  state.syncedLyrics = [];
+  state.currentLyricIndex = -1;
+
+  if (state.isLyricsOpen) {
+    showLyricsLoading();
+  }
+
+  try {
+    const cleanTitle = song.title || '';
+    const cleanArtist = song.channel || '';
+    const res = await apiFetch(`/api/lyrics?title=${encodeURIComponent(cleanTitle)}&artist=${encodeURIComponent(cleanArtist)}`);
+
+    if (res && res.success) {
+      state.lyrics = res;
+      if (res.syncedLyrics) {
+        state.syncedLyrics = parseLrc(res.syncedLyrics);
+      }
+    } else {
+      state.lyrics = null;
+      state.syncedLyrics = [];
+    }
+  } catch (err) {
+    state.lyrics = null;
+    state.syncedLyrics = [];
+  }
+
+  if (state.isLyricsOpen) {
+    renderLyricsForCurrentSong();
+  }
+}
+
+function showLyricsLoading() {
+  if (!elements.lyricsOverlay) return;
+  elements.lyricsTitle.textContent = state.currentSong ? state.currentSong.title : 'Şarkı Sözleri';
+  elements.lyricsArtist.textContent = state.currentSong ? state.currentSong.channel : '';
+  elements.lyricsLines.innerHTML = '';
+  elements.lyricsEmpty.style.display = 'none';
+  elements.lyricsLoading.style.display = 'flex';
+}
+
+function renderLyricsForCurrentSong() {
+  if (!elements.lyricsOverlay || !state.currentSong) return;
+
+  elements.lyricsTitle.textContent = state.currentSong.title;
+  elements.lyricsArtist.textContent = state.currentSong.channel;
+  elements.lyricsLoading.style.display = 'none';
+
+  if (!state.lyrics) {
+    elements.lyricsBadge.textContent = 'Şarkı Sözü';
+    elements.lyricsLines.innerHTML = '';
+    elements.lyricsEmpty.style.display = 'flex';
+    return;
+  }
+
+  elements.lyricsEmpty.style.display = 'none';
+
+  if (state.syncedLyrics && state.syncedLyrics.length > 0) {
+    elements.lyricsBadge.textContent = 'Canlı Senkronize';
+    elements.lyricsLines.innerHTML = state.syncedLyrics.map((l, i) => `
+      <div class="lyric-line" data-index="${i}" data-time="${l.time}">
+        ${escapeHtml(l.text)}
+      </div>
+    `).join('');
+
+    elements.lyricsLines.querySelectorAll('.lyric-line').forEach(el => {
+      el.addEventListener('click', () => {
+        const time = parseFloat(el.dataset.time);
+        if (!isNaN(time)) {
+          if (state.isOfflinePlaying) {
+            localAudio.currentTime = time;
+          } else if (ytReady && ytPlayer && ytPlayer.seekTo) {
+            ytPlayer.seekTo(time, true);
+          }
+          syncLyricsWithTime(time, true);
+        }
+      });
+    });
+
+    const currentTime = state.isOfflinePlaying
+      ? (localAudio.currentTime || 0)
+      : ((ytReady && ytPlayer && ytPlayer.getCurrentTime) ? ytPlayer.getCurrentTime() : 0);
+    syncLyricsWithTime(currentTime, true);
+  } else if (state.lyrics.plainLyrics) {
+    elements.lyricsBadge.textContent = 'Şarkı Sözleri';
+    const lines = state.lyrics.plainLyrics.split('\n');
+    elements.lyricsLines.innerHTML = lines.map(line => {
+      const trimmed = line.trim();
+      return trimmed ? `<div class="lyric-line past">${escapeHtml(trimmed)}</div>` : '<br/>';
+    }).join('');
+  } else {
+    elements.lyricsEmpty.style.display = 'flex';
+  }
+}
+
+function syncLyricsWithTime(currentTime, forceScroll = false) {
+  if (!state.isLyricsOpen || !state.syncedLyrics || state.syncedLyrics.length === 0) return;
+
+  let activeIdx = -1;
+  for (let i = 0; i < state.syncedLyrics.length; i++) {
+    if (state.syncedLyrics[i].time <= currentTime + 0.25) {
+      activeIdx = i;
+    } else {
+      break;
+    }
+  }
+
+  if (activeIdx !== state.currentLyricIndex || forceScroll) {
+    state.currentLyricIndex = activeIdx;
+    const allLines = elements.lyricsLines.querySelectorAll('.lyric-line');
+
+    allLines.forEach((lineEl, i) => {
+      if (i === activeIdx) {
+        lineEl.classList.add('active');
+        lineEl.classList.remove('past');
+        if (state.isLyricsOpen) {
+          lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } else if (i < activeIdx) {
+        lineEl.classList.remove('active');
+        lineEl.classList.add('past');
+      } else {
+        lineEl.classList.remove('active', 'past');
+      }
+    });
+  }
+}
+
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.2.9';
+const CURRENT_APP_VERSION = '1.3.0';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -1918,6 +2178,9 @@ window.addEventListener('focus', () => {
 
 // --- BOOTSTRAP APP ---
 window.addEventListener('DOMContentLoaded', async () => {
+  const sidebarVer = document.getElementById('sidebar-app-ver');
+  if (sidebarVer) sidebarVer.textContent = 'v' + CURRENT_APP_VERSION;
+
   setupEventListeners();
   setViewMode(state.viewMode);
   updateCategoryChipsVisibility();
