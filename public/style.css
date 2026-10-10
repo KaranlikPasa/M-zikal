@@ -311,54 +311,77 @@ body {
 
 .search-box {
   position: relative;
-  width: 440px;
+  width: 480px;
+  height: 48px;
   display: flex;
   align-items: center;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-full);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+}
+
+.search-box:focus-within {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 20px rgba(30, 215, 96, 0.35), 0 6px 24px rgba(0, 0, 0, 0.4);
+  transform: translateY(-1px);
 }
 
 .search-icon {
   position: absolute;
-  left: 14px;
-  color: var(--text-muted);
+  left: 16px;
+  color: var(--accent);
   pointer-events: none;
+  transition: transform 0.2s ease;
+}
+
+.search-box:focus-within .search-icon {
+  transform: scale(1.1);
 }
 
 .search-box input {
   width: 100%;
-  padding: 12px 40px 12px 42px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
+  height: 100%;
+  padding: 0 42px 0 50px;
+  background: transparent;
+  border: none;
+  outline: none;
   color: #fff;
   font-family: inherit;
-  font-size: 14px;
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.search-box input:focus {
-  border-color: var(--accent);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 16px rgba(30, 215, 96, 0.2);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
 }
 
 .search-box input::placeholder {
-  color: var(--text-subtle);
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 500;
 }
 
 .btn-clear-search {
   position: absolute;
   right: 12px;
-  background: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
   border: none;
-  color: var(--text-muted);
+  color: #fff;
   cursor: pointer;
-  font-size: 13px;
-  width: 20px;
-  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 0.15s ease;
+}
+
+.btn-clear-search:hover {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .topbar-actions {
@@ -1634,18 +1657,31 @@ html, body {
   .search-box {
     max-width: none;
     width: 100%;
-    height: 38px;
-    font-size: 13px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1.5px solid rgba(255, 255, 255, 0.16);
+    border-radius: var(--radius-full);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  }
+
+  .search-box:focus-within {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(30, 215, 96, 0.35);
   }
 
   .search-box input {
-    font-size: 13px;
-    padding: 0 32px 0 36px;
+    font-size: 14.5px;
+    font-weight: 600;
+    padding: 0 42px 0 50px;
+    color: #fff;
   }
 
   /* CATEGORY CHIPS: Touch scroll */
   .category-chips {
-    padding: 6px 14px;
+    padding: 8px 14px;
     overflow-x: auto;
     flex-wrap: nowrap;
     gap: 8px;
@@ -1660,8 +1696,9 @@ html, body {
   .chip {
     white-space: nowrap;
     flex-shrink: 0;
-    padding: 6px 12px;
-    font-size: 12px;
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 600;
   }
 
   /* SCROLL CONTENT CONTAINER */
@@ -1669,43 +1706,16 @@ html, body {
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 12px 14px 140px 14px; /* Room for floating mini player + bottom nav */
+    padding: 8px 12px 145px 12px;
   }
 
-  /* HERO BANNER: Compact */
+  /* HERO BANNER & STORAGE: Clean up mobile display */
   .hero-banner {
-    padding: 16px 14px;
-    margin-bottom: 16px;
-    border-radius: var(--radius-md);
+    display: none !important;
   }
 
-  .hero-vinyl {
-    display: none;
-  }
-
-  .hero-title {
-    font-size: 20px;
-    line-height: 1.2;
-    margin-bottom: 6px;
-  }
-
-  .hero-subtitle {
-    font-size: 12px;
-    margin-bottom: 12px;
-    line-height: 1.4;
-  }
-
-  .hero-buttons {
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-  }
-
-  .hero-buttons button {
-    width: 100%;
-    justify-content: center;
-    padding: 10px 14px;
-    font-size: 13px;
+  .storage-info-box {
+    display: none !important;
   }
 
   /* SECTION HEADER */
@@ -1762,22 +1772,26 @@ html, body {
   /* FLOATING SPOTIFY-STYLE MINI PLAYER BAR */
   .player-bar {
     position: fixed;
-    bottom: 64px;
-    left: 8px;
-    right: 8px;
+    bottom: 66px;
+    left: 10px;
+    right: 10px;
     width: auto;
     height: 56px;
-    padding: 6px 10px;
-    border-radius: 12px;
-    background: rgba(18, 22, 32, 0.96);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-    z-index: 150;
-    display: flex;
+    padding: 6px 12px;
+    border-radius: 14px;
+    background: rgba(18, 22, 34, 0.96);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    z-index: 180;
+    display: none;
     align-items: center;
     justify-content: space-between;
+  }
+
+  .player-bar.active {
+    display: flex;
   }
 
   /* Mini Player Left: Track info clickable */
@@ -1863,17 +1877,18 @@ html, body {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 56px;
-    background: #0b0d13;
-    border-top: 1px solid var(--border-color);
-    z-index: 140;
-    padding-bottom: env(safe-area-inset-bottom);
+    height: 58px;
+    background: #090a10;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 170;
+    padding-bottom: 0;
     align-items: center;
     justify-content: space-around;
   }
 
   .mobile-nav-btn {
     flex: 1;
+    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1882,10 +1897,10 @@ html, body {
     background: none;
     border: none;
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: 10.5px;
     font-weight: 600;
     cursor: pointer;
-    padding: 6px 0;
+    padding: 0;
     transition: color 0.15s ease;
   }
 

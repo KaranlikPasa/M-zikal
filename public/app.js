@@ -305,10 +305,17 @@ async function playSong(song, playlist = null, index = -1) {
   if (elements.mfpTitle) elements.mfpTitle.textContent = song.title || 'Bilinmeyen Şarkı';
   if (elements.mfpArtist) elements.mfpArtist.textContent = song.channel || 'Bilinmeyen Sanatçı';
 
+  // Activate player bar on mobile
+  const playerBar = document.querySelector('.player-bar');
+  if (playerBar) playerBar.classList.add('active');
+
   syncLikeState();
 
-  // Check if song is downloaded offline on Drive D
+  // Check if song is downloaded offline
   const isOffline = state.downloadedIds.has(song.id);
+  if (elements.mfpDownloadLabel) {
+    elements.mfpDownloadLabel.textContent = isOffline ? 'Cihazda Kayıtlı' : 'Cihaza İndir';
+  }
 
   if (isOffline) {
     // Play locally through HTML5 audio!
@@ -645,7 +652,7 @@ async function triggerDownloadTrack(song, btn = null) {
   if (!song || !song.id) return;
 
   if (state.downloadedIds.has(song.id)) {
-    showToast(`"${song.title}" zaten D:\\müzikal\\downloads içinde mevcut.`);
+    showToast(`"${song.title}" zaten cihazınızda kayıtlı.`);
     return;
   }
 
@@ -654,7 +661,7 @@ async function triggerDownloadTrack(song, btn = null) {
     btn.title = 'İndiriliyor...';
   }
 
-  showToast(`"${song.title}" D diskine indiriliyor...`);
+  showToast(`"${song.title}" indiriliyor...`);
 
   try {
     const res = await fetch('/api/download/track', {
@@ -689,7 +696,7 @@ function pollTrackDownload(songId, btn = null) {
           btn.classList.add('downloaded');
           btn.title = 'Çevrimdışı İndirildi';
         }
-        showToast('💾 Şarkı D:\\müzikal\\downloads klasörüne indirildi!');
+        showToast('💾 Şarkı çevrimdışı dinlemek için indirildi!');
         renderSongs(state.currentPlaylist);
       }
     } catch (e) {
@@ -699,7 +706,7 @@ function pollTrackDownload(songId, btn = null) {
 }
 
 async function triggerDownloadPlaylist(playlistId) {
-  showToast('Tüm liste D:\\müzikal\\downloads klasörüne indiriliyor...');
+  showToast('Tüm liste çevrimdışı dinlemek için indiriliyor...');
   try {
     const res = await fetch('/api/download/playlist', {
       method: 'POST',
@@ -727,7 +734,7 @@ async function deleteDownloadedTrack(songId) {
     if (data.success) {
       state.downloadedIds.delete(songId);
       elements.downloadsCountBadge.textContent = state.downloadedIds.size;
-      showToast('Şarkı D diskinden silindi.');
+      showToast('Şarkı silindi.');
       if (state.currentView === 'downloads') {
         openDownloadsView();
       } else {
@@ -781,7 +788,7 @@ function renderSongs(songs, isSearching = false) {
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <button class="btn-icon-subtle btn-card-download ${isDownloaded ? 'downloaded' : ''}" title="${isDownloaded ? 'D Diskinde İndirildi' : 'Çevrimdışı İndir (D Diski)'}">
+          <button class="btn-icon-subtle btn-card-download ${isDownloaded ? 'downloaded' : ''}" title="${isDownloaded ? 'Çevrimdışı İndirildi' : 'Çevrimdışı İndir'}">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               ${isDownloaded 
                 ? '<polyline points="20 6 9 17 4 12"></polyline>' 
@@ -964,7 +971,7 @@ function openPlaylistView(plId) {
         <polyline points="7 10 12 15 17 10"></polyline>
         <line x1="12" y1="15" x2="12" y2="3"></line>
       </svg>
-      <span>Tümünü D Diskine İndir</span>
+      <span>Tümünü Çevrimdışı İndir</span>
     </button>
   `;
 
@@ -980,7 +987,7 @@ function openDownloadsView() {
   elements.heroBanner.style.display = 'none';
   elements.sectionActions.innerHTML = '';
   elements.currentSectionTitle.textContent = 'İndirilenler & Çevrimdışı Parçalar';
-  elements.currentSectionDesc.textContent = `D:\\müzikal\\downloads içinde kayıtlı ${state.downloadedIds.size} şarkı. İnternetsiz dinlenebilir.`;
+  elements.currentSectionDesc.textContent = `Cihazınızda kayıtlı ${state.downloadedIds.size} şarkı. İnternetsiz dinlenebilir.`;
 
   // Filter songs across library or construct from downloaded IDs
   const offlineSongs = [];
