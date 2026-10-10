@@ -4,6 +4,7 @@ downloads/
 server.log
 *.tmp
 *.zip
+*.exe
 *.log
 
 # User local data

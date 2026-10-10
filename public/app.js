@@ -284,6 +284,47 @@ function persistLibrary(lib) {
   } catch (e) {}
 }
 
+// --- BACKGROUND PLAYBACK & NATIVE NOTIFICATION SYNC ---
+function updateNativePlaybackState(song, isPlaying) {
+  if (!song) return;
+  if (window.MuzikalNative && typeof window.MuzikalNative.updatePlaybackState === 'function') {
+    try {
+      window.MuzikalNative.updatePlaybackState(
+        isPlaying,
+        song.title || 'Müzikal',
+        song.channel || 'Bilinmeyen Sanatçı',
+        song.thumbnail || ''
+      );
+    } catch (e) {
+      console.warn('Native updatePlaybackState error:', e);
+    }
+  }
+
+  // Web Media Session API for Lock Screen & Notification Center
+  if ('mediaSession' in navigator && song) {
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: song.title,
+        artist: song.channel,
+        album: 'Müzikal',
+        artwork: [
+          { src: song.thumbnail || '/logo.png', sizes: '512x512', type: 'image/png' }
+        ]
+      });
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    } catch (e) {}
+  }
+}
+
+if ('mediaSession' in navigator) {
+  try {
+    navigator.mediaSession.setActionHandler('play', () => togglePlayPause());
+    navigator.mediaSession.setActionHandler('pause', () => togglePlayPause());
+    navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
+    navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
+  } catch (e) {}
+}
+
 function onPlayerStateChange(event) {
   if (state.isOfflinePlaying) return; // Managed by localAudio
 
@@ -293,12 +334,15 @@ function onPlayerStateChange(event) {
     startProgressTracker();
     elements.heroVinyl.classList.remove('paused');
     elements.playingIndicator.classList.add('active');
+    updateNativePlaybackState(state.currentSong, true);
   } else if (event.data === YT.PlayerState.PAUSED) {
     state.isPlaying = false;
     updatePlayPauseButton();
     elements.heroVinyl.classList.add('paused');
     elements.playingIndicator.classList.remove('active');
+    updateNativePlaybackState(state.currentSong, false);
   } else if (event.data === YT.PlayerState.ENDED) {
+    updateNativePlaybackState(state.currentSong, false);
     onSongEnded();
   }
 }
@@ -356,6 +400,7 @@ if (localAudio) {
     updatePlayPauseButton();
     elements.heroVinyl.classList.remove('paused');
     elements.playingIndicator.classList.add('active');
+    updateNativePlaybackState(state.currentSong, true);
   });
 
   localAudio.addEventListener('pause', () => {
@@ -363,9 +408,11 @@ if (localAudio) {
     updatePlayPauseButton();
     elements.heroVinyl.classList.add('paused');
     elements.playingIndicator.classList.remove('active');
+    updateNativePlaybackState(state.currentSong, false);
   });
 
   localAudio.addEventListener('ended', () => {
+    updateNativePlaybackState(state.currentSong, false);
     onSongEnded();
   });
 
@@ -508,6 +555,7 @@ async function playSong(song, playlist = null, index = -1) {
     body: JSON.stringify({ song })
   }).catch(() => {});
 
+  updateNativePlaybackState(song, true);
   updateQueueDrawer();
 }
 
@@ -1774,7 +1822,7 @@ function showToast(msg) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.2.8';
+const CURRENT_APP_VERSION = '1.2.9';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -1800,8 +1848,20 @@ async function checkForAppUpdates(isManual = false) {
     lastAutoCheckTime = Date.now();
 
     if (compareSemver(remoteTag, CURRENT_APP_VERSION) > 0) {
-      const apkAsset = release.assets && release.assets.find(a => a.name.endsWith('.apk'));
-      const downloadUrl = apkAsset ? apkAsset.browser_download_url : (release.html_url || 'https://github.com/KaranlikPasa/M-zikal/releases/latest');
+      const isAndroid = (window.MuzikalNative && typeof window.MuzikalNative.isNative === 'function') ||
+                        navigator.userAgent.toLowerCase().includes('android');
+
+      let downloadUrl = release.html_url || 'https://github.com/KaranlikPasa/M-zikal/releases/latest';
+      if (isAndroid) {
+        const apkAsset = release.assets && release.assets.find(a => a.name.endsWith('.apk'));
+        if (apkAsset) downloadUrl = apkAsset.browser_download_url;
+      } else {
+        const setupAsset = release.assets && (
+          release.assets.find(a => a.name.toLowerCase().endsWith('setup.exe') || a.name.endsWith('.exe')) ||
+          release.assets.find(a => a.name.endsWith('.zip'))
+        );
+        if (setupAsset) downloadUrl = setupAsset.browser_download_url;
+      }
 
       const titleElem = document.getElementById('update-title');
       const verElem = document.getElementById('update-version-text');
@@ -1815,6 +1875,7 @@ async function checkForAppUpdates(isManual = false) {
       if (dlBtn) {
         dlBtn.href = downloadUrl;
         dlBtn.setAttribute('data-url', downloadUrl);
+        dlBtn.textContent = isAndroid ? 'APK İndir ve Güncelle' : 'Kurulum Dosyasını İndir & Güncelle';
       }
       if (modal) modal.style.display = 'flex';
       if (isManual) showToast(`🚀 Yeni sürüm (v${remoteTag}) bulundu!`);

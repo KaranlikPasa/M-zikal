@@ -10,8 +10,8 @@ const { spawn } = require('child_process');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = 3456;
-const APP_VERSION = '1.2.8';
-const APP_VERSION_CODE = 10;
+const APP_VERSION = '1.2.9';
+const APP_VERSION_CODE = 11;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -790,6 +790,49 @@ const server = http.createServer(async (req, res) => {
           'Accept-Ranges': 'bytes'
         });
         fs.createReadStream(filePath).pipe(res);
+        return;
+      }
+    }
+
+    // 16. Windows In-App Silent Auto-Update
+    if (pathname === '/api/app/update-windows' && req.method === 'POST') {
+      try {
+        const ghRes = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest', {
+          headers: { 'User-Agent': 'Muzikal-Updater' }
+        });
+        const release = await ghRes.json();
+        const setupAsset = release.assets && release.assets.find(a => a.name.endsWith('Setup.exe') || a.name.endsWith('.exe'));
+        if (!setupAsset) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, message: 'Kurulum dosyası bulunamadı.' }));
+          return;
+        }
+
+        const tempDir = process.env.TEMP || os.tmpdir();
+        const installerPath = path.join(tempDir, 'Muzikal-Setup.exe');
+
+        const fileRes = await fetch(setupAsset.browser_download_url, {
+          headers: { 'User-Agent': 'Muzikal-Updater' }
+        });
+        const arrayBuf = await fileRes.arrayBuffer();
+        fs.writeFileSync(installerPath, Buffer.from(arrayBuf));
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Güncelleme indirildi, kuruluyor...' }));
+
+        setTimeout(() => {
+          const cp = spawn(installerPath, ['/SILENT', '/UPDATE'], {
+            detached: true,
+            stdio: 'ignore'
+          });
+          cp.unref();
+          process.exit(0);
+        }, 1200);
+        return;
+      } catch (err) {
+        console.error('Windows update error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
         return;
       }
     }
