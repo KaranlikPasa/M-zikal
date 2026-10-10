@@ -1477,6 +1477,14 @@ function setupEventListeners() {
     elements.btnViewList.addEventListener('click', () => setViewMode('list'));
   }
 
+  // Sidebar "Güncellemeleri Kontrol Et" button
+  const btnCheckUpdates = document.getElementById('btn-check-updates');
+  if (btnCheckUpdates) {
+    btnCheckUpdates.addEventListener('click', () => {
+      checkForAppUpdates(true);
+    });
+  }
+
   // Update Modal Handlers
   const btnDismissUpdate = document.getElementById('btn-dismiss-update');
   if (btnDismissUpdate) {
@@ -1507,16 +1515,31 @@ function showToast(msg) {
   }, 2600);
 }
 
-// --- AUTOMATIC IN-APP UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.2.3';
+// --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
+const CURRENT_APP_VERSION = '1.2.4';
+let lastAutoCheckTime = 0;
 
-async function checkForAppUpdates() {
+async function checkForAppUpdates(isManual = false) {
+  const btnCheckUpdates = document.getElementById('btn-check-updates');
+  if (isManual) {
+    if (btnCheckUpdates) btnCheckUpdates.classList.add('checking');
+    showToast('Güncellemeler denetleniyor...');
+  }
+
   try {
     const res = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest');
-    if (!res.ok) return;
+    if (!res.ok) {
+      if (isManual) showToast('Güncelleme sunucusuna bağlanılamadı.');
+      return;
+    }
     const release = await res.json();
     const remoteTag = release.tag_name ? release.tag_name.replace('v', '').trim() : '';
-    if (!remoteTag) return;
+    if (!remoteTag) {
+      if (isManual) showToast('Sürüm bilgisi alınamadı.');
+      return;
+    }
+
+    lastAutoCheckTime = Date.now();
 
     if (compareSemver(remoteTag, CURRENT_APP_VERSION) > 0) {
       const apkAsset = release.assets && release.assets.find(a => a.name.endsWith('.apk'));
@@ -1536,9 +1559,16 @@ async function checkForAppUpdates() {
         dlBtn.setAttribute('data-url', downloadUrl);
       }
       if (modal) modal.style.display = 'flex';
+      if (isManual) showToast(`🚀 Yeni sürüm (v${remoteTag}) bulundu!`);
+    } else {
+      if (isManual) {
+        showToast(`Harika! Zaten en güncel sürümü (v${CURRENT_APP_VERSION}) kullanıyorsunuz. 🎉`);
+      }
     }
   } catch (e) {
-    // Offline or rate-limited
+    if (isManual) showToast('İnternet bağlantınızı kontrol edin.');
+  } finally {
+    if (btnCheckUpdates) btnCheckUpdates.classList.remove('checking');
   }
 }
 
@@ -1554,6 +1584,19 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
+// Automatic check on every app entry / visit
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - lastAutoCheckTime > 60000) {
+    checkForAppUpdates(false);
+  }
+});
+
+window.addEventListener('focus', () => {
+  if (Date.now() - lastAutoCheckTime > 60000) {
+    checkForAppUpdates(false);
+  }
+});
+
 // --- BOOTSTRAP APP ---
 window.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
@@ -1561,5 +1604,5 @@ window.addEventListener('DOMContentLoaded', async () => {
   await loadDownloads();
   await loadLibrary();
   await fetchExploreGenre('trendler');
-  setTimeout(checkForAppUpdates, 2000); // Check updates 2 seconds after startup
+  setTimeout(() => checkForAppUpdates(false), 1500); // Check updates automatically on startup
 });
