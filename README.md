@@ -7,14 +7,15 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1ed760?style=for-the-badge&logo=android)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.2.5-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.2.6-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
-- ✨ **Spotify Tarzı Akıllı Karışık Çalma (Smart Shuffle) (Yeni):** Karışık çalma tuşuna basarak 3 mod arasında geçiş yapın: Kapalı ➔ Standart Karışık (🔀) ➔ Akıllı Karışık (✨). Akıllı mod aktifken Müzikal, dinlediğiniz şarkıların sanatçı ve tarzına göre özel önerilen parçaları araya otomatik olarak serpiştirir ve ekranda parıldayan `✨ Akıllı Öneri` rozetiyle çalar.
+- 🔎 **Akıllı Arama Görünümü & Kategori Filtresi Optimizasyonu (Yeni):** Arama yapıldığında veya bir şarkı aratıldığında üstteki kategori/trend etiketleri otomatik olarak gizlenerek arama sonuçlarına maksimum alan açılır; kategori etiketleri sadece ana ekranda görünür.
+- ✨ **Spotify Tarzı Akıllı Karışık Çalma (Smart Shuffle):** Karışık çalma tuşuna basarak 3 mod arasında geçiş yapın: Kapalı ➔ Standart Karışık (🔀) ➔ Akıllı Karışık (✨). Akıllı mod aktifken Müzikal, dinlediğiniz şarkıların sanatçı ve tarzına göre özel önerilen parçaları araya otomatik olarak serpiştirir ve ekranda parıldayan `✨ Akıllı Öneri` rozetiyle çalar.
 - 🔄 **Menüden & Girişte Otomatik Güncelleme Kontrolü:** Yan menüdeki "Güncellemeleri Kontrol Et" butonuyla dilediğiniz an tek dokunuşla yeni sürümleri denetleyin; ayrıca uygulama her açıldığında arka planda otomatik olarak en güncel sürümü kontrol eder.
 - 🎨 **Özel Tasarım Logo & Simge:** Müzikal'e özel neon zümrüt yeşili ve siber mavi ışıltılı modern uygulama simgesi ve Android başlatıcı ikonu.
 - 🔍 **Milyonlarca Şarkı & Klip Arama:** YouTube üzerinden doğrudan yüksek kaliteli arama ve anında müzik akışı (API anahtarı gerekmez).
@@ -35,8 +36,8 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 
 | Platform | Dosya | Açıklama |
 | :--- | :--- | :--- |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.5/Muzikal.apk) | Spotify tarzı Akıllı Karışık Çalma (Smart Shuffle) destekli mobil sürüm. |
-| **Windows** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.5/Muzikal-Windows-x64.zip) | Kurulum gerektirmez. Node.js ve yt-dlp dahildir. İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.6/Muzikal.apk) | Arama odaklı ekran optimizasyonu ve Smart Shuffle destekli en güncel mobil APK. |
+| **Windows** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.6/Muzikal-Windows-x64.zip) | Kurulum gerektirmez. Node.js ve yt-dlp dahildir. İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
 
 ---
 

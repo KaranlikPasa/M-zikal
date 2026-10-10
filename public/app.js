@@ -1005,7 +1005,19 @@ function renderSongs(songs, isSearching = false) {
   });
 }
 
-// --- DATA FETCHING ---
+// --- DATA FETCHING & UI VISIBILITY ---
+
+function updateCategoryChipsVisibility() {
+  if (!elements.categoryChips) return;
+  const isSearching = !!(elements.searchInput && elements.searchInput.value.trim().length > 0);
+  const isHomeOrExplore = (state.currentView === 'home' || state.currentView === 'explore');
+
+  if (isHomeOrExplore && !isSearching) {
+    elements.categoryChips.style.display = 'flex';
+  } else {
+    elements.categoryChips.style.display = 'none';
+  }
+}
 
 async function fetchExploreGenre(genreKey) {
   elements.sectionActions.innerHTML = '';
@@ -1028,11 +1040,13 @@ async function fetchExploreGenre(genreKey) {
 
 async function performSearch(query) {
   if (!query || query.trim() === '') {
+    updateCategoryChipsVisibility();
     fetchExploreGenre(state.currentGenre);
     return;
   }
 
   elements.heroBanner.style.display = 'none';
+  updateCategoryChipsVisibility();
   elements.sectionActions.innerHTML = '';
   elements.currentSectionTitle.textContent = `"${query}" İçin Arama Sonuçları`;
   elements.currentSectionDesc.textContent = 'Milyonlarca şarkı ve video arasından bulundu';
@@ -1128,8 +1142,12 @@ function openPlaylistView(plId) {
   const pl = state.library.playlists.find(p => p.id === plId);
   if (!pl) return;
 
+  state.currentView = 'playlist';
   state.currentPlaylistId = plId;
+  if (elements.searchInput) elements.searchInput.value = '';
+  if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
   elements.heroBanner.style.display = 'none';
+  updateCategoryChipsVisibility();
   elements.currentSectionTitle.textContent = pl.name;
   elements.currentSectionDesc.textContent = pl.description || `${pl.songs.length} şarkı`;
 
@@ -1154,7 +1172,11 @@ function openPlaylistView(plId) {
 }
 
 function openDownloadsView() {
+  state.currentView = 'downloads';
+  if (elements.searchInput) elements.searchInput.value = '';
+  if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
   elements.heroBanner.style.display = 'none';
+  updateCategoryChipsVisibility();
   elements.sectionActions.innerHTML = '';
   elements.currentSectionTitle.textContent = 'İndirilenler & Çevrimdışı Parçalar';
   elements.currentSectionDesc.textContent = `Cihazınızda kayıtlı ${state.downloadedIds.size} şarkı. İnternetsiz dinlenebilir.`;
@@ -1242,6 +1264,12 @@ function navigateTo(view) {
   // Close mobile sidebar if open
   if (elements.sidebar) elements.sidebar.classList.remove('mobile-open');
   if (elements.sidebarBackdrop) elements.sidebarBackdrop.classList.remove('active');
+
+  // Reset search input and clear button when navigating
+  if (elements.searchInput) elements.searchInput.value = '';
+  if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
+
+  updateCategoryChipsVisibility();
 
   if (view === 'home') {
     elements.heroBanner.style.display = 'flex';
@@ -1393,6 +1421,7 @@ function setupEventListeners() {
   elements.searchInput.addEventListener('input', (e) => {
     const val = e.target.value;
     elements.btnClearSearch.style.display = val ? 'block' : 'none';
+    updateCategoryChipsVisibility();
 
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
@@ -1410,7 +1439,10 @@ function setupEventListeners() {
   elements.btnClearSearch.addEventListener('click', () => {
     elements.searchInput.value = '';
     elements.btnClearSearch.style.display = 'none';
-    elements.heroBanner.style.display = 'flex';
+    if (state.currentView === 'home') {
+      elements.heroBanner.style.display = 'flex';
+    }
+    updateCategoryChipsVisibility();
     fetchExploreGenre(state.currentGenre);
   });
 
@@ -1616,7 +1648,7 @@ function showToast(msg) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.2.5';
+const CURRENT_APP_VERSION = '1.2.6';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -1701,6 +1733,7 @@ window.addEventListener('focus', () => {
 window.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   setViewMode(state.viewMode);
+  updateCategoryChipsVisibility();
   await loadDownloads();
   await loadLibrary();
   await fetchExploreGenre('trendler');
