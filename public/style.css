@@ -82,15 +82,21 @@ body {
 }
 
 .brand-logo {
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #1ed760, #00b4d8);
+  width: 42px;
+  height: 42px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #000;
-  box-shadow: 0 4px 16px var(--accent-glow);
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(30, 215, 96, 0.35);
+}
+
+.brand-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-md);
 }
 
 .brand-name {
@@ -1813,14 +1819,21 @@ html, body {
   }
 
   .brand-logo-sm {
-    width: 30px;
-    height: 30px;
-    background: linear-gradient(135deg, #1ed760, #00b4d8);
+    width: 32px;
+    height: 32px;
     border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #000;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(30, 215, 96, 0.35);
+  }
+
+  .brand-logo-img-sm {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
   }
 
   .mobile-brand-title {

@@ -1,18 +1,23 @@
 # 🎵 Müzikal
 
+<p align="center">
+  <img src="public/logo.png" width="120" height="120" alt="Müzikal Logo" style="border-radius: 24px; box-shadow: 0 8px 24px rgba(30,215,96,0.3);">
+</p>
+
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1ed760?style=for-the-badge&logo=android)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.2.2-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.2.3-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
+- 🎨 **Özel Tasarım Logo & Simge (Yeni):** Müzikal'e özel neon zümrüt yeşili ve siber mavi ışıltılı modern uygulama simgesi ve Android başlatıcı ikonu.
 - 🔍 **Milyonlarca Şarkı & Klip Arama:** YouTube üzerinden doğrudan yüksek kaliteli arama ve anında müzik akışı (API anahtarı gerekmez).
-- 📋 **Izgara / Liste Görünümü Değiştirici (Yeni):** Müzikleri ister şık albüm kartları (Grid) şeklinde, isterseniz Spotify tarzı dikey liste (List) şeklinde tek tuşla görüntüleyin.
-- 🛡️ **Akıllı Kısıtlama & Alternatif Kaynak Motoru (Yeni):** YouTube'da gömülü oynatması kısıtlı parçalar artık doğrudan atlanmaz; şarkının alternatif stüdyo/ses kaynağı otomatik olarak bulunup kesintisiz oynatılır.
+- 📋 **Izgara / Liste Görünümü Değiştirici:** Müzikleri ister şık albüm kartları (Grid) şeklinde, isterseniz Spotify tarzı dikey liste (List) şeklinde tek tuşla görüntüleyin.
+- 🛡️ **Akıllı Kısıtlama & Alternatif Kaynak Motoru:** YouTube'da gömülü oynatması kısıtlı parçalar artık doğrudan atlanmaz; şarkının alternatif stüdyo/ses kaynağı otomatik olarak bulunup kesintisiz oynatılır.
 - 🟢 **Spotify Çalma Listesi Aktarma:** Spotify çalma listesi bağlantınızı (`https://open.spotify.com/playlist/...`) yapıştırın, saniyeler içinde kitaplığınıza eklensin.
 - 💾 **Çevrimdışı Dinleme & İndirme:** Şarkıları veya tüm çalma listelerini tek tıkla çevrimdışı dinlemek üzere indirin.
 - 📱 **Yenilenen Android Arayüzü:** Telefon ekranlarına kusursuz oturan responsive tasarım, şık cam arama çubuğu, çakışmayan yüzen mini çalar ve alt dolaşım çubuğu.
@@ -28,19 +33,19 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 
 | Platform | Dosya | Açıklama |
 | :--- | :--- | :--- |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.2/Muzikal.apk) | Yenilenen mobil arayüz ile telefonunuza yükleyin. |
-| **Windows** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.2/Muzikal-Windows-x64.zip) | Kurulum gerektirmez. Node.js ve yt-dlp dahildir. İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.3/Muzikal.apk) | Yenilenen mobil arayüz ve özel uygulama logosu ile telefonunuza yükleyin. |
+| **Windows** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.3/Muzikal-Windows-x64.zip) | Kurulum gerektirmez. Node.js ve yt-dlp dahildir. İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
 
 ---
 
 ## 🚀 Başlangıç & Kullanım
 
 ### 📱 Android
-1. [`Muzikal.apk`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.2/Muzikal.apk) dosyasını telefonunuza indirip yükleyin.
+1. [`Muzikal.apk`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.3/Muzikal.apk) dosyasını telefonunuza indirip yükleyin.
 2. PC uygulamanız evdeki Wi-Fi ağında açıkken telefon otomatik olarak PC'nize bağlanır ve anlık senkronize olur. Dışarıdayken veya PC kapalıyken bağımsız çevrimdışı modda çalışır.
 
 ### 🪟 Windows (Hazır Paket)
-1. [`Muzikal-Windows-x64.zip`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.2/Muzikal-Windows-x64.zip) dosyasını indirin ve bir klasöre çıkartın.
+1. [`Muzikal-Windows-x64.zip`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.2.3/Muzikal-Windows-x64.zip) dosyasını indirin ve bir klasöre çıkartın.
 2. Klasör içindeki **`Muzikal.bat`** (veya arka planda sessiz açılması için **`Muzikal.vbs`**) dosyasına çift tıklayın.
 3. Node.js veya başka hiçbir şey yüklemenize gerek yoktur; yerleşik taşınabilir motor ile uygulama masaüstü penceresi olarak anında açılır.
 

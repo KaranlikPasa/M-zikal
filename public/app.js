@@ -1508,7 +1508,7 @@ function showToast(msg) {
 }
 
 // --- AUTOMATIC IN-APP UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.2.2';
+const CURRENT_APP_VERSION = '1.2.3';
 
 async function checkForAppUpdates() {
   try {
