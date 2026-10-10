@@ -425,6 +425,29 @@
     </div>
   </div>
 
+  <!-- GÜNCELLEME BİLDİRİMİ MODAL (AUTO-UPDATER) -->
+  <div class="modal-overlay" id="update-modal" style="display: none;">
+    <div class="modal-box modal-box-update">
+      <div class="update-header">
+        <div class="update-icon-badge">🚀</div>
+        <div>
+          <h3 id="update-title">Yeni Güncelleme Mevcut!</h3>
+          <p id="update-version-text" style="color:var(--accent); font-weight:700;">Sürüm v1.2.0</p>
+        </div>
+      </div>
+      <p style="font-size:12px; margin-bottom:8px; color:var(--text-muted);">Yenilikler:</p>
+      <div class="update-notes-box" id="update-notes-box">
+        Uygulama performans iyileştirmeleri ve yeni özellikler içeriyor.
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btn-dismiss-update">Daha Sonra</button>
+        <a class="btn-primary" id="btn-download-update" href="#" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+          <span>Şimdi İndir & Güncelle</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
   <!-- MOBİL ALT DOLAŞIM ÇUBUĞU (BOTTOM NAVIGATION) -->
   <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
     <button class="mobile-nav-btn active" data-view="home">

@@ -1395,6 +1395,15 @@ function setupEventListeners() {
       if (state.currentSong) toggleFavorite(state.currentSong);
     }
   });
+
+  // Update Modal Dismiss
+  const btnDismissUpdate = document.getElementById('btn-dismiss-update');
+  if (btnDismissUpdate) {
+    btnDismissUpdate.addEventListener('click', () => {
+      const modal = document.getElementById('update-modal');
+      if (modal) modal.style.display = 'none';
+    });
+  }
 }
 
 function showToast(msg) {
@@ -1405,10 +1414,55 @@ function showToast(msg) {
   }, 2600);
 }
 
+// --- AUTOMATIC IN-APP UPDATE CHECKER ---
+const CURRENT_APP_VERSION = '1.2.0';
+
+async function checkForAppUpdates() {
+  try {
+    const res = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest');
+    if (!res.ok) return;
+    const release = await res.json();
+    const remoteTag = release.tag_name ? release.tag_name.replace('v', '').trim() : '';
+    if (!remoteTag) return;
+
+    if (compareSemver(remoteTag, CURRENT_APP_VERSION) > 0) {
+      const apkAsset = release.assets && release.assets.find(a => a.name.endsWith('.apk'));
+      const downloadUrl = apkAsset ? apkAsset.browser_download_url : release.html_url;
+
+      const titleElem = document.getElementById('update-title');
+      const verElem = document.getElementById('update-version-text');
+      const notesElem = document.getElementById('update-notes-box');
+      const dlBtn = document.getElementById('btn-download-update');
+      const modal = document.getElementById('update-modal');
+
+      if (titleElem) titleElem.textContent = release.name || 'Yeni Güncelleme Mevcut!';
+      if (verElem) verElem.textContent = `Mevcut: v${CURRENT_APP_VERSION} ➔ Yeni: v${remoteTag}`;
+      if (notesElem && release.body) notesElem.textContent = release.body;
+      if (dlBtn) dlBtn.href = downloadUrl;
+      if (modal) modal.style.display = 'flex';
+    }
+  } catch (e) {
+    // Offline or rate-limited
+  }
+}
+
+function compareSemver(v1, v2) {
+  const p1 = v1.split('.').map(Number);
+  const p2 = v2.split('.').map(Number);
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const num1 = p1[i] || 0;
+    const num2 = p2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
 // --- BOOTSTRAP APP ---
 window.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   await loadDownloads();
   await loadLibrary();
   await fetchExploreGenre('trendler');
+  setTimeout(checkForAppUpdates, 2000); // Check updates 2 seconds after startup
 });
