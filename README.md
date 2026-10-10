@@ -61,3 +61,12 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 - **Arka Yüz:** Node.js HTTP Server, IPv4 first resolver
 - **Ses Motoru:** YouTube IFrame Player API & Native HTML5 Audio
 - **Mobil:** Android WebView Native Container (API 24 - 36)
+
+---
+
+## ⚖️ Yasal Uyarı & Feragatname (Disclaimer)
+
+Bu proje yalnızca **eğitim, araştırma ve kişisel kullanım** amacıyla geliştirilmiştir. 
+- Bu uygulama bünyesinde herhangi bir telifli ses veya müzik dosyası barındırmaz.
+- Tüm medya aramaları ve oynatmaları üçüncü taraf platformların herkese açık arayüzleri üzerinden yürütülür.
+- Kullanıcıların indirdiği veya oynattığı içeriklerden doğabilecek her türlü sorumluluk kullanıcının kendisine aittir.
