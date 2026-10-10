@@ -337,7 +337,10 @@
       <div class="player-text">
         <div class="player-title" id="player-title">Bir şarkı seçin</div>
         <div class="player-artist" id="player-artist">Müzikal Hazır</div>
-        <span class="offline-badge" id="player-offline-badge" style="display: none;">💾 Çevrimdışı Dinleniyor</span>
+        <div class="player-badges-row">
+          <span class="offline-badge" id="player-offline-badge" style="display: none;">💾 Çevrimdışı Dinleniyor</span>
+          <span class="smart-rec-badge" id="player-smart-badge" style="display: none;">✨ Akıllı Öneri</span>
+        </div>
       </div>
       <button class="btn-icon-subtle btn-heart" id="player-fav-btn" title="Favorilere Ekle">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" id="player-fav-icon">
@@ -357,6 +360,7 @@
             <line x1="15" y1="15" x2="21" y2="21"></line>
             <line x1="4" y1="4" x2="9" y2="9"></line>
           </svg>
+          <span class="smart-shuffle-dot" id="smart-shuffle-dot" style="display: none;">✨</span>
         </button>
         <button class="btn-ctrl" id="btn-prev" title="Önceki Şarkı">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
@@ -538,6 +542,7 @@
       <div class="mfp-info-left">
         <div class="mfp-title" id="mfp-title">Bir şarkı seçin</div>
         <div class="mfp-artist" id="mfp-artist">Müzikal</div>
+        <span class="smart-rec-badge" id="mfp-smart-badge" style="display: none;">✨ Akıllı Öneri</span>
       </div>
       <button class="btn-icon-subtle btn-heart" id="mfp-fav-btn" title="Favori">
         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" id="mfp-fav-icon">
@@ -566,6 +571,7 @@
           <line x1="15" y1="15" x2="21" y2="21"></line>
           <line x1="4" y1="4" x2="9" y2="9"></line>
         </svg>
+        <span class="smart-shuffle-dot" id="mfp-smart-shuffle-dot" style="display: none;">✨</span>
       </button>
       <button class="btn-ctrl" id="mfp-btn-prev" title="Önceki">
         <svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor">

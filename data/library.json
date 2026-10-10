@@ -605,6 +605,13 @@
   ],
   "history": [
     {
+      "id": "Dncs42FOBy8",
+      "title": "Semicenk - Vur Beni (Prod. by Büken)",
+      "channel": "Eva Records",
+      "duration": "3:17",
+      "thumbnail": "https://i.ytimg.com/vi/Dncs42FOBy8/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLB1ZjQDLhx_u80XKWl99t8F7kaZlw"
+    },
+    {
       "id": "cLygvXtuklI",
       "title": "Semicenk - Çıkmaz Bir Sokakta",
       "channel": "Eva Records",
@@ -612,8 +619,8 @@
       "thumbnail": "https://i.ytimg.com/vi/cLygvXtuklI/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDy0tOi7IZvcR8GEYOZHuL9U9EklA"
     },
     {
-      "id": "oU7Kjgyu4Ik",
-      "title": "İndirilen Parça (oU7Kjgyu4Ik)",
+      "id": "wPQEeBAXou0",
+      "title": "İndirilen Parça (wPQEeBAXou0)",
       "channel": "Çevrimdışı Ses",
       "duration": "",
       "thumbnail": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=240"
@@ -621,6 +628,47 @@
     {
       "id": "5NV6Rdv1a3I",
       "title": "İndirilen Parça (5NV6Rdv1a3I)",
+      "channel": "Çevrimdışı Ses",
+      "duration": "",
+      "thumbnail": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=240"
+    },
+    {
+      "id": "2BvDvMuO8c8",
+      "title": "KADIKÖY",
+      "channel": "Göksel İpekçi",
+      "duration": "2:24",
+      "thumbnail": "https://i.ytimg.com/vi/2BvDvMuO8c8/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLB-zwq5_LmAYbkDL0r6d4h8bmqbGA",
+      "spotifySearchQuery": "KADIKÖY Göksel İpekçi",
+      "spotifyResolved": true
+    },
+    {
+      "id": "HK9-VEdeP8E",
+      "title": "MECBURUM",
+      "channel": "Göksel İpekçi",
+      "duration": "2:48",
+      "thumbnail": "https://i.ytimg.com/vi/HK9-VEdeP8E/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDkykW2pjt0MDKM4xX5g2Ta3sYQzA",
+      "spotifyResolved": true
+    },
+    {
+      "id": "E6lNDqIcbNU",
+      "title": "Yakamoz Güzeli",
+      "channel": "Yaşlı Amca",
+      "duration": "4:29",
+      "thumbnail": "https://i.ytimg.com/vi/E6lNDqIcbNU/hq720.jpg?sqp=-oaymwEcCNAFEJQDSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLALvSa-JOca5iWBcI-YbPsyt59oyw",
+      "spotifyResolved": true
+    },
+    {
+      "id": "sp_6N1QTQHk6AZ7eqWhBf5RhA_0",
+      "title": "Biraz Delisin",
+      "channel": "Dolu Kadehi Ters Tut",
+      "duration": "3:52",
+      "thumbnail": "https://mosaic.scdn.co/640/ab67616d00001e026871126471897b1f6b1c21d7ab67616d00001e026979f46f0767f0aa85672d19ab67616d00001e02a6b37fcf6c61fa2a742540e9ab67616d00001e02d84bb51d4153c401b8562c9f",
+      "spotifySearchQuery": "Biraz Delisin Dolu Kadehi Ters Tut",
+      "spotifyResolved": false
+    },
+    {
+      "id": "oU7Kjgyu4Ik",
+      "title": "İndirilen Parça (oU7Kjgyu4Ik)",
       "channel": "Çevrimdışı Ses",
       "duration": "",
       "thumbnail": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=240"

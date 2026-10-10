@@ -1282,6 +1282,7 @@ body {
   padding: 6px;
   border-radius: 50%;
   transition: all 0.15s ease;
+  position: relative;
 }
 
 .btn-ctrl:hover {
@@ -1291,6 +1292,27 @@ body {
 
 .btn-ctrl.active {
   color: var(--accent);
+}
+
+.btn-ctrl.smart-active {
+  color: #1ed760;
+  filter: drop-shadow(0 0 6px rgba(30, 215, 96, 0.65));
+}
+
+.smart-shuffle-dot {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  font-size: 11px;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px #1ed760);
+  animation: sparkleBounce 1.8s infinite ease-in-out;
+  pointer-events: none;
+}
+
+@keyframes sparkleBounce {
+  0%, 100% { transform: scale(0.9) rotate(0deg); opacity: 0.9; }
+  50% { transform: scale(1.25) rotate(15deg); opacity: 1; }
 }
 
 .btn-play-pause {
@@ -1673,6 +1695,14 @@ body {
   line-height: 1.4;
 }
 
+.player-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+
 .offline-badge {
   display: inline-block;
   font-size: 10px;
@@ -1681,8 +1711,32 @@ body {
   background: rgba(56, 189, 248, 0.15);
   padding: 2px 6px;
   border-radius: var(--radius-full);
-  margin-top: 3px;
   border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.smart-rec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #1ed760;
+  background: rgba(30, 215, 96, 0.15);
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(30, 215, 96, 0.35);
+  animation: pulseSmart 2s infinite ease-in-out;
+}
+
+@keyframes pulseSmart {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(30, 215, 96, 0.4);
+    border-color: rgba(30, 215, 96, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 8px 1px rgba(30, 215, 96, 0.3);
+    border-color: rgba(30, 215, 96, 0.8);
+  }
 }
 
 .btn-card-download {

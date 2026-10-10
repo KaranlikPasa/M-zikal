@@ -10,6 +10,8 @@ const state = {
   volume: 80,
   repeatMode: 'all', // 'off', 'all', 'one'
   isShuffled: false,
+  shuffleMode: 'off', // 'off', 'standard', 'smart'
+  smartShuffleCounter: 0,
   shuffledIndices: [],
   isOfflinePlaying: false,
   downloadedIds: new Set(),
@@ -95,6 +97,8 @@ const elements = {
   playerTitle: document.getElementById('player-title'),
   playerArtist: document.getElementById('player-artist'),
   playerOfflineBadge: document.getElementById('player-offline-badge'),
+  playerSmartBadge: document.getElementById('player-smart-badge'),
+  smartShuffleDot: document.getElementById('smart-shuffle-dot'),
   playerFavBtn: document.getElementById('player-fav-btn'),
   playingIndicator: document.getElementById('playing-indicator'),
   btnShuffle: document.getElementById('btn-shuffle'),
@@ -144,6 +148,7 @@ const elements = {
   mfpArtwork: document.getElementById('mfp-artwork'),
   mfpTitle: document.getElementById('mfp-title'),
   mfpArtist: document.getElementById('mfp-artist'),
+  mfpSmartBadge: document.getElementById('mfp-smart-badge'),
   mfpFavBtn: document.getElementById('mfp-fav-btn'),
   mfpFavIcon: document.getElementById('mfp-fav-icon'),
   mfpProgressTrack: document.getElementById('mfp-progress-track'),
@@ -152,6 +157,7 @@ const elements = {
   mfpCurrentTime: document.getElementById('mfp-current-time'),
   mfpTotalDuration: document.getElementById('mfp-total-duration'),
   mfpBtnShuffle: document.getElementById('mfp-btn-shuffle'),
+  mfpSmartShuffleDot: document.getElementById('mfp-smart-shuffle-dot'),
   mfpBtnPrev: document.getElementById('mfp-btn-prev'),
   mfpBtnPlayPause: document.getElementById('mfp-btn-play-pause'),
   mfpPlayPauseIcon: document.getElementById('mfp-play-pause-icon'),
@@ -358,6 +364,15 @@ async function playSong(song, playlist = null, index = -1) {
 
   syncLikeState();
 
+  // Smart Recommendation Badge
+  const isSmartRec = !!song.isSmartRecommendation;
+  if (elements.playerSmartBadge) {
+    elements.playerSmartBadge.style.display = isSmartRec ? 'inline-flex' : 'none';
+  }
+  if (elements.mfpSmartBadge) {
+    elements.mfpSmartBadge.style.display = isSmartRec ? 'inline-flex' : 'none';
+  }
+
   // Check if song is downloaded offline
   const isOffline = state.downloadedIds.has(song.id);
   if (elements.mfpDownloadLabel) {
@@ -458,7 +473,7 @@ function updatePlayPauseButton() {
   }
 }
 
-function playNext() {
+async function playNext() {
   if (state.queue.length > 0) {
     const nextSong = state.queue.shift();
     elements.queueBadge.textContent = state.queue.length;
@@ -468,19 +483,53 @@ function playNext() {
 
   if (state.currentPlaylist.length === 0) return;
 
-  if (state.isShuffled) {
+  // SMART SHUFFLE: every ~3 tracks, fetch and play a related recommendation
+  if (state.shuffleMode === 'smart') {
+    state.smartShuffleCounter = (state.smartShuffleCounter || 0) + 1;
+    if (state.smartShuffleCounter % 3 === 0 && state.currentSong && !state.isOfflinePlaying) {
+      try {
+        const queryTerm = (state.currentSong.channel || state.currentSong.title || '').replace(/[^\w\sğüşıöçĞÜŞİÖÇ]/g, ' ').trim();
+        const res = await fetch(`/api/search?q=${encodeURIComponent(queryTerm + ' popüler şarkıları')}`);
+        if (res.ok) {
+          const recs = await res.json();
+          const existingIds = new Set(state.currentPlaylist.map(s => s.id));
+          if (state.currentSong) existingIds.add(state.currentSong.id);
+          const candidates = (Array.isArray(recs) ? recs : []).filter(s => s && s.id && !existingIds.has(s.id));
+          if (candidates.length > 0) {
+            const picked = { ...candidates[Math.floor(Math.random() * Math.min(candidates.length, 5))], isSmartRecommendation: true };
+            showToast(`✨ Akıllı Öneri: ${picked.title}`);
+            playSong(picked, state.currentPlaylist, state.currentIndex);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Smart shuffle recommendation fallback:', err);
+      }
+    }
+
     const nextIdx = Math.floor(Math.random() * state.currentPlaylist.length);
-    playSong(state.currentPlaylist[nextIdx], state.currentPlaylist, nextIdx);
+    const nextSong = { ...state.currentPlaylist[nextIdx], isSmartRecommendation: false };
+    playSong(nextSong, state.currentPlaylist, nextIdx);
     return;
   }
 
+  // STANDARD SHUFFLE
+  if (state.isShuffled || state.shuffleMode === 'standard') {
+    const nextIdx = Math.floor(Math.random() * state.currentPlaylist.length);
+    const nextSong = { ...state.currentPlaylist[nextIdx], isSmartRecommendation: false };
+    playSong(nextSong, state.currentPlaylist, nextIdx);
+    return;
+  }
+
+  // SEQUENTIAL
   let nextIdx = state.currentIndex + 1;
   if (nextIdx >= state.currentPlaylist.length) {
     if (state.repeatMode === 'off') return;
     nextIdx = 0;
   }
 
-  playSong(state.currentPlaylist[nextIdx], state.currentPlaylist, nextIdx);
+  const nextSong = { ...state.currentPlaylist[nextIdx], isSmartRecommendation: false };
+  playSong(nextSong, state.currentPlaylist, nextIdx);
 }
 
 function playPrev() {
@@ -498,7 +547,62 @@ function playPrev() {
 
   let prevIdx = state.currentIndex - 1;
   if (prevIdx < 0) prevIdx = state.currentPlaylist.length - 1;
-  playSong(state.currentPlaylist[prevIdx], state.currentPlaylist, prevIdx);
+  const prevSong = { ...state.currentPlaylist[prevIdx], isSmartRecommendation: false };
+  playSong(prevSong, state.currentPlaylist, prevIdx);
+}
+
+function updateShuffleUI() {
+  const mode = state.shuffleMode || (state.isShuffled ? 'standard' : 'off');
+  state.shuffleMode = mode;
+  state.isShuffled = (mode !== 'off');
+
+  // Desktop shuffle button
+  if (elements.btnShuffle) {
+    elements.btnShuffle.classList.toggle('active', mode === 'standard' || mode === 'smart');
+    elements.btnShuffle.classList.toggle('smart-active', mode === 'smart');
+    if (elements.smartShuffleDot) {
+      elements.smartShuffleDot.style.display = mode === 'smart' ? 'block' : 'none';
+    }
+    if (mode === 'smart') {
+      elements.btnShuffle.title = 'Akıllı Karışık Çalma Açık (✨)';
+    } else if (mode === 'standard') {
+      elements.btnShuffle.title = 'Karışık Çalma Açık (🔀)';
+    } else {
+      elements.btnShuffle.title = 'Karışık Çal';
+    }
+  }
+
+  // Mobile full-screen shuffle button
+  if (elements.mfpBtnShuffle) {
+    elements.mfpBtnShuffle.classList.toggle('active', mode === 'standard' || mode === 'smart');
+    elements.mfpBtnShuffle.classList.toggle('smart-active', mode === 'smart');
+    if (elements.mfpSmartShuffleDot) {
+      elements.mfpSmartShuffleDot.style.display = mode === 'smart' ? 'block' : 'none';
+    }
+    if (mode === 'smart') {
+      elements.mfpBtnShuffle.title = 'Akıllı Karışık Çalma Açık (✨)';
+    } else if (mode === 'standard') {
+      elements.mfpBtnShuffle.title = 'Karışık Çalma Açık (🔀)';
+    } else {
+      elements.mfpBtnShuffle.title = 'Karışık Çal';
+    }
+  }
+}
+
+function cycleShuffleMode() {
+  if (state.shuffleMode === 'off' || !state.shuffleMode) {
+    state.shuffleMode = 'standard';
+    updateShuffleUI();
+    showToast('🔀 Karışık Çalma Açık');
+  } else if (state.shuffleMode === 'standard') {
+    state.shuffleMode = 'smart';
+    updateShuffleUI();
+    showToast('✨ Akıllı Karışık Çalma Açık (Öneriler Dahil)');
+  } else {
+    state.shuffleMode = 'off';
+    updateShuffleUI();
+    showToast('Karışık Çalma Kapalı');
+  }
 }
 
 function onSongEnded() {
@@ -1327,11 +1431,7 @@ function setupEventListeners() {
   elements.btnNext.addEventListener('click', playNext);
   elements.btnPrev.addEventListener('click', playPrev);
 
-  elements.btnShuffle.addEventListener('click', () => {
-    state.isShuffled = !state.isShuffled;
-    elements.btnShuffle.classList.toggle('active', state.isShuffled);
-    showToast(state.isShuffled ? '🔀 Karışık Çalma Açık' : 'Karışık Çalma Kapalı');
-  });
+  elements.btnShuffle.addEventListener('click', cycleShuffleMode);
 
   elements.btnRepeat.addEventListener('click', () => {
     if (state.repeatMode === 'all') {
@@ -1516,7 +1616,7 @@ function showToast(msg) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.2.4';
+const CURRENT_APP_VERSION = '1.2.5';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
