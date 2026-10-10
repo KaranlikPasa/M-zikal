@@ -198,6 +198,55 @@ window.onYouTubeIframeAPIReady = function() {
   });
 };
 
+// --- UNIFIED API ENGINE (NATIVE ANDROID BRIDGE + HTTP FALLBACK) ---
+async function apiFetch(endpoint, options = {}) {
+  // 1. Android Native Bridge
+  if (window.MuzikalNative && typeof window.MuzikalNative.isNative === 'function') {
+    try {
+      if (endpoint.startsWith('/api/explore')) {
+        const dummy = new URL('http://local' + endpoint);
+        const genre = dummy.searchParams.get('genre') || 'trendler';
+        const resStr = window.MuzikalNative.explore(genre);
+        if (resStr) return JSON.parse(resStr);
+      }
+      if (endpoint.startsWith('/api/search')) {
+        const dummy = new URL('http://local' + endpoint);
+        const q = dummy.searchParams.get('q') || '';
+        const resStr = window.MuzikalNative.search(q);
+        if (resStr) return JSON.parse(resStr);
+      }
+      if (endpoint.startsWith('/api/library') && (!options.method || options.method === 'GET')) {
+        const resStr = window.MuzikalNative.getLibrary();
+        if (resStr) return JSON.parse(resStr);
+      }
+    } catch (err) {
+      console.warn('Native bridge error, falling back to fetch:', err);
+    }
+  }
+
+  // 2. Standard Fetch (works via shouldInterceptRequest or server.js)
+  const res = await fetch(endpoint, options);
+  return await res.json();
+}
+
+function getStoredLibrary() {
+  try {
+    const raw = localStorage.getItem('muzikal_library_data');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return { favorites: [], playlists: [], history: [] };
+}
+
+function persistLibrary(lib) {
+  try {
+    const json = JSON.stringify(lib);
+    localStorage.setItem('muzikal_library_data', json);
+    if (window.MuzikalNative && typeof window.MuzikalNative.saveLibrary === 'function') {
+      window.MuzikalNative.saveLibrary(json);
+    }
+  } catch (e) {}
+}
+
 function onPlayerStateChange(event) {
   if (state.isOfflinePlaying) return; // Managed by localAudio
 
@@ -489,12 +538,11 @@ async function playNext() {
     if (state.smartShuffleCounter % 3 === 0 && state.currentSong && !state.isOfflinePlaying) {
       try {
         const queryTerm = (state.currentSong.channel || state.currentSong.title || '').replace(/[^\w\sğüşıöçĞÜŞİÖÇ]/g, ' ').trim();
-        const res = await fetch(`/api/search?q=${encodeURIComponent(queryTerm + ' popüler şarkıları')}`);
-        if (res.ok) {
-          const recs = await res.json();
-          const existingIds = new Set(state.currentPlaylist.map(s => s.id));
-          if (state.currentSong) existingIds.add(state.currentSong.id);
-          const candidates = (Array.isArray(recs) ? recs : []).filter(s => s && s.id && !existingIds.has(s.id));
+        const searchData = await apiFetch(`/api/search?q=${encodeURIComponent(queryTerm + ' popüler şarkıları')}`);
+        const recs = searchData.results || (Array.isArray(searchData) ? searchData : []);
+        const existingIds = new Set(state.currentPlaylist.map(s => s.id));
+        if (state.currentSong) existingIds.add(state.currentSong.id);
+        const candidates = recs.filter(s => s && s.id && !existingIds.has(s.id));
           if (candidates.length > 0) {
             const picked = { ...candidates[Math.floor(Math.random() * Math.min(candidates.length, 5))], isSmartRecommendation: true };
             showToast(`✨ Akıllı Öneri: ${picked.title}`);
@@ -1027,10 +1075,14 @@ async function fetchExploreGenre(genreKey) {
   elements.loadingText.textContent = 'Müzikler yükleniyor...';
 
   try {
-    const res = await fetch(`/api/explore?genre=${encodeURIComponent(genreKey)}`);
-    const data = await res.json();
-    state.currentPlaylist = data.results || [];
-    renderSongs(state.currentPlaylist);
+    const data = await apiFetch(`/api/explore?genre=${encodeURIComponent(genreKey)}`);
+    state.currentPlaylist = data.results || (Array.isArray(data) ? data : []);
+    if (state.currentPlaylist.length === 0) {
+      elements.loadingState.style.display = 'none';
+      elements.emptyState.style.display = 'flex';
+    } else {
+      renderSongs(state.currentPlaylist);
+    }
   } catch (err) {
     console.error('Explore fetch failed:', err);
     elements.loadingState.style.display = 'none';
@@ -1056,10 +1108,14 @@ async function performSearch(query) {
   elements.loadingText.textContent = 'Arama yapılıyor...';
 
   try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-    const data = await res.json();
-    state.currentPlaylist = data.results || [];
-    renderSongs(state.currentPlaylist, true);
+    const data = await apiFetch(`/api/search?q=${encodeURIComponent(query)}`);
+    state.currentPlaylist = data.results || (Array.isArray(data) ? data : []);
+    if (state.currentPlaylist.length === 0) {
+      elements.loadingState.style.display = 'none';
+      elements.emptyState.style.display = 'flex';
+    } else {
+      renderSongs(state.currentPlaylist, true);
+    }
   } catch (err) {
     console.error('Search failed:', err);
     elements.loadingState.style.display = 'none';
@@ -1069,14 +1125,18 @@ async function performSearch(query) {
 
 async function loadLibrary() {
   try {
-    const res = await fetch('/api/library');
-    const data = await res.json();
-    state.library = data;
-    elements.favCountBadge.textContent = state.library.favorites.length;
-    renderSidebarPlaylists();
+    const data = await apiFetch('/api/library');
+    if (data && (data.favorites || data.playlists)) {
+      state.library = data;
+      persistLibrary(state.library);
+    } else {
+      state.library = getStoredLibrary();
+    }
   } catch (e) {
-    console.error('Failed to load library:', e);
+    state.library = getStoredLibrary();
   }
+  elements.favCountBadge.textContent = (state.library.favorites || []).length;
+  renderSidebarPlaylists();
 }
 
 async function toggleFavorite(song) {
@@ -1089,13 +1149,29 @@ async function toggleFavorite(song) {
     const data = await res.json();
     if (data.success) {
       state.library.favorites = data.favorites;
+      persistLibrary(state.library);
       elements.favCountBadge.textContent = state.library.favorites.length;
       syncLikeState();
       showToast(data.isFavorite ? '❤️ Beğenilen Şarkılara eklendi' : 'Beğenilen Şarkılardan kaldırıldı');
+      return;
     }
   } catch (e) {
-    console.error('Toggle favorite failed:', e);
+    // Offline local fallback
   }
+
+  const idx = state.library.favorites.findIndex(s => s.id === song.id);
+  let isFav = false;
+  if (idx >= 0) {
+    state.library.favorites.splice(idx, 1);
+    isFav = false;
+  } else {
+    state.library.favorites.unshift(song);
+    isFav = true;
+  }
+  persistLibrary(state.library);
+  elements.favCountBadge.textContent = state.library.favorites.length;
+  syncLikeState();
+  showToast(isFav ? '❤️ Beğenilen Şarkılara eklendi' : 'Beğenilen Şarkılardan kaldırıldı');
 }
 
 function syncLikeState() {
@@ -1354,6 +1430,16 @@ function setupEventListeners() {
   if (elements.playerTrackInfo) {
     elements.playerTrackInfo.addEventListener('click', () => {
       if (window.innerWidth <= 768 && state.currentSong) {
+        elements.mobileFullPlayer.classList.add('open');
+      }
+    });
+  }
+
+  if (elements.sidebarNp) {
+    elements.sidebarNp.addEventListener('click', () => {
+      if (window.innerWidth <= 768 && state.currentSong) {
+        if (elements.sidebar) elements.sidebar.classList.remove('mobile-open');
+        if (elements.sidebarBackdrop) elements.sidebarBackdrop.classList.remove('active');
         elements.mobileFullPlayer.classList.add('open');
       }
     });
@@ -1648,7 +1734,7 @@ function showToast(msg) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.2.6';
+const CURRENT_APP_VERSION = '1.2.7';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
