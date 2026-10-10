@@ -10,8 +10,8 @@ const { spawn } = require('child_process');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = 3456;
-const APP_VERSION = '1.2.7';
-const APP_VERSION_CODE = 9;
+const APP_VERSION = '1.2.8';
+const APP_VERSION_CODE = 10;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -112,13 +112,13 @@ async function searchYouTube(query) {
   const marker = 'var ytInitialData = ';
   const idx = html.indexOf(marker);
   if (idx === -1) {
-    return [];
+    return await searchYouTubeInnerTube(query);
   }
 
   const jsonStart = idx + marker.length;
   const jsonEnd = html.indexOf(';</script>', jsonStart);
   if (jsonEnd === -1) {
-    return [];
+    return await searchYouTubeInnerTube(query);
   }
 
   const jsonStr = html.substring(jsonStart, jsonEnd);
@@ -127,7 +127,7 @@ async function searchYouTube(query) {
     data = JSON.parse(jsonStr);
   } catch (e) {
     console.error('JSON parse error from YouTube search:', e);
-    return [];
+    return await searchYouTubeInnerTube(query);
   }
 
   const sections = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
@@ -161,8 +161,75 @@ async function searchYouTube(query) {
     }
   }
 
+  if (results.length === 0) {
+    return await searchYouTubeInnerTube(query);
+  }
+
   searchCache.set(query, { timestamp: Date.now(), results });
   return results;
+}
+
+// YouTube InnerTube JSON API (Direct fallback, fast & resilient)
+async function searchYouTubeInnerTube(query) {
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'X-YouTube-Client-Name': '1',
+        'X-YouTube-Client-Version': '2.20240101.00.00',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20240101.00.00',
+            hl: 'tr',
+            gl: 'TR'
+          }
+        },
+        query: query,
+        params: 'EgIQAQ%3D%3D'
+      })
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const sections = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+    const results = [];
+    const seenIds = new Set();
+    for (const sec of sections) {
+      const items = sec.itemSectionRenderer?.contents || [];
+      for (const it of items) {
+        const v = it.videoRenderer;
+        if (v && v.videoId && !seenIds.has(v.videoId)) {
+          seenIds.add(v.videoId);
+          let thumbnail = '';
+          if (v.thumbnail?.thumbnails?.length) {
+            thumbnail = v.thumbnail.thumbnails[v.thumbnail.thumbnails.length - 1].url;
+          }
+          const title = v.title?.runs?.map(r => r.text).join('') || v.title?.simpleText || 'Bilinmeyen Başlık';
+          const channel = v.ownerText?.runs?.map(r => r.text).join('') || 'Bilinmeyen Sanatçı';
+          const duration = v.lengthText?.simpleText || '';
+          results.push({
+            id: v.videoId,
+            title: title.trim(),
+            channel: channel.trim(),
+            duration: duration,
+            thumbnail: thumbnail
+          });
+        }
+      }
+    }
+    if (results.length > 0) {
+      searchCache.set(query, { timestamp: Date.now(), results });
+    }
+    return results;
+  } catch (e) {
+    console.error('InnerTube search error:', e);
+    return [];
+  }
 }
 
 // Spotify Playlist Scraper

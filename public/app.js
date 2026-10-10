@@ -198,6 +198,24 @@ window.onYouTubeIframeAPIReady = function() {
   });
 };
 
+const BUNDLED_EXPLORE_SONGS = [
+  { id: 'IcXsGn_iFUA', title: 'Türkçe Pop Müzik 2025 Mix - En Çok Dinlenenler', channel: 'Müzikal Hits', duration: '3:45', thumbnail: 'https://i.ytimg.com/vi/IcXsGn_iFUA/hqdefault.jpg' },
+  { id: '1G4isv_Fylg', title: 'Coldplay - Paradise (Official Video)', channel: 'Coldplay', duration: '4:20', thumbnail: 'https://i.ytimg.com/vi/1G4isv_Fylg/hqdefault.jpg' },
+  { id: 'kXYiU_JCYtU', title: 'Numb - Linkin Park', channel: 'Linkin Park', duration: '3:07', thumbnail: 'https://i.ytimg.com/vi/kXYiU_JCYtU/hqdefault.jpg' },
+  { id: 'fJ9rUzIMcZQ', title: 'Bohemian Rhapsody - Queen', channel: 'Queen Official', duration: '5:55', thumbnail: 'https://i.ytimg.com/vi/fJ9rUzIMcZQ/hqdefault.jpg' },
+  { id: 'kJQP7kiw5Fk', title: 'Luis Fonsi - Despacito ft. Daddy Yankee', channel: 'Luis Fonsi', duration: '4:42', thumbnail: 'https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg' },
+  { id: 'JGwWNGJdvx8', title: 'Ed Sheeran - Shape of You', channel: 'Ed Sheeran', duration: '4:24', thumbnail: 'https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg' },
+  { id: '4NRXx6U8ABQ', title: 'The Weeknd - Blinding Lights', channel: 'The Weeknd', duration: '3:20', thumbnail: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg' },
+  { id: 'OPf0YbXqDm0', title: 'Mark Ronson - Uptown Funk ft. Bruno Mars', channel: 'Mark Ronson', duration: '4:30', thumbnail: 'https://i.ytimg.com/vi/OPf0YbXqDm0/hqdefault.jpg' },
+  { id: 'hT_nvWreIhg', title: 'OneRepublic - Counting Stars', channel: 'OneRepublic', duration: '4:44', thumbnail: 'https://i.ytimg.com/vi/hT_nvWreIhg/hqdefault.jpg' },
+  { id: '09R8_2nJtjg', title: 'Maroon 5 - Sugar', channel: 'Maroon 5', duration: '5:01', thumbnail: 'https://i.ytimg.com/vi/09R8_2nJtjg/hqdefault.jpg' },
+  { id: 'RgKAFK5djSk', title: 'Wiz Khalifa - See You Again ft. Charlie Puth', channel: 'Wiz Khalifa', duration: '3:58', thumbnail: 'https://i.ytimg.com/vi/RgKAFK5djSk/hqdefault.jpg' },
+  { id: 'CevxZvSJLk8', title: 'Katy Perry - Roar', channel: 'Katy Perry', duration: '4:30', thumbnail: 'https://i.ytimg.com/vi/CevxZvSJLk8/hqdefault.jpg' },
+  { id: 'YQHsXMglC9A', title: 'Adele - Hello', channel: 'Adele', duration: '6:07', thumbnail: 'https://i.ytimg.com/vi/YQHsXMglC9A/hqdefault.jpg' },
+  { id: 'L_XJ_s5IsQc', title: 'Eminem - Lose Yourself', channel: 'Eminem', duration: '5:26', thumbnail: 'https://i.ytimg.com/vi/L_XJ_s5IsQc/hqdefault.jpg' },
+  { id: 'nfWlot6h_JM', title: 'Taylor Swift - Shake It Off', channel: 'Taylor Swift', duration: '4:02', thumbnail: 'https://i.ytimg.com/vi/nfWlot6h_JM/hqdefault.jpg' }
+];
+
 // --- UNIFIED API ENGINE (NATIVE ANDROID BRIDGE + HTTP FALLBACK) ---
 async function apiFetch(endpoint, options = {}) {
   // 1. Android Native Bridge
@@ -207,13 +225,19 @@ async function apiFetch(endpoint, options = {}) {
         const dummy = new URL('http://local' + endpoint);
         const genre = dummy.searchParams.get('genre') || 'trendler';
         const resStr = window.MuzikalNative.explore(genre);
-        if (resStr) return JSON.parse(resStr);
+        if (resStr) {
+          const parsed = JSON.parse(resStr);
+          if (parsed && Array.isArray(parsed.results) && parsed.results.length > 0) return parsed;
+        }
       }
       if (endpoint.startsWith('/api/search')) {
         const dummy = new URL('http://local' + endpoint);
         const q = dummy.searchParams.get('q') || '';
         const resStr = window.MuzikalNative.search(q);
-        if (resStr) return JSON.parse(resStr);
+        if (resStr) {
+          const parsed = JSON.parse(resStr);
+          if (parsed && Array.isArray(parsed.results) && parsed.results.length > 0) return parsed;
+        }
       }
       if (endpoint.startsWith('/api/library') && (!options.method || options.method === 'GET')) {
         const resStr = window.MuzikalNative.getLibrary();
@@ -225,8 +249,21 @@ async function apiFetch(endpoint, options = {}) {
   }
 
   // 2. Standard Fetch (works via shouldInterceptRequest or server.js)
-  const res = await fetch(endpoint, options);
-  return await res.json();
+  try {
+    const res = await fetch(endpoint, options);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    // Relative fetch on file:/// may throw
+  }
+
+  // 3. Guaranteed Fallback for explore
+  if (endpoint.startsWith('/api/explore')) {
+    return { results: BUNDLED_EXPLORE_SONGS };
+  }
+
+  return { results: [] };
 }
 
 function getStoredLibrary() {
@@ -543,12 +580,11 @@ async function playNext() {
         const existingIds = new Set(state.currentPlaylist.map(s => s.id));
         if (state.currentSong) existingIds.add(state.currentSong.id);
         const candidates = recs.filter(s => s && s.id && !existingIds.has(s.id));
-          if (candidates.length > 0) {
-            const picked = { ...candidates[Math.floor(Math.random() * Math.min(candidates.length, 5))], isSmartRecommendation: true };
-            showToast(`✨ Akıllı Öneri: ${picked.title}`);
-            playSong(picked, state.currentPlaylist, state.currentIndex);
-            return;
-          }
+        if (candidates.length > 0) {
+          const picked = { ...candidates[Math.floor(Math.random() * Math.min(candidates.length, 5))], isSmartRecommendation: true };
+          showToast(`✨ Akıllı Öneri: ${picked.title}`);
+          playSong(picked, state.currentPlaylist, state.currentIndex);
+          return;
         }
       } catch (err) {
         console.warn('Smart shuffle recommendation fallback:', err);
@@ -839,12 +875,17 @@ function updateQueueDrawer() {
 async function loadDownloads() {
   try {
     const res = await fetch('/api/downloads');
-    const data = await res.json();
-    state.downloadedIds = new Set(data.downloadedIds || []);
-    elements.downloadsCountBadge.textContent = state.downloadedIds.size;
+    if (res.ok) {
+      const data = await res.json();
+      state.downloadedIds = new Set(data.downloadedIds || []);
+      if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = state.downloadedIds.size;
+      return;
+    }
   } catch (e) {
-    console.error('Error fetching downloads:', e);
+    // Normal in standalone offline mode
   }
+  state.downloadedIds = new Set();
+  if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = 0;
 }
 
 async function triggerDownloadTrack(song, btn = null) {
@@ -1076,17 +1117,16 @@ async function fetchExploreGenre(genreKey) {
 
   try {
     const data = await apiFetch(`/api/explore?genre=${encodeURIComponent(genreKey)}`);
-    state.currentPlaylist = data.results || (Array.isArray(data) ? data : []);
-    if (state.currentPlaylist.length === 0) {
-      elements.loadingState.style.display = 'none';
-      elements.emptyState.style.display = 'flex';
-    } else {
-      renderSongs(state.currentPlaylist);
+    let songs = data && (data.results || (Array.isArray(data) ? data : []));
+    if (!songs || songs.length === 0) {
+      songs = BUNDLED_EXPLORE_SONGS;
     }
+    state.currentPlaylist = songs;
+    renderSongs(state.currentPlaylist);
   } catch (err) {
-    console.error('Explore fetch failed:', err);
-    elements.loadingState.style.display = 'none';
-    elements.emptyState.style.display = 'flex';
+    console.warn('Explore fetch fallback to bundled:', err);
+    state.currentPlaylist = BUNDLED_EXPLORE_SONGS;
+    renderSongs(state.currentPlaylist);
   }
 }
 
@@ -1734,7 +1774,7 @@ function showToast(msg) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.2.7';
+const CURRENT_APP_VERSION = '1.2.8';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
