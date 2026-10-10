@@ -20,16 +20,27 @@
 
 ---
 
-## 🚀 Başlangıç & Kurulum
+## 📥 İndir (Releases)
 
-### Windows Masaüstü
-1. Bu depoyu indirin veya klonlayın.
-2. `Muzikal.bat` (veya `Muzikal.vbs`) dosyasına çift tıklayın.
-3. Uygulama bağımsız bir masaüstü penceresi olarak açılacaktır.
+En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPasa/M-zikal/releases/tag/v1.1.0) sayfasından indirebilirsiniz:
 
-### Android
-- `Muzikal.apk` dosyasını telefonunuza yükleyin ve açın.
-- PC sunucunuz açıkken aynı Wi-Fi'daysanız anında canlı güncellemeleri alır, dışarıdayken bağımsız çevrimdışı modda çalışır.
+| Platform | Dosya | Açıklama |
+| :--- | :--- | :--- |
+| **Windows** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.1.0/Muzikal-Windows-x64.zip) | Kurulum gerektirmez. Node.js ve yt-dlp dahildir. İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.1.0/Muzikal.apk) | Telefonunuza indirip kurun. |
+
+---
+
+## 🚀 Başlangıç & Kullanım
+
+### 🪟 Windows (Hazır Paket)
+1. [`Muzikal-Windows-x64.zip`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.1.0/Muzikal-Windows-x64.zip) dosyasını indirin ve bir klasöre çıkartın.
+2. Klasör içindeki **`Muzikal.bat`** (veya arka planda sessiz açılması için **`Muzikal.vbs`**) dosyasına çift tıklayın.
+3. Node.js veya başka hiçbir şey yüklemenize gerek yoktur; yerleşik taşınabilir motor ile uygulama masaüstü penceresi olarak anında açılır.
+
+### 📱 Android
+1. [`Muzikal.apk`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.1.0/Muzikal.apk) dosyasını telefonunuza yükleyin ve açın.
+2. PC uygulamanız evdeki Wi-Fi ağında açıkken telefon otomatik olarak PC'nize bağlanır ve en güncel arayüzü çeker. Dışarıdayken ise bağımsız çevrimdışı modda çalışır.
 
 ---
 
