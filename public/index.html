@@ -2,7 +2,11 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0b10">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Müzikal - Müzik Dinleme Uygulaması</title>
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -114,10 +118,39 @@
       </div>
     </aside>
 
+    <!-- MOBİL MENÜ ARKA PLAN KARARTMASI -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
     <!-- ANA İÇERİK ALANI (MAIN CONTENT) -->
     <main class="main-content">
       <!-- ÜST BAŞLIK VE ARAMA ÇUBUĞU -->
       <header class="topbar">
+        <!-- MOBİL ÜST SATIR (LOGO + MENÜ BUTONU) -->
+        <div class="topbar-mobile-row">
+          <div class="mobile-brand">
+            <div class="brand-logo-sm">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+            </div>
+            <span class="mobile-brand-title">Müzikal</span>
+          </div>
+          <div class="mobile-header-btns">
+            <button class="btn-icon-subtle btn-sp-sm-header" id="btn-mobile-spotify-top" title="Spotify Listesi Aktar">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="#1ed760">
+                <path d="M12 2C6.477 2 2 6.477 2 12c0 5.524 4.477 10 10 10s10-4.476 10-10c0-5.523-4.477-10-10-10zm4.586 14.424a.625.625 0 0 1-.86.208c-2.355-1.439-5.32-1.764-8.812-.966a.626.626 0 1 1-.278-1.22c3.824-.875 7.1-.508 9.742 1.117a.626.626 0 0 1 .208.861zm1.226-2.723a.782.782 0 0 1-1.077.257c-2.695-1.657-6.805-2.138-9.993-1.17a.783.783 0 1 1-.453-1.498c3.642-1.106 8.19-.57 11.266 1.334a.783.783 0 0 1 .257 1.077zm.106-2.837C14.69 9.07 9.38 8.9 6.295 9.835a.939.939 0 1 1-.546-1.796c3.542-1.076 9.42-.876 13.14 1.334a.94.94 0 0 1-3.971 1.491z"/>
+              </svg>
+            </button>
+            <button class="btn-icon-subtle" id="btn-mobile-menu" title="Kitaplık Menüsü">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+
         <div class="search-box">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" class="search-icon">
             <circle cx="11" cy="11" r="8"></circle>
@@ -347,6 +380,7 @@
         </div>
       </div>
     </div>
+    <div class="mini-progress-line" id="mini-progress-line"></div>
   </footer>
 
   <!-- YENİ ÇALMA LİSTESİ MODAL -->
@@ -388,6 +422,135 @@
           <div class="spinner-sm" id="sp-spinner" style="display: none;"></div>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- MOBİL ALT DOLAŞIM ÇUBUĞU (BOTTOM NAVIGATION) -->
+  <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+    <button class="mobile-nav-btn active" data-view="home">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+      <span>Ana Sayfa</span>
+    </button>
+    <button class="mobile-nav-btn" data-view="explore">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+      </svg>
+      <span>Keşfet</span>
+    </button>
+    <button class="mobile-nav-btn" data-view="favorites">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" class="fav-icon-color">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+      </svg>
+      <span>Beğenilenler</span>
+    </button>
+    <button class="mobile-nav-btn" data-view="downloads">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" class="download-icon-color">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      <span>İndirilenler</span>
+    </button>
+  </nav>
+
+  <!-- MOBİL TAM EKRAN ÇALAR (FULL-SCREEN NOW PLAYING SHEET) -->
+  <div class="mobile-full-player" id="mobile-full-player">
+    <div class="mfp-header">
+      <button class="btn-icon-subtle" id="mfp-btn-collapse" title="Küçült">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+      <div class="mfp-header-text">
+        <span class="mfp-header-sub">ŞU ANDA ÇALINIYOR</span>
+        <span class="mfp-header-album" id="mfp-header-album">Müzikal</span>
+      </div>
+      <button class="btn-icon-subtle" id="mfp-btn-queue-toggle" title="Sıra">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="8" y1="6" x2="21" y2="6"></line>
+          <line x1="8" y1="12" x2="21" y2="12"></line>
+          <line x1="8" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <div class="mfp-artwork-wrapper">
+      <img src="https://via.placeholder.com/320" id="mfp-artwork" class="mfp-artwork" alt="Albüm Kapağı">
+    </div>
+
+    <div class="mfp-track-details">
+      <div class="mfp-info-left">
+        <div class="mfp-title" id="mfp-title">Bir şarkı seçin</div>
+        <div class="mfp-artist" id="mfp-artist">Müzikal</div>
+      </div>
+      <button class="btn-icon-subtle btn-heart" id="mfp-fav-btn" title="Favori">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" id="mfp-fav-icon">
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="mfp-scrub-section">
+      <div class="progress-bar-track mfp-progress-track" id="mfp-progress-track">
+        <div class="progress-bar-fill" id="mfp-progress-fill"></div>
+        <div class="progress-bar-handle" id="mfp-progress-handle"></div>
+      </div>
+      <div class="mfp-times">
+        <span id="mfp-current-time">0:00</span>
+        <span id="mfp-total-duration">0:00</span>
+      </div>
+    </div>
+
+    <div class="mfp-controls">
+      <button class="btn-ctrl" id="mfp-btn-shuffle" title="Karışık Çal">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="16 3 21 3 21 8"></polyline>
+          <line x1="4" y1="20" x2="21" y2="3"></line>
+          <polyline points="21 16 21 21 16 21"></polyline>
+          <line x1="15" y1="15" x2="21" y2="21"></line>
+          <line x1="4" y1="4" x2="9" y2="9"></line>
+        </svg>
+      </button>
+      <button class="btn-ctrl" id="mfp-btn-prev" title="Önceki">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor">
+          <polygon points="19 20 9 12 19 4 19 20"></polygon>
+          <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5"></line>
+        </svg>
+      </button>
+      <button class="mfp-btn-play-pause" id="mfp-btn-play-pause" title="Oynat / Duraklat">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" id="mfp-play-pause-icon">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+      </button>
+      <button class="btn-ctrl" id="mfp-btn-next" title="Sonraki">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor">
+          <polygon points="5 4 15 12 5 20 5 4"></polygon>
+          <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5"></line>
+        </svg>
+      </button>
+      <button class="btn-ctrl" id="mfp-btn-repeat" title="Tekrar Çal">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="17 1 21 5 17 9"></polyline>
+          <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+          <polyline points="7 23 3 19 7 15"></polyline>
+          <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div class="mfp-bottom-bar">
+      <button class="btn-pill" id="mfp-btn-download">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        <span id="mfp-download-label">D Diskine İndir</span>
+      </button>
     </div>
   </div>
 

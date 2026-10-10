@@ -124,7 +124,39 @@ const elements = {
   spBtnText: document.getElementById('sp-btn-text'),
   spSpinner: document.getElementById('sp-spinner'),
 
-  toast: document.getElementById('toast-notification')
+  toast: document.getElementById('toast-notification'),
+
+  // Mobile References
+  mobileNavBtns: document.querySelectorAll('.mobile-nav-btn'),
+  btnMobileMenu: document.getElementById('btn-mobile-menu'),
+  btnMobileSpotifyTop: document.getElementById('btn-mobile-spotify-top'),
+  sidebarBackdrop: document.getElementById('sidebar-backdrop'),
+  sidebar: document.querySelector('.sidebar'),
+  miniProgressLine: document.getElementById('mini-progress-line'),
+  playerTrackInfo: document.querySelector('.player-track-info'),
+
+  // Mobile Full-Screen Player
+  mobileFullPlayer: document.getElementById('mobile-full-player'),
+  mfpBtnCollapse: document.getElementById('mfp-btn-collapse'),
+  mfpArtwork: document.getElementById('mfp-artwork'),
+  mfpTitle: document.getElementById('mfp-title'),
+  mfpArtist: document.getElementById('mfp-artist'),
+  mfpFavBtn: document.getElementById('mfp-fav-btn'),
+  mfpFavIcon: document.getElementById('mfp-fav-icon'),
+  mfpProgressTrack: document.getElementById('mfp-progress-track'),
+  mfpProgressFill: document.getElementById('mfp-progress-fill'),
+  mfpProgressHandle: document.getElementById('mfp-progress-handle'),
+  mfpCurrentTime: document.getElementById('mfp-current-time'),
+  mfpTotalDuration: document.getElementById('mfp-total-duration'),
+  mfpBtnShuffle: document.getElementById('mfp-btn-shuffle'),
+  mfpBtnPrev: document.getElementById('mfp-btn-prev'),
+  mfpBtnPlayPause: document.getElementById('mfp-btn-play-pause'),
+  mfpPlayPauseIcon: document.getElementById('mfp-play-pause-icon'),
+  mfpBtnNext: document.getElementById('mfp-btn-next'),
+  mfpBtnRepeat: document.getElementById('mfp-btn-repeat'),
+  mfpBtnDownload: document.getElementById('mfp-btn-download'),
+  mfpDownloadLabel: document.getElementById('mfp-download-label'),
+  mfpBtnQueueToggle: document.getElementById('mfp-btn-queue-toggle')
 };
 
 // --- YOUTUBE IFRAME API INITIALIZATION ---
@@ -210,6 +242,11 @@ if (localAudio) {
       const pct = (current / duration) * 100;
       elements.progressBarFill.style.width = `${pct}%`;
       elements.progressBarHandle.style.left = `${pct}%`;
+      if (elements.miniProgressLine) elements.miniProgressLine.style.width = `${pct}%`;
+      if (elements.mfpProgressFill) elements.mfpProgressFill.style.width = `${pct}%`;
+      if (elements.mfpProgressHandle) elements.mfpProgressHandle.style.left = `${pct}%`;
+      if (elements.mfpCurrentTime) elements.mfpCurrentTime.textContent = formatTime(current);
+      if (elements.mfpTotalDuration) elements.mfpTotalDuration.textContent = formatTime(duration);
     }
   });
 
@@ -262,6 +299,12 @@ async function playSong(song, playlist = null, index = -1) {
   elements.sidebarNp.style.display = 'flex';
 
   elements.videoNowTitle.textContent = `${song.title} - ${song.channel}`;
+
+  // Mobile Full-Screen Player updates
+  if (elements.mfpArtwork) elements.mfpArtwork.src = song.thumbnail || 'https://via.placeholder.com/320';
+  if (elements.mfpTitle) elements.mfpTitle.textContent = song.title || 'Bilinmeyen Şarkı';
+  if (elements.mfpArtist) elements.mfpArtist.textContent = song.channel || 'Bilinmeyen Sanatçı';
+
   syncLikeState();
 
   // Check if song is downloaded offline on Drive D
@@ -343,10 +386,21 @@ function updatePlayPauseButton() {
       <rect x="6" y="4" width="4" height="16" fill="currentColor"></rect>
       <rect x="14" y="4" width="4" height="16" fill="currentColor"></rect>
     `;
+    if (elements.mfpPlayPauseIcon) {
+      elements.mfpPlayPauseIcon.innerHTML = `
+        <rect x="6" y="4" width="4" height="16" fill="currentColor"></rect>
+        <rect x="14" y="4" width="4" height="16" fill="currentColor"></rect>
+      `;
+    }
   } else {
     elements.playPauseIcon.innerHTML = `
       <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"></polygon>
     `;
+    if (elements.mfpPlayPauseIcon) {
+      elements.mfpPlayPauseIcon.innerHTML = `
+        <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"></polygon>
+      `;
+    }
   }
 }
 
@@ -427,13 +481,18 @@ function startProgressTracker() {
         const pct = (current / duration) * 100;
         elements.progressBarFill.style.width = `${pct}%`;
         elements.progressBarHandle.style.left = `${pct}%`;
+        if (elements.miniProgressLine) elements.miniProgressLine.style.width = `${pct}%`;
+        if (elements.mfpProgressFill) elements.mfpProgressFill.style.width = `${pct}%`;
+        if (elements.mfpProgressHandle) elements.mfpProgressHandle.style.left = `${pct}%`;
+        if (elements.mfpCurrentTime) elements.mfpCurrentTime.textContent = formatTime(current);
+        if (elements.mfpTotalDuration) elements.mfpTotalDuration.textContent = formatTime(duration);
       }
     } catch (e) {}
   }, 500);
 }
 
-function seekTo(event) {
-  const rect = elements.progressBarTrack.getBoundingClientRect();
+function seekToTrack(trackElem, event) {
+  const rect = trackElem.getBoundingClientRect();
   const clickX = event.clientX - rect.left;
   const pct = Math.max(0, Math.min(1, clickX / rect.width));
 
@@ -452,6 +511,13 @@ function seekTo(event) {
 
   elements.progressBarFill.style.width = `${pct * 100}%`;
   elements.progressBarHandle.style.left = `${pct * 100}%`;
+  if (elements.miniProgressLine) elements.miniProgressLine.style.width = `${pct * 100}%`;
+  if (elements.mfpProgressFill) elements.mfpProgressFill.style.width = `${pct * 100}%`;
+  if (elements.mfpProgressHandle) elements.mfpProgressHandle.style.left = `${pct * 100}%`;
+}
+
+function seekTo(event) {
+  seekToTrack(elements.progressBarTrack, event);
 }
 
 function setVolume(pct) {
@@ -846,8 +912,22 @@ function syncLikeState() {
   const isFav = state.library.favorites.some(s => s.id === state.currentSong.id);
   if (isFav) {
     elements.playerFavBtn.classList.add('active');
+    if (elements.mfpFavBtn) {
+      elements.mfpFavBtn.classList.add('active');
+      if (elements.mfpFavIcon) {
+        elements.mfpFavIcon.setAttribute('fill', '#ec4899');
+        elements.mfpFavIcon.setAttribute('stroke', '#ec4899');
+      }
+    }
   } else {
     elements.playerFavBtn.classList.remove('active');
+    if (elements.mfpFavBtn) {
+      elements.mfpFavBtn.classList.remove('active');
+      if (elements.mfpFavIcon) {
+        elements.mfpFavIcon.setAttribute('fill', 'none');
+        elements.mfpFavIcon.setAttribute('stroke', 'currentColor');
+      }
+    }
   }
 }
 
@@ -975,57 +1055,153 @@ async function handleSpotifyImport() {
 
 // --- EVENT LISTENERS & SETUP ---
 
+function navigateTo(view) {
+  state.currentView = view;
+  elements.navItems.forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  if (elements.mobileNavBtns) {
+    elements.mobileNavBtns.forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  }
+
+  // Close mobile sidebar if open
+  if (elements.sidebar) elements.sidebar.classList.remove('mobile-open');
+  if (elements.sidebarBackdrop) elements.sidebarBackdrop.classList.remove('active');
+
+  if (view === 'home') {
+    elements.heroBanner.style.display = 'flex';
+    elements.sectionActions.innerHTML = '';
+    elements.currentSectionTitle.textContent = 'En Popüler Şarkılar';
+    elements.currentSectionDesc.textContent = 'Günün en çok dinlenen hit parçaları';
+    fetchExploreGenre('trendler');
+  } else if (view === 'explore') {
+    elements.heroBanner.style.display = 'none';
+    elements.sectionActions.innerHTML = '';
+    elements.currentSectionTitle.textContent = 'Müzik Türleri & Trendler';
+    elements.currentSectionDesc.textContent = 'Kategorilere göre popüler şarkıları keşfedin';
+    fetchExploreGenre(state.currentGenre);
+  } else if (view === 'favorites') {
+    elements.heroBanner.style.display = 'none';
+    elements.sectionActions.innerHTML = '';
+    elements.currentSectionTitle.textContent = 'Beğenilen Şarkılar';
+    elements.currentSectionDesc.textContent = `${state.library.favorites.length} favori parça`;
+    state.currentPlaylist = state.library.favorites;
+    renderSongs(state.library.favorites);
+  } else if (view === 'downloads') {
+    openDownloadsView();
+  } else if (view === 'history') {
+    elements.heroBanner.style.display = 'none';
+    elements.sectionActions.innerHTML = '';
+    elements.currentSectionTitle.textContent = 'Dinleme Geçmişi';
+    elements.currentSectionDesc.textContent = 'En son dinlediğiniz şarkılar';
+    state.currentPlaylist = state.library.history;
+    renderSongs(state.library.history);
+  }
+}
+
 function setupEventListeners() {
-  // Navigation
+  // Desktop Sidebar Navigation
   elements.navItems.forEach(btn => {
     btn.addEventListener('click', () => {
-      elements.navItems.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const view = btn.dataset.view;
-      state.currentView = view;
-
-      if (view === 'home') {
-        elements.heroBanner.style.display = 'flex';
-        elements.sectionActions.innerHTML = '';
-        elements.currentSectionTitle.textContent = 'En Popüler Şarkılar';
-        elements.currentSectionDesc.textContent = 'Günün en çok dinlenen hit parçaları';
-        fetchExploreGenre('trendler');
-      } else if (view === 'explore') {
-        elements.heroBanner.style.display = 'none';
-        elements.sectionActions.innerHTML = '';
-        elements.currentSectionTitle.textContent = 'Müzik Türleri & Trendler';
-        elements.currentSectionDesc.textContent = 'Kategorilere göre popüler şarkıları keşfedin';
-        fetchExploreGenre(state.currentGenre);
-      } else if (view === 'favorites') {
-        elements.heroBanner.style.display = 'none';
-        elements.sectionActions.innerHTML = '';
-        elements.currentSectionTitle.textContent = 'Beğenilen Şarkılar';
-        elements.currentSectionDesc.textContent = `${state.library.favorites.length} favori parça`;
-        state.currentPlaylist = state.library.favorites;
-        renderSongs(state.library.favorites);
-      } else if (view === 'downloads') {
-        openDownloadsView();
-      } else if (view === 'history') {
-        elements.heroBanner.style.display = 'none';
-        elements.sectionActions.innerHTML = '';
-        elements.currentSectionTitle.textContent = 'Dinleme Geçmişi';
-        elements.currentSectionDesc.textContent = 'En son dinlediğiniz şarkılar';
-        state.currentPlaylist = state.library.history;
-        renderSongs(state.library.history);
-      }
+      navigateTo(btn.dataset.view);
     });
   });
+
+  // Mobile Bottom Navigation
+  if (elements.mobileNavBtns) {
+    elements.mobileNavBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        navigateTo(btn.dataset.view);
+      });
+    });
+  }
+
+  // Mobile Drawer Toggle & Backdrop
+  if (elements.btnMobileMenu) {
+    elements.btnMobileMenu.addEventListener('click', () => {
+      elements.sidebar.classList.toggle('mobile-open');
+      elements.sidebarBackdrop.classList.toggle('active');
+    });
+  }
+
+  if (elements.sidebarBackdrop) {
+    elements.sidebarBackdrop.addEventListener('click', () => {
+      elements.sidebar.classList.remove('mobile-open');
+      elements.sidebarBackdrop.classList.remove('active');
+    });
+  }
 
   // Spotify Modals triggers
   const openSpModal = () => {
     elements.modalSpUrl.value = '';
     elements.spotifyModal.style.display = 'flex';
     elements.modalSpUrl.focus();
+    if (elements.sidebar) elements.sidebar.classList.remove('mobile-open');
+    if (elements.sidebarBackdrop) elements.sidebarBackdrop.classList.remove('active');
   };
 
   elements.btnOpenSpotifyModal.addEventListener('click', openSpModal);
   elements.btnSidebarSpotify.addEventListener('click', openSpModal);
   elements.btnHeroSpotify.addEventListener('click', openSpModal);
+  if (elements.btnMobileSpotifyTop) {
+    elements.btnMobileSpotifyTop.addEventListener('click', openSpModal);
+  }
+
+  // Mobile Full-Screen Player Open / Close
+  if (elements.playerTrackInfo) {
+    elements.playerTrackInfo.addEventListener('click', () => {
+      if (window.innerWidth <= 768 && state.currentSong) {
+        elements.mobileFullPlayer.classList.add('open');
+      }
+    });
+  }
+
+  if (elements.mfpBtnCollapse) {
+    elements.mfpBtnCollapse.addEventListener('click', () => {
+      elements.mobileFullPlayer.classList.remove('open');
+    });
+  }
+
+  // Mobile Full-Screen Controls
+  if (elements.mfpBtnPlayPause) {
+    elements.mfpBtnPlayPause.addEventListener('click', togglePlayPause);
+  }
+  if (elements.mfpBtnNext) {
+    elements.mfpBtnNext.addEventListener('click', playNext);
+  }
+  if (elements.mfpBtnPrev) {
+    elements.mfpBtnPrev.addEventListener('click', playPrev);
+  }
+  if (elements.mfpBtnShuffle) {
+    elements.mfpBtnShuffle.addEventListener('click', () => {
+      elements.btnShuffle.click();
+    });
+  }
+  if (elements.mfpBtnRepeat) {
+    elements.mfpBtnRepeat.addEventListener('click', () => {
+      elements.btnRepeat.click();
+    });
+  }
+  if (elements.mfpFavBtn) {
+    elements.mfpFavBtn.addEventListener('click', () => {
+      if (state.currentSong) toggleFavorite(state.currentSong);
+    });
+  }
+  if (elements.mfpProgressTrack) {
+    elements.mfpProgressTrack.addEventListener('click', (e) => {
+      seekToTrack(elements.mfpProgressTrack, e);
+    });
+  }
+  if (elements.mfpBtnDownload) {
+    elements.mfpBtnDownload.addEventListener('click', () => {
+      if (state.currentSong) triggerDownloadTrack(state.currentSong);
+    });
+  }
+  if (elements.mfpBtnQueueToggle) {
+    elements.mfpBtnQueueToggle.addEventListener('click', () => {
+      elements.mobileFullPlayer.classList.remove('open');
+      elements.queueDrawer.classList.toggle('open');
+      updateQueueDrawer();
+    });
+  }
 
   elements.btnCancelSpModal.addEventListener('click', () => {
     elements.spotifyModal.style.display = 'none';
