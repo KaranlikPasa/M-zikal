@@ -22,7 +22,8 @@ const state = {
   currentView: 'home',
   currentGenre: 'trendler',
   currentPlaylistId: null,
-  isVideoVisible: false
+  isVideoVisible: false,
+  viewMode: localStorage.getItem('muzikal_view_mode') || 'grid'
 };
 
 let ytPlayer = null;
@@ -73,6 +74,8 @@ const elements = {
   currentSectionTitle: document.getElementById('current-section-title'),
   currentSectionDesc: document.getElementById('current-section-desc'),
   sectionActions: document.getElementById('section-actions'),
+  btnViewGrid: document.getElementById('btn-view-grid'),
+  btnViewList: document.getElementById('btn-view-list'),
   songsGrid: document.getElementById('songs-grid'),
   loadingState: document.getElementById('loading-state'),
   loadingText: document.getElementById('loading-text'),
@@ -161,6 +164,10 @@ const elements = {
 
 // --- YOUTUBE IFRAME API INITIALIZATION ---
 window.onYouTubeIframeAPIReady = function() {
+  const origin = (window.location.origin && window.location.origin.startsWith('http'))
+    ? window.location.origin
+    : 'https://www.youtube.com';
+
   ytPlayer = new YT.Player('yt-player', {
     height: '100%',
     width: '100%',
@@ -171,7 +178,8 @@ window.onYouTubeIframeAPIReady = function() {
       'modestbranding': 1,
       'playsinline': 1,
       'enablejsapi': 1,
-      'origin': window.location.origin
+      'origin': origin,
+      'widget_referrer': 'https://www.youtube.com'
     },
     events: {
       'onReady': () => {
@@ -203,10 +211,49 @@ function onPlayerStateChange(event) {
   }
 }
 
-function onPlayerError(event) {
+async function onPlayerError(event) {
   if (state.isOfflinePlaying) return;
-  console.warn('YouTube playback error:', event.data);
-  showToast('Bu video kısıtlı. Sonraki parçaya geçiliyor...');
+  console.warn('YouTube playback error:', event.data, state.currentSong);
+
+  const song = state.currentSong;
+  if (!song) {
+    playNext();
+    return;
+  }
+
+  // If this song already attempted fallback, proceed to next song
+  if (song._fallbackAttempted) {
+    showToast('Bu parça oynatılamadı. Sonraki parçaya geçiliyor...');
+    setTimeout(() => playNext(), 1200);
+    return;
+  }
+
+  // Mark fallback attempt
+  song._fallbackAttempted = true;
+  showToast('Bu video kısıtlı, alternatif kaynak aranıyor...');
+
+  try {
+    const q = `${song.title} ${song.channel || ''} audio`;
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    const candidate = data.results && data.results.find(r => r.id && r.id !== song.id);
+
+    if (candidate && candidate.id) {
+      console.log('Found alternative audio for restricted track:', candidate);
+      showToast('🎵 Alternatif kaynaktan oynatılıyor...');
+      song.id = candidate.id;
+      if (candidate.duration) song.duration = candidate.duration;
+      if (ytReady && ytPlayer && ytPlayer.loadVideoById) {
+        ytPlayer.loadVideoById({ videoId: candidate.id, startSeconds: 0 });
+        ytPlayer.playVideo();
+      }
+      return;
+    }
+  } catch (err) {
+    console.error('Fallback search error:', err);
+  }
+
+  showToast('Alternatif bulunamadı. Sonraki şarkıya geçiliyor...');
   setTimeout(() => playNext(), 1500);
 }
 
@@ -746,7 +793,21 @@ async function deleteDownloadedTrack(songId) {
   }
 }
 
-// --- RENDERING SONGS IN GRID ---
+// --- RENDERING SONGS IN GRID / LIST ---
+
+function setViewMode(mode) {
+  state.viewMode = mode;
+  localStorage.setItem('muzikal_view_mode', mode);
+  if (mode === 'list') {
+    elements.songsGrid.classList.add('list-view');
+    if (elements.btnViewList) elements.btnViewList.classList.add('active');
+    if (elements.btnViewGrid) elements.btnViewGrid.classList.remove('active');
+  } else {
+    elements.songsGrid.classList.remove('list-view');
+    if (elements.btnViewGrid) elements.btnViewGrid.classList.add('active');
+    if (elements.btnViewList) elements.btnViewList.classList.remove('active');
+  }
+}
 
 function renderSongs(songs, isSearching = false) {
   elements.loadingState.style.display = 'none';
@@ -779,9 +840,13 @@ function renderSongs(songs, isSearching = false) {
             </svg>
           </div>
         </div>
-        <div class="song-card-title" title="${song.title}">${song.title}</div>
-        <div class="song-card-channel">${song.channel}</div>
-        <div class="song-card-actions">
+        <div class="song-card-info">
+          <div class="song-card-title" title="${song.title}">${song.title}</div>
+          <div class="song-card-channel">${song.channel}</div>
+        </div>
+        <div class="song-card-right">
+          ${song.duration ? `<span class="song-card-time">${song.duration}</span>` : ''}
+          <div class="song-card-actions">
           <button class="btn-icon-subtle btn-add-q" title="Sıraya Ekle">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -800,6 +865,7 @@ function renderSongs(songs, isSearching = false) {
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
             </svg>
           </button>
+        </div>
         </div>
       </div>
     `;
@@ -1403,12 +1469,32 @@ function setupEventListeners() {
     }
   });
 
-  // Update Modal Dismiss
+  // View Mode Toggles (Grid / List)
+  if (elements.btnViewGrid) {
+    elements.btnViewGrid.addEventListener('click', () => setViewMode('grid'));
+  }
+  if (elements.btnViewList) {
+    elements.btnViewList.addEventListener('click', () => setViewMode('list'));
+  }
+
+  // Update Modal Handlers
   const btnDismissUpdate = document.getElementById('btn-dismiss-update');
   if (btnDismissUpdate) {
     btnDismissUpdate.addEventListener('click', () => {
       const modal = document.getElementById('update-modal');
       if (modal) modal.style.display = 'none';
+    });
+  }
+
+  const btnDlUpdate = document.getElementById('btn-download-update');
+  if (btnDlUpdate) {
+    btnDlUpdate.addEventListener('click', (e) => {
+      e.preventDefault();
+      const targetUrl = btnDlUpdate.getAttribute('data-url') || btnDlUpdate.href || 'https://github.com/KaranlikPasa/M-zikal/releases/latest';
+      const modal = document.getElementById('update-modal');
+      if (modal) modal.style.display = 'none';
+      showToast('İndirme sayfası açılıyor...');
+      window.location.href = targetUrl;
     });
   }
 }
@@ -1422,7 +1508,7 @@ function showToast(msg) {
 }
 
 // --- AUTOMATIC IN-APP UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.2.0';
+const CURRENT_APP_VERSION = '1.2.2';
 
 async function checkForAppUpdates() {
   try {
@@ -1434,7 +1520,7 @@ async function checkForAppUpdates() {
 
     if (compareSemver(remoteTag, CURRENT_APP_VERSION) > 0) {
       const apkAsset = release.assets && release.assets.find(a => a.name.endsWith('.apk'));
-      const downloadUrl = apkAsset ? apkAsset.browser_download_url : release.html_url;
+      const downloadUrl = apkAsset ? apkAsset.browser_download_url : (release.html_url || 'https://github.com/KaranlikPasa/M-zikal/releases/latest');
 
       const titleElem = document.getElementById('update-title');
       const verElem = document.getElementById('update-version-text');
@@ -1445,7 +1531,10 @@ async function checkForAppUpdates() {
       if (titleElem) titleElem.textContent = release.name || 'Yeni Güncelleme Mevcut!';
       if (verElem) verElem.textContent = `Mevcut: v${CURRENT_APP_VERSION} ➔ Yeni: v${remoteTag}`;
       if (notesElem && release.body) notesElem.textContent = release.body;
-      if (dlBtn) dlBtn.href = downloadUrl;
+      if (dlBtn) {
+        dlBtn.href = downloadUrl;
+        dlBtn.setAttribute('data-url', downloadUrl);
+      }
       if (modal) modal.style.display = 'flex';
     }
   } catch (e) {
@@ -1468,6 +1557,7 @@ function compareSemver(v1, v2) {
 // --- BOOTSTRAP APP ---
 window.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
+  setViewMode(state.viewMode);
   await loadDownloads();
   await loadLibrary();
   await fetchExploreGenre('trendler');
