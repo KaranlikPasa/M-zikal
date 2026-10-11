@@ -215,71 +215,7 @@ const elements = {
 
 // --- YOUTUBE IFRAME API INITIALIZATION & FAILSAFE PLAYBACK ---
 let pendingSongToPlay = null;
-let ytInitInProgress = false;
-
-function initYouTubePlayer(initialVideoId = null) {
-  if (ytPlayer && ytReady) {
-    if (initialVideoId && typeof ytPlayer.loadVideoById === 'function') {
-      try {
-        ytPlayer.loadVideoById({ videoId: initialVideoId, startSeconds: 0 });
-        ytPlayer.playVideo();
-      } catch (e) {}
-    }
-    return;
-  }
-  if (ytInitInProgress) return;
-  if (!window.YT || !window.YT.Player) {
-    ensureYouTubeApiScript();
-    return;
-  }
-
-  const container = document.getElementById('yt-player');
-  if (!container) return;
-
-  ytInitInProgress = true;
-
-  const playerVars = {
-    'autoplay': 1,
-    'controls': 1,
-    'rel': 0,
-    'modestbranding': 1,
-    'playsinline': 1,
-    'enablejsapi': 1
-  };
-
-  // Only pass origin if http/https to avoid postMessage origin mismatch on file:///
-  if (window.location.origin && window.location.origin.startsWith('http')) {
-    playerVars.origin = window.location.origin;
-  }
-
-  try {
-    ytPlayer = new YT.Player('yt-player', {
-      height: '100%',
-      width: '100%',
-      videoId: initialVideoId || undefined,
-      playerVars: playerVars,
-      events: {
-        'onReady': () => {
-          ytReady = true;
-          ytInitInProgress = false;
-          try { ytPlayer.setVolume(state.volume); } catch (e) {}
-          if (pendingSongToPlay) {
-            const s = pendingSongToPlay;
-            pendingSongToPlay = null;
-            playSong(s);
-          } else if (initialVideoId) {
-            try { ytPlayer.playVideo(); } catch (e) {}
-          }
-        },
-        'onStateChange': onPlayerStateChange,
-        'onError': onPlayerError
-      }
-    });
-  } catch (err) {
-    ytInitInProgress = false;
-    console.warn('Failed to construct YT.Player:', err);
-  }
-}
+let ytApiLoaded = false;
 
 function ensureYouTubeApiScript() {
   if (document.getElementById('yt-iframe-api-tag')) return;
@@ -290,13 +226,80 @@ function ensureYouTubeApiScript() {
 }
 
 window.onYouTubeIframeAPIReady = function() {
-  initYouTubePlayer();
+  ytApiLoaded = true;
+  if (pendingSongToPlay) {
+    const s = pendingSongToPlay;
+    pendingSongToPlay = null;
+    playOnlineYouTubeTrack(s);
+  }
 };
 
 if (window.YT && window.YT.Player) {
-  initYouTubePlayer();
+  ytApiLoaded = true;
 } else {
   ensureYouTubeApiScript();
+}
+
+function playOnlineYouTubeTrack(song) {
+  if (!song || !song.id) return;
+
+  if (!window.YT || !window.YT.Player) {
+    pendingSongToPlay = song;
+    ensureYouTubeApiScript();
+    return;
+  }
+
+  // If a player is already instantiated and ready, load video into it
+  if (ytPlayer && ytReady && typeof ytPlayer.loadVideoById === 'function') {
+    try {
+      ytPlayer.loadVideoById({ videoId: song.id, startSeconds: 0 });
+      ytPlayer.playVideo();
+      return;
+    } catch (e) {
+      console.warn('loadVideoById failed, re-creating player:', e);
+    }
+  }
+
+  // Reset the wrapper element to a pristine div so YT.Player can cleanly construct the iframe
+  const wrapper = document.querySelector('.video-wrapper');
+  if (wrapper) {
+    wrapper.innerHTML = '<div id="yt-player"></div>';
+  }
+
+  ytReady = false;
+
+  const playerVars = {
+    'autoplay': 1,
+    'controls': 1,
+    'rel': 0,
+    'modestbranding': 1,
+    'playsinline': 1,
+    'enablejsapi': 1
+  };
+
+  if (window.location.origin && window.location.origin.startsWith('http')) {
+    playerVars.origin = window.location.origin;
+  }
+
+  try {
+    ytPlayer = new YT.Player('yt-player', {
+      height: '100%',
+      width: '100%',
+      videoId: song.id,
+      playerVars: playerVars,
+      events: {
+        'onReady': (event) => {
+          ytReady = true;
+          try { event.target.setVolume(state.volume); } catch (e) {}
+          try { event.target.playVideo(); } catch (e) {}
+        },
+        'onStateChange': onPlayerStateChange,
+        'onError': onPlayerError
+      }
+    });
+  } catch (err) {
+    console.error('Failed to construct YT.Player:', err);
+  }
 }
 
 const BUNDLED_EXPLORE_SONGS = [
@@ -503,12 +506,7 @@ async function onPlayerError(event) {
       showToast('🎵 Alternatif kaynaktan oynatılıyor...');
       song.id = candidate.id;
       if (candidate.duration) song.duration = candidate.duration;
-      if (ytReady && ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
-        ytPlayer.loadVideoById({ videoId: candidate.id, startSeconds: 0 });
-        ytPlayer.playVideo();
-      } else {
-        initYouTubePlayer(candidate.id);
-      }
+      playOnlineYouTubeTrack(song);
       return;
     }
   } catch (err) {
@@ -660,19 +658,7 @@ async function playSong(song, playlist = null, index = -1) {
     // Stop local audio
     localAudio.pause();
 
-    if (ytReady && ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
-      try {
-        ytPlayer.loadVideoById({ videoId: song.id, startSeconds: 0 });
-        ytPlayer.playVideo();
-      } catch (err) {
-        console.warn('loadVideoById failed, reinitializing:', err);
-        pendingSongToPlay = song;
-        initYouTubePlayer(song.id);
-      }
-    } else {
-      pendingSongToPlay = song;
-      initYouTubePlayer(song.id);
-    }
+    playOnlineYouTubeTrack(song);
   }
 
   // Highlight active song in grid
@@ -2342,7 +2328,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.3.2';
+const CURRENT_APP_VERSION = '1.3.3';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {

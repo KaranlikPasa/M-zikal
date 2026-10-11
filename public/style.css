@@ -511,14 +511,14 @@ body {
 /* Video Popout */
 .video-container {
   position: fixed;
-  bottom: 0;
-  right: 0;
-  width: 1px;
-  height: 1px;
-  opacity: 0.01;
+  bottom: 80px;
+  right: 16px;
+  width: 280px;
+  height: 160px;
+  opacity: 0;
   pointer-events: none;
+  z-index: -1;
   overflow: hidden;
-  z-index: -10;
 }
 
 .video-container.active {

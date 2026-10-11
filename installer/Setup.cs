@@ -12,7 +12,7 @@ namespace MuzikalInstaller
 {
     static class Program
     {
-        public const string AppVersion = "1.3.2";
+        public const string AppVersion = "1.3.3";
         public const string AppName = "Müzikal";
         public const string RegKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Muzikal";
 
@@ -75,17 +75,48 @@ namespace MuzikalInstaller
         {
             try
             {
+                // Kill any lingering process listening on port 3456
+                Process netstat = new Process();
+                netstat.StartInfo.FileName = "cmd.exe";
+                netstat.StartInfo.Arguments = "/c netstat -ano | findstr :3456";
+                netstat.StartInfo.UseShellExecute = false;
+                netstat.StartInfo.RedirectStandardOutput = true;
+                netstat.StartInfo.CreateNoWindow = true;
+                netstat.Start();
+                string output = netstat.StandardOutput.ReadToEnd();
+                netstat.WaitForExit();
+
+                string[] lines = output.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string line in lines)
+                {
+                    string[] parts = line.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 5)
+                    {
+                        int pid;
+                        if (int.TryParse(parts[parts.Length - 1], out pid) && pid > 0)
+                        {
+                            try
+                            {
+                                Process p = Process.GetProcessById(pid);
+                                p.Kill();
+                                p.WaitForExit(1000);
+                            }
+                            catch { }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
                 Process[] procs = Process.GetProcessesByName("node");
                 foreach (Process p in procs)
                 {
                     try
                     {
-                        string pPath = p.MainModule.FileName;
-                        if (pPath.StartsWith(installDir, StringComparison.OrdinalIgnoreCase))
-                        {
-                            p.Kill();
-                            p.WaitForExit(1500);
-                        }
+                        p.Kill();
+                        p.WaitForExit(1000);
                     }
                     catch { }
                 }

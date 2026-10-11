@@ -9,8 +9,8 @@ const { spawn } = require('child_process');
 // Force IPv4 first to avoid connection timeouts on Windows
 dns.setDefaultResultOrder('ipv4first');
 
-const PORT = 3456;
-const APP_VERSION = '1.3.2';
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
+const APP_VERSION = '1.3.3';
 const APP_VERSION_CODE = 14;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
@@ -969,7 +969,13 @@ const server = http.createServer(async (req, res) => {
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       const ext = path.extname(filePath).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      res.writeHead(200, { 'Content-Type': contentType });
+      const headers = { 'Content-Type': contentType };
+      if (['.html', '.js', '.css', '.json'].includes(ext)) {
+        headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+        headers['Pragma'] = 'no-cache';
+        headers['Expires'] = '0';
+      }
+      res.writeHead(200, headers);
       fs.createReadStream(filePath).pipe(res);
       return;
     }
@@ -977,7 +983,12 @@ const server = http.createServer(async (req, res) => {
     // SPA fallback
     const indexHtml = path.join(PUBLIC_DIR, 'index.html');
     if (fs.existsSync(indexHtml)) {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
       fs.createReadStream(indexHtml).pipe(res);
       return;
     }
