@@ -10,8 +10,8 @@ const { spawn } = require('child_process');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = 3456;
-const APP_VERSION = '1.3.0';
-const APP_VERSION_CODE = 12;
+const APP_VERSION = '1.3.1';
+const APP_VERSION_CODE = 13;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -42,15 +42,15 @@ const CACHE_TTL = 15 * 60 * 1000;
 // Download status tracker
 const activeDownloads = new Map(); // songId -> { status: 'downloading'|'done'|'error', progress: 0, title: '' }
 
-// Preset explore categories
+// Preset explore categories (pure music hit queries without marathon mix clutter)
 const EXPLORE_GENRES = {
-  'trendler': 'en çok dinlenen popüler şarkılar 2024 2025',
-  'turkce-pop': 'en iyi türkçe pop şarkılar',
-  'turkce-rap': 'en popüler türkçe rap şarkılar',
-  'rock': 'türkçe rock ve yabancı klasik rock efsaneleri',
-  'akustik': 'türkçe akustik sakin şarkılar',
+  'trendler': 'türkiye top müzik hit şarkılar official audio klip',
+  'turkce-pop': 'türkçe pop hit şarkılar audio klip',
+  'turkce-rap': 'türkçe rap hip hop şarkılar audio klip',
+  'rock': 'türkçe rock ve klasik rock hit şarkılar',
+  'akustik': 'türkçe akustik canlı performans şarkılar',
   'lofi': 'lofi hip hop radio beats to relax study to',
-  'global': 'top billboard global hits 2024 2025'
+  'global': 'top billboard global hit songs official video'
 };
 
 // Helper to read library
@@ -91,6 +91,57 @@ function getDownloadedTrackIds() {
   } catch (e) {
     return [];
   }
+}
+
+// Helper to parse duration string (e.g., "3:45" or "1:05:20") into total seconds
+function parseDurationSecs(durStr) {
+  if (!durStr) return 0;
+  const parts = durStr.split(':').map(Number);
+  if (parts.length === 3) {
+    return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+  } else if (parts.length === 2) {
+    return (parts[0] || 0) * 60 + (parts[1] || 0);
+  }
+  return 0;
+}
+
+// Strict music search sanitization: filters out gaming, twitch, vlogs, reactions, trailers, and marathon mixes
+function isGenuineMusicVideo(title, channel, duration, query = '') {
+  const qLower = (query || '').toLowerCase();
+  const tLower = (title || '').toLowerCase();
+  const cLower = (channel || '').toLowerCase();
+
+  // Allow long sets if user explicitly searched for mix, set, album, podcast
+  const allowLong = /\b(mix|set|albüm|album|podcast|full|saat|disko)\b/i.test(qLower);
+  const durSecs = parseDurationSecs(duration);
+
+  // Exclude marathon videos > 13 minutes (780s) unless explicitly asked for mixes
+  if (!allowLong && durSecs > 780) {
+    return false;
+  }
+  // Exclude short teasers / intros (< 30s)
+  if (durSecs > 0 && durSecs < 30) {
+    return false;
+  }
+
+  // Blacklist gaming videos, vlogs, reactions, trailers, film/dizi clips
+  const blacklist = [
+    'gameplay', 'lets play', "let's play", 'walkthrough', 'oyun', 'oyunlar', 'gamer',
+    'pubg', 'valorant', 'fortnite', 'minecraft', 'gta 5', 'gta v', 'roblox', 'brawl stars',
+    'twitch', 'canlı yayın', 'tepki', 'reaction', 'vlog', 'bölüm', 'fragman', 'trailer',
+    'dizi', 'film izle', 'özet', 'full izle', 'shorts'
+  ];
+
+  for (const word of blacklist) {
+    if (!qLower.includes(word)) {
+      const regex = new RegExp(`(^|[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ])${word}([^a-zA-Z0-9çğıöşüÇĞİÖŞÜ]|$)`, 'i');
+      if (regex.test(tLower) || regex.test(cLower)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 // YouTube search scraper
@@ -149,6 +200,11 @@ async function searchYouTube(query) {
         const title = v.title?.runs?.map(r => r.text).join('') || v.title?.simpleText || 'Bilinmeyen Başlık';
         const channel = v.ownerText?.runs?.map(r => r.text).join('') || 'Bilinmeyen Sanatçı';
         const duration = v.lengthText?.simpleText || '';
+
+        // Filter out non-music, gaming, vlogs, and marathon mixes
+        if (!isGenuineMusicVideo(title, channel, duration, query)) {
+          continue;
+        }
 
         results.push({
           id: v.videoId,
@@ -212,6 +268,12 @@ async function searchYouTubeInnerTube(query) {
           const title = v.title?.runs?.map(r => r.text).join('') || v.title?.simpleText || 'Bilinmeyen Başlık';
           const channel = v.ownerText?.runs?.map(r => r.text).join('') || 'Bilinmeyen Sanatçı';
           const duration = v.lengthText?.simpleText || '';
+
+          // Filter out non-music, gaming, vlogs, and marathon mixes
+          if (!isGenuineMusicVideo(title, channel, duration, query)) {
+            continue;
+          }
+
           results.push({
             id: v.videoId,
             title: title.trim(),

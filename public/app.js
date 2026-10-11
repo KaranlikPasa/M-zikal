@@ -108,6 +108,13 @@ const elements = {
   emptyTitle: document.getElementById('empty-title'),
   emptyDesc: document.getElementById('empty-desc'),
 
+  // Home Screen Custom Sections (Son Dinlenenler & Önerilen Sanatçılar)
+  homeCustomSections: document.getElementById('home-custom-sections'),
+  homeRecentSection: document.getElementById('home-recent-section'),
+  homeRecentGrid: document.getElementById('home-recent-grid'),
+  btnHomeSeeHistory: document.getElementById('btn-home-see-history'),
+  homeArtistsRow: document.getElementById('home-artists-row'),
+
   // Queue Drawer
   queueDrawer: document.getElementById('queue-drawer'),
   btnCloseQueue: document.getElementById('btn-close-queue'),
@@ -606,6 +613,16 @@ async function playSong(song, playlist = null, index = -1) {
     }
   });
 
+  // Record history locally and persist to storage
+  if (!state.library.history) state.library.history = [];
+  state.library.history = state.library.history.filter(s => s.id !== song.id);
+  state.library.history.unshift(song);
+  if (state.library.history.length > 50) state.library.history = state.library.history.slice(0, 50);
+  persistLibrary(state.library);
+  if (state.currentView === 'home' && typeof renderHomeSections === 'function') {
+    renderHomeSections();
+  }
+
   // Record history to backend
   fetch('/api/library/history', {
     method: 'POST',
@@ -799,6 +816,50 @@ function cycleShuffleMode() {
     showToast('Karışık Çalma Kapalı');
   }
 }
+
+function cycleRepeatMode() {
+  if (state.repeatMode === 'all') {
+    state.repeatMode = 'one';
+    if (elements.btnRepeat) {
+      elements.btnRepeat.classList.add('active');
+      elements.btnRepeat.title = 'Tek Şarkı Tekrarı';
+    }
+    if (elements.mfpBtnRepeat) {
+      elements.mfpBtnRepeat.classList.add('active');
+      elements.mfpBtnRepeat.title = 'Tek Şarkı Tekrarı';
+    }
+    showToast('🔂 Tek Şarkı Tekrarı');
+  } else if (state.repeatMode === 'one') {
+    state.repeatMode = 'off';
+    if (elements.btnRepeat) {
+      elements.btnRepeat.classList.remove('active');
+      elements.btnRepeat.title = 'Tekrar Kapalı';
+    }
+    if (elements.mfpBtnRepeat) {
+      elements.mfpBtnRepeat.classList.remove('active');
+      elements.mfpBtnRepeat.title = 'Tekrar Kapalı';
+    }
+    showToast('Tekrar Kapalı');
+  } else {
+    state.repeatMode = 'all';
+    if (elements.btnRepeat) {
+      elements.btnRepeat.classList.add('active');
+      elements.btnRepeat.title = 'Tümünü Tekrarla';
+    }
+    if (elements.mfpBtnRepeat) {
+      elements.mfpBtnRepeat.classList.add('active');
+      elements.mfpBtnRepeat.title = 'Tümünü Tekrarla';
+    }
+    showToast('🔁 Tümünü Tekrarla');
+  }
+}
+
+// Window global bindings for native Android media controls
+window.togglePlayPause = togglePlayPause;
+window.playNext = playNext;
+window.playPrev = playPrev;
+window.toggleShuffle = cycleShuffleMode;
+window.toggleRepeat = cycleRepeatMode;
 
 function onSongEnded() {
   if (state.repeatMode === 'one' && state.currentSong) {
@@ -1208,12 +1269,103 @@ function renderSongs(songs, isSearching = false) {
 
 // --- DATA FETCHING & UI VISIBILITY ---
 
+const RECOMMENDED_ARTISTS = [
+  { name: 'Semicenk', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=260&h=260&fit=crop' },
+  { name: 'Sezen Aksu', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=260&h=260&fit=crop' },
+  { name: 'Duman', role: 'Grup', img: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=260&h=260&fit=crop' },
+  { name: 'Lvbel C5', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=260&h=260&fit=crop' },
+  { name: 'Manga', role: 'Grup', img: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=260&h=260&fit=crop' },
+  { name: 'Mor ve Ötesi', role: 'Grup', img: 'https://images.unsplash.com/photo-1511735111819-9a3f7709049c?w=260&h=260&fit=crop' },
+  { name: 'Gülşen', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=260&h=260&fit=crop' },
+  { name: 'Teoman', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=260&h=260&fit=crop' },
+  { name: 'Tarkan', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=260&h=260&fit=crop' },
+  { name: 'Simge', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1520523839898-507125cd53c1?w=260&h=260&fit=crop' },
+  { name: 'Melike Şahin', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=260&h=260&fit=crop' },
+  { name: 'Dedublüman', role: 'Grup', img: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=260&h=260&fit=crop' },
+  { name: 'Coldplay', role: 'Grup', img: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=260&h=260&fit=crop' },
+  { name: 'The Weeknd', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=260&h=260&fit=crop' },
+  { name: 'Billie Eilish', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=260&h=260&fit=crop' }
+];
+
+function renderHomeSections() {
+  if (!elements.homeCustomSections) return;
+  if (state.currentView !== 'home') {
+    elements.homeCustomSections.style.display = 'none';
+    return;
+  }
+
+  elements.homeCustomSections.style.display = 'flex';
+
+  // 1. Son Dinlenenler (History)
+  if (elements.homeRecentSection && elements.homeRecentGrid) {
+    const historySongs = state.library.history || [];
+    if (historySongs.length > 0) {
+      elements.homeRecentSection.style.display = 'flex';
+      const recents = historySongs.slice(0, 6);
+      elements.homeRecentGrid.innerHTML = recents.map((s, idx) => `
+        <div class="recent-track-card" data-idx="${idx}">
+          <img src="${s.thumbnail || 'https://via.placeholder.com/60'}" class="recent-track-thumb" alt="${escapeHtml(s.title)}" loading="lazy">
+          <div class="recent-track-info">
+            <div class="recent-track-title">${escapeHtml(s.title)}</div>
+            <div class="recent-track-artist">${escapeHtml(s.channel)}</div>
+          </div>
+          <div class="recent-track-play">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          </div>
+        </div>
+      `).join('');
+
+      elements.homeRecentGrid.querySelectorAll('.recent-track-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const idx = parseInt(card.dataset.idx, 10);
+          const s = recents[idx];
+          if (s) playSong(s, recents, idx);
+        });
+      });
+    } else {
+      elements.homeRecentSection.style.display = 'none';
+    }
+  }
+
+  // 2. Önerilen Sanatçılar (Spotify-style Circular Artist Cards)
+  if (elements.homeArtistsRow && elements.homeArtistsRow.children.length === 0) {
+    elements.homeArtistsRow.innerHTML = RECOMMENDED_ARTISTS.map(a => `
+      <div class="artist-circle-card" data-artist="${escapeHtml(a.name)}">
+        <div class="artist-avatar-wrap">
+          <img src="${a.img}" class="artist-avatar-img" alt="${escapeHtml(a.name)}" loading="lazy">
+          <div class="artist-hover-play">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          </div>
+        </div>
+        <div class="artist-name">${escapeHtml(a.name)}</div>
+        <div class="artist-role">${a.role}</div>
+      </div>
+    `).join('');
+
+    elements.homeArtistsRow.querySelectorAll('.artist-circle-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const artist = card.dataset.artist;
+        if (elements.searchInput) {
+          elements.searchInput.value = artist;
+          if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'block';
+        }
+        performSearch(artist);
+      });
+    });
+  }
+}
+
 function updateCategoryChipsVisibility() {
   if (!elements.categoryChips) return;
   const isSearching = !!(elements.searchInput && elements.searchInput.value.trim().length > 0);
-  const isHomeOrExplore = (state.currentView === 'home' || state.currentView === 'explore');
+  const isExplore = (state.currentView === 'explore');
 
-  if (isHomeOrExplore && !isSearching) {
+  // Chips strictly visible ONLY on Explore ("Trendler & Keşif") when not searching
+  if (isExplore && !isSearching) {
     elements.categoryChips.style.display = 'flex';
   } else {
     elements.categoryChips.style.display = 'none';
@@ -1226,6 +1378,12 @@ async function fetchExploreGenre(genreKey) {
   elements.emptyState.style.display = 'none';
   elements.loadingState.style.display = 'flex';
   elements.loadingText.textContent = 'Müzikler yükleniyor...';
+
+  if (state.currentView === 'home') {
+    renderHomeSections();
+  } else if (elements.homeCustomSections) {
+    elements.homeCustomSections.style.display = 'none';
+  }
 
   try {
     const data = await apiFetch(`/api/explore?genre=${encodeURIComponent(genreKey)}`);
@@ -1250,6 +1408,7 @@ async function performSearch(query) {
   }
 
   elements.heroBanner.style.display = 'none';
+  if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
   updateCategoryChipsVisibility();
   elements.sectionActions.innerHTML = '';
   elements.currentSectionTitle.textContent = `"${query}" İçin Arama Sonuçları`;
@@ -1375,6 +1534,7 @@ function openPlaylistView(plId) {
   if (elements.searchInput) elements.searchInput.value = '';
   if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
   elements.heroBanner.style.display = 'none';
+  if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
   updateCategoryChipsVisibility();
   elements.currentSectionTitle.textContent = pl.name;
   elements.currentSectionDesc.textContent = pl.description || `${pl.songs.length} şarkı`;
@@ -1404,6 +1564,7 @@ function openDownloadsView() {
   if (elements.searchInput) elements.searchInput.value = '';
   if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
   elements.heroBanner.style.display = 'none';
+  if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
   updateCategoryChipsVisibility();
   elements.sectionActions.innerHTML = '';
   elements.currentSectionTitle.textContent = 'İndirilenler & Çevrimdışı Parçalar';
@@ -1501,36 +1662,47 @@ function navigateTo(view) {
 
   if (view === 'home') {
     elements.heroBanner.style.display = 'flex';
+    renderHomeSections();
     elements.sectionActions.innerHTML = '';
-    elements.currentSectionTitle.textContent = 'En Popüler Şarkılar';
-    elements.currentSectionDesc.textContent = 'Günün en çok dinlenen hit parçaları';
+    elements.currentSectionTitle.textContent = 'Sana Özel Önerilen Parçalar';
+    elements.currentSectionDesc.textContent = 'Günün en sevilen popüler hitleri';
     fetchExploreGenre('trendler');
-  } else if (view === 'explore') {
-    elements.heroBanner.style.display = 'none';
-    elements.sectionActions.innerHTML = '';
-    elements.currentSectionTitle.textContent = 'Müzik Türleri & Trendler';
-    elements.currentSectionDesc.textContent = 'Kategorilere göre popüler şarkıları keşfedin';
-    fetchExploreGenre(state.currentGenre);
-  } else if (view === 'favorites') {
-    elements.heroBanner.style.display = 'none';
-    elements.sectionActions.innerHTML = '';
-    elements.currentSectionTitle.textContent = 'Beğenilen Şarkılar';
-    elements.currentSectionDesc.textContent = `${state.library.favorites.length} favori parça`;
-    state.currentPlaylist = state.library.favorites;
-    renderSongs(state.library.favorites);
-  } else if (view === 'downloads') {
-    openDownloadsView();
-  } else if (view === 'history') {
-    elements.heroBanner.style.display = 'none';
-    elements.sectionActions.innerHTML = '';
-    elements.currentSectionTitle.textContent = 'Dinleme Geçmişi';
-    elements.currentSectionDesc.textContent = 'En son dinlediğiniz şarkılar';
-    state.currentPlaylist = state.library.history;
-    renderSongs(state.library.history);
+  } else {
+    if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
+    if (view === 'explore') {
+      elements.heroBanner.style.display = 'none';
+      elements.sectionActions.innerHTML = '';
+      elements.currentSectionTitle.textContent = '🔥 Trendler & Müzik Türleri';
+      elements.currentSectionDesc.textContent = 'Kategorilere göre popüler şarkıları keşfedin';
+      fetchExploreGenre(state.currentGenre);
+    } else if (view === 'favorites') {
+      elements.heroBanner.style.display = 'none';
+      elements.sectionActions.innerHTML = '';
+      elements.currentSectionTitle.textContent = 'Beğenilen Şarkılar';
+      elements.currentSectionDesc.textContent = `${state.library.favorites.length} favori parça`;
+      state.currentPlaylist = state.library.favorites;
+      renderSongs(state.library.favorites);
+    } else if (view === 'downloads') {
+      openDownloadsView();
+    } else if (view === 'history') {
+      elements.heroBanner.style.display = 'none';
+      elements.sectionActions.innerHTML = '';
+      elements.currentSectionTitle.textContent = 'Dinleme Geçmişi';
+      elements.currentSectionDesc.textContent = 'En son dinlediğiniz şarkılar';
+      state.currentPlaylist = state.library.history;
+      renderSongs(state.library.history);
+    }
   }
 }
 
 function setupEventListeners() {
+  // Home See All History Button
+  if (elements.btnHomeSeeHistory) {
+    elements.btnHomeSeeHistory.addEventListener('click', () => {
+      navigateTo('history');
+    });
+  }
+
   // Desktop Sidebar Navigation
   elements.navItems.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1703,24 +1875,7 @@ function setupEventListeners() {
 
   elements.btnShuffle.addEventListener('click', cycleShuffleMode);
 
-  elements.btnRepeat.addEventListener('click', () => {
-    if (state.repeatMode === 'all') {
-      state.repeatMode = 'one';
-      elements.btnRepeat.classList.add('active');
-      elements.btnRepeat.title = 'Tek Şarkı Tekrarı';
-      showToast('🔂 Tek Şarkı Tekrarı');
-    } else if (state.repeatMode === 'one') {
-      state.repeatMode = 'off';
-      elements.btnRepeat.classList.remove('active');
-      elements.btnRepeat.title = 'Tekrar Kapalı';
-      showToast('Tekrar Kapalı');
-    } else {
-      state.repeatMode = 'all';
-      elements.btnRepeat.classList.add('active');
-      elements.btnRepeat.title = 'Tümünü Tekrarla';
-      showToast('🔁 Tümünü Tekrarla');
-    }
-  });
+  elements.btnRepeat.addEventListener('click', cycleRepeatMode);
 
   elements.progressBarTrack.addEventListener('click', seekTo);
 
@@ -2082,7 +2237,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.3.0';
+const CURRENT_APP_VERSION = '1.3.1';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {

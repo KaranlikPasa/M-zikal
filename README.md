@@ -7,13 +7,17 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1ed760?style=for-the-badge&logo=android)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.3.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.3.1-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
+- 🌟 **Yenilenen Spotify Tarzı Ana Sayfa (v1.3.1):** Ana ekrandan karmaşık trend etiketleri kaldırıldı ve menüdeki "Trendler & Keşif" sekmesine taşındı. Ana sayfada artık doğrudan **Son Dinlenenler**, Spotify tarzı dairesel **Önerilen Sanatçılar** (Semicenk, Sezen Aksu, Duman, Lvbel C5, Manga, Mor ve Ötesi, Gülşen, vb. - tek dokunuşla sanatçının şarkılarına ulaşın) ve **Sana Özel Önerilen Parçalar** yer alır.
+- 🖼️ **Kristal Netliğinde HD Bildirim & Kilit Ekranı Kumandası (v1.3.1):** Bildirim çubuğu ve kilit ekranındaki düşük çözünürlüklü (144p) albüm kapağı sorunu çözüldü! YouTube küçük resimleri yerine 720p/1080p yüksek çözünürlüklü kapaklar ve yerel `MediaMetadata` kullanıldı. Bildirim kumandasına **Karışık Çal (🔀)** ve **Tekrar Çal (🔁)** butonları eklendi.
+- 🎯 **Saf Müzik Odaklı Arama Motoru (v1.3.1):** Arama motoruna eklenen akıllı müzik filtresi sayesinde oyun videoları (gameplay, PUBG, Valorant, Minecraft, GTA, Roblox vb.), vloglar, klip tepki videoları ve 1 saatlik kulüp miksleri arama sonuçlarından filtrelenir; yalnızca aradığınız gerçek müzik parçaları ve klipleri listelenir.
+- ⚡ **100% PC Bağımsız Çalışma:** Bilgisayarınız kapalıyken bile telefon uygulaması kesintisiz çalışır. Gömülü yerel motor (`NativeEngine`) sayesinde arama, şarkı sözleri, oynatma ve favoriler doğrudan telefonunuz üzerinden bağımsız olarak yürütülür.
 - 🎤 **Spotify Tarzı Canlı Şarkı Sözleri (v1.3.0):** Şarkı çalarken tek tıkla açılan şık koyu cam panelde gerçek zamanlı karaoke şarkı sözleri! Şarkı aktıkça okunan satır parıldayarak beyaz renkte öne çıkar ve ekran otomatik kayar. Dilediğiniz söz satırına dokunarak şarkıyı doğrudan o saniyeye atlatabilirsiniz. (Sözü bulunmayan şarkılarda gereksiz kalabalık yapmaz).
 - 🎧 **Android Kusursuz Arka Planda Çalma & Kilit Ekranı Kumandası (v1.3.0):** Uygulama simge durumuna küçültüldüğünde, ekran kilitlendiğinde veya başka uygulamalara geçildiğinde müzik asla kesilmez. Yerel `MediaSession` ve `MediaWebView` mimarisiyle telefonun uyku moduna geçmesi engellenir. Kilit ekranında ve bildirim çubuğunda şarkı kapağı ile Önceki, Oynat/Duraklat, Sonraki, Kapat kumandaları yer alır.
 - 📦 **Windows Otomatik Kurulum & Güncelleme Programı:** Artık zip açmakla uğraşmak istemeyenler için tek tıkla kurulan `Muzikal-Setup.exe`! Masaüstü ve Başlat Menüsü kısayollarını otomatik oluşturur, Windows Denetim Masası / Program Ekle-Kaldır'a entegre olur. Uygulama içi tek tıkla sessiz güncelleme alabilir ve çalma listeleriniz ile indirdiğiniz şarkıları her zaman güvende tutar.

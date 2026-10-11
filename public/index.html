@@ -77,7 +77,7 @@
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
           </svg>
           <span>Güncellemeleri Kontrol Et</span>
-          <span class="badge" id="sidebar-app-ver">v1.3.0</span>
+          <span class="badge" id="sidebar-app-ver">v1.3.1</span>
         </button>
       </nav>
 
@@ -245,6 +245,36 @@
             </div>
           </div>
         </section>
+
+        <!-- ANA SAYFA ÖZEL BÖLÜMLERİ (SON DİNLENENLER & ÖNERİLEN SANATÇILAR) -->
+        <div class="home-custom-sections" id="home-custom-sections" style="display: none;">
+          <!-- 1. SON DİNLENENLER (GEÇMİŞ) -->
+          <div class="home-sub-section" id="home-recent-section" style="display: none;">
+            <div class="home-sub-header">
+              <div class="home-sub-header-left">
+                <h3 class="home-sub-title">Son Dinlenenler</h3>
+                <span class="home-sub-desc">Kaldığınız yerden devam edin</span>
+              </div>
+              <button class="btn-text-subtle" id="btn-home-see-history">Tümünü Gör</button>
+            </div>
+            <div class="recent-tracks-grid" id="home-recent-grid">
+              <!-- Dynamic Recent Tracks -->
+            </div>
+          </div>
+
+          <!-- 2. ÖNERİLEN SANATÇILAR (SPOTIFY TARZI DAİRESEL SANATÇI KARTLARI) -->
+          <div class="home-sub-section" id="home-artists-section">
+            <div class="home-sub-header">
+              <div class="home-sub-header-left">
+                <h3 class="home-sub-title">Önerilen Sanatçılar</h3>
+                <span class="home-sub-desc">Şarkılarını keşfetmek için dokunun</span>
+              </div>
+            </div>
+            <div class="artists-scroll-row" id="home-artists-row">
+              <!-- Dynamic Artist Circles -->
+            </div>
+          </div>
+        </div>
 
         <!-- BÖLÜM BAŞLIĞI -->
         <div class="section-header">
