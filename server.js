@@ -10,8 +10,8 @@ const { spawn } = require('child_process');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.3.5';
-const APP_VERSION_CODE = 17;
+const APP_VERSION = '1.3.6';
+const APP_VERSION_CODE = 18;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -475,13 +475,22 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer(async (req, res) => {
-  const parsedUrl = new URL(req.url, 'http://127.0.0.1:3456');
+  const host = req.headers.host || '';
+  const parsedUrl = new URL(req.url, `http://${host || 'localhost:3456'}`);
   const pathname = parsedUrl.pathname;
 
-  // CORS headers for local usage
+  // Auto-redirect raw IP 127.0.0.1 to localhost for Web UI so YouTube embed origin restriction does not block music
+  if (host.startsWith('127.0.0.1') && !pathname.startsWith('/api/') && !pathname.endsWith('.apk')) {
+    res.writeHead(302, { 'Location': `http://localhost:${PORT}${req.url}` });
+    res.end();
+    return;
+  }
+
+  // CORS and Referrer Policy headers so embedded YouTube player is never rejected by Error 153 (MISSING_REFERRER)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+  res.setHeader('Referrer-Policy', 'origin');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);

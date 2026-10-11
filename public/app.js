@@ -304,8 +304,13 @@ function playOnlineYouTubeTrack(song) {
     'enablejsapi': 1
   };
 
-  if (window.location.origin && window.location.origin.startsWith('http')) {
-    playerVars.origin = window.location.origin;
+  let embedOrigin = window.location.origin || 'http://localhost:3456';
+  if (embedOrigin.includes('127.0.0.1')) {
+    embedOrigin = embedOrigin.replace('127.0.0.1', 'localhost');
+  }
+  if (embedOrigin.startsWith('http')) {
+    playerVars.origin = embedOrigin;
+    playerVars.widget_referrer = embedOrigin;
   }
 
   try {
@@ -317,6 +322,13 @@ function playOnlineYouTubeTrack(song) {
       events: {
         'onReady': (event) => {
           ytReady = true;
+          try {
+            const iframe = typeof event.target.getIframe === 'function' ? event.target.getIframe() : null;
+            if (iframe) {
+              iframe.setAttribute('referrerpolicy', 'origin');
+              iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+            }
+          } catch (e) {}
           try { event.target.setVolume(state.volume); } catch (e) {}
           if (!state.isVideoVisible && typeof event.target.setPlaybackQuality === 'function') {
             try { event.target.setPlaybackQuality('small'); } catch (qErr) {}
@@ -571,21 +583,31 @@ async function onPlayerError(event) {
     return;
   }
 
-  // If this song already attempted fallback, proceed to next song
-  if (song._fallbackAttempted) {
-    showToast('Bu parça oynatılamadı. Sonraki parçaya geçiliyor...');
+  song._attemptedIds = song._attemptedIds || new Set();
+  song._attemptedIds.add(song.id);
+  song._fallbackCount = (song._fallbackCount || 0) + 1;
+
+  if (song._fallbackCount > 3) {
+    showToast('Bu parça telif/kısıtlama nedeniyle oynatılamadı. Sonraki parçaya geçiliyor...');
     setTimeout(() => playNext(), 1200);
     return;
   }
 
-  // Mark fallback attempt
-  song._fallbackAttempted = true;
   showToast('Bu video kısıtlı, alternatif kaynak aranıyor...');
 
   try {
-    const q = `${song.title} ${song.channel || ''} audio`;
+    // Clean up title for high-accuracy alternative search
+    const rawTitle = song.title || '';
+    const cleanTitle = rawTitle
+      .replace(/\(.*?video.*?\)|\[.*?video.*?\]/gi, '')
+      .replace(/\(.*?klip.*?\)|\[.*?klip.*?\]/gi, '')
+      .replace(/\(.*?official.*?\)|\[.*?official.*?\]/gi, '')
+      .replace(/\(.*?remix.*?\)|\[.*?remix.*?\]/gi, '')
+      .trim();
+
+    const q = `${cleanTitle} audio`;
     const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
-    const candidate = data && data.results && data.results.find(r => r.id && r.id !== song.id);
+    const candidate = data && data.results && data.results.find(r => r.id && !song._attemptedIds.has(r.id));
 
     if (candidate && candidate.id) {
       console.log('Found alternative audio for restricted track:', candidate);
@@ -2453,7 +2475,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.3.5';
+const CURRENT_APP_VERSION = '1.3.6';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
