@@ -213,35 +213,91 @@ const elements = {
   sidebarAppVer: document.getElementById('sidebar-app-ver')
 };
 
-// --- YOUTUBE IFRAME API INITIALIZATION ---
-window.onYouTubeIframeAPIReady = function() {
-  const origin = (window.location.origin && window.location.origin.startsWith('http'))
-    ? window.location.origin
-    : 'https://www.youtube.com';
+// --- YOUTUBE IFRAME API INITIALIZATION & FAILSAFE PLAYBACK ---
+let pendingSongToPlay = null;
+let ytInitInProgress = false;
 
-  ytPlayer = new YT.Player('yt-player', {
-    height: '100%',
-    width: '100%',
-    playerVars: {
-      'autoplay': 1,
-      'controls': 1,
-      'rel': 0,
-      'modestbranding': 1,
-      'playsinline': 1,
-      'enablejsapi': 1,
-      'origin': origin,
-      'widget_referrer': 'https://www.youtube.com'
-    },
-    events: {
-      'onReady': () => {
-        ytReady = true;
-        ytPlayer.setVolume(state.volume);
-      },
-      'onStateChange': onPlayerStateChange,
-      'onError': onPlayerError
+function initYouTubePlayer(initialVideoId = null) {
+  if (ytPlayer && ytReady) {
+    if (initialVideoId && typeof ytPlayer.loadVideoById === 'function') {
+      try {
+        ytPlayer.loadVideoById({ videoId: initialVideoId, startSeconds: 0 });
+        ytPlayer.playVideo();
+      } catch (e) {}
     }
-  });
+    return;
+  }
+  if (ytInitInProgress) return;
+  if (!window.YT || !window.YT.Player) {
+    ensureYouTubeApiScript();
+    return;
+  }
+
+  const container = document.getElementById('yt-player');
+  if (!container) return;
+
+  ytInitInProgress = true;
+
+  const playerVars = {
+    'autoplay': 1,
+    'controls': 1,
+    'rel': 0,
+    'modestbranding': 1,
+    'playsinline': 1,
+    'enablejsapi': 1
+  };
+
+  // Only pass origin if http/https to avoid postMessage origin mismatch on file:///
+  if (window.location.origin && window.location.origin.startsWith('http')) {
+    playerVars.origin = window.location.origin;
+  }
+
+  try {
+    ytPlayer = new YT.Player('yt-player', {
+      height: '100%',
+      width: '100%',
+      videoId: initialVideoId || undefined,
+      playerVars: playerVars,
+      events: {
+        'onReady': () => {
+          ytReady = true;
+          ytInitInProgress = false;
+          try { ytPlayer.setVolume(state.volume); } catch (e) {}
+          if (pendingSongToPlay) {
+            const s = pendingSongToPlay;
+            pendingSongToPlay = null;
+            playSong(s);
+          } else if (initialVideoId) {
+            try { ytPlayer.playVideo(); } catch (e) {}
+          }
+        },
+        'onStateChange': onPlayerStateChange,
+        'onError': onPlayerError
+      }
+    });
+  } catch (err) {
+    ytInitInProgress = false;
+    console.warn('Failed to construct YT.Player:', err);
+  }
+}
+
+function ensureYouTubeApiScript() {
+  if (document.getElementById('yt-iframe-api-tag')) return;
+  const tag = document.createElement('script');
+  tag.id = 'yt-iframe-api-tag';
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+}
+
+window.onYouTubeIframeAPIReady = function() {
+  initYouTubePlayer();
 };
+
+if (window.YT && window.YT.Player) {
+  initYouTubePlayer();
+} else {
+  ensureYouTubeApiScript();
+}
 
 const BUNDLED_EXPLORE_SONGS = [
   { id: 'IcXsGn_iFUA', title: 'Türkçe Pop Müzik 2025 Mix - En Çok Dinlenenler', channel: 'Müzikal Hits', duration: '3:45', thumbnail: 'https://i.ytimg.com/vi/IcXsGn_iFUA/hqdefault.jpg' },
@@ -339,13 +395,18 @@ function persistLibrary(lib) {
 // --- BACKGROUND PLAYBACK & NATIVE NOTIFICATION SYNC ---
 function updateNativePlaybackState(song, isPlaying) {
   if (!song) return;
+  const shuffleMode = state.shuffleMode || (state.isShuffled ? 'standard' : 'off');
+  const repeatMode = state.repeatMode || 'all';
+
   if (window.MuzikalNative && typeof window.MuzikalNative.updatePlaybackState === 'function') {
     try {
       window.MuzikalNative.updatePlaybackState(
         isPlaying,
         song.title || 'Müzikal',
         song.channel || 'Bilinmeyen Sanatçı',
-        song.thumbnail || ''
+        song.thumbnail || '',
+        shuffleMode,
+        repeatMode
       );
     } catch (e) {
       console.warn('Native updatePlaybackState error:', e);
@@ -434,18 +495,19 @@ async function onPlayerError(event) {
 
   try {
     const q = `${song.title} ${song.channel || ''} audio`;
-    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-    const data = await res.json();
-    const candidate = data.results && data.results.find(r => r.id && r.id !== song.id);
+    const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const candidate = data && data.results && data.results.find(r => r.id && r.id !== song.id);
 
     if (candidate && candidate.id) {
       console.log('Found alternative audio for restricted track:', candidate);
       showToast('🎵 Alternatif kaynaktan oynatılıyor...');
       song.id = candidate.id;
       if (candidate.duration) song.duration = candidate.duration;
-      if (ytReady && ytPlayer && ytPlayer.loadVideoById) {
+      if (ytReady && ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
         ytPlayer.loadVideoById({ videoId: candidate.id, startSeconds: 0 });
         ytPlayer.playVideo();
+      } else {
+        initYouTubePlayer(candidate.id);
       }
       return;
     }
@@ -583,8 +645,8 @@ async function playSong(song, playlist = null, index = -1) {
     elements.playerOfflineBadge.style.display = 'inline-block';
 
     // Stop YouTube
-    if (ytReady && ytPlayer && ytPlayer.stopVideo) {
-      ytPlayer.stopVideo();
+    if (ytReady && ytPlayer && typeof ytPlayer.stopVideo === 'function') {
+      try { ytPlayer.stopVideo(); } catch (e) {}
     }
 
     localAudio.src = `/downloads/${song.id}.m4a`;
@@ -598,9 +660,18 @@ async function playSong(song, playlist = null, index = -1) {
     // Stop local audio
     localAudio.pause();
 
-    if (ytReady && ytPlayer && ytPlayer.loadVideoById) {
-      ytPlayer.loadVideoById({ videoId: song.id, startSeconds: 0 });
-      ytPlayer.playVideo();
+    if (ytReady && ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+      try {
+        ytPlayer.loadVideoById({ videoId: song.id, startSeconds: 0 });
+        ytPlayer.playVideo();
+      } catch (err) {
+        console.warn('loadVideoById failed, reinitializing:', err);
+        pendingSongToPlay = song;
+        initYouTubePlayer(song.id);
+      }
+    } else {
+      pendingSongToPlay = song;
+      initYouTubePlayer(song.id);
     }
   }
 
@@ -815,43 +886,73 @@ function cycleShuffleMode() {
     updateShuffleUI();
     showToast('Karışık Çalma Kapalı');
   }
+  updateNativePlaybackState(state.currentSong, state.isPlaying);
+}
+
+function updateRepeatUI() {
+  const mode = state.repeatMode || 'all';
+  state.repeatMode = mode;
+
+  const repeatSvgStandard = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="17 1 21 5 17 9"></polyline>
+    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+    <polyline points="7 23 3 19 7 15"></polyline>
+    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+  </svg>`;
+
+  const repeatSvgOne = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="17 1 21 5 17 9"></polyline>
+    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+    <polyline points="7 23 3 19 7 15"></polyline>
+    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+    <text x="12" y="15" font-size="9" font-weight="900" fill="currentColor" text-anchor="middle" stroke="none">1</text>
+  </svg>`;
+
+  const mfpRepeatSvgStandard = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="17 1 21 5 17 9"></polyline>
+    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+    <polyline points="7 23 3 19 7 15"></polyline>
+    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+  </svg>`;
+
+  const mfpRepeatSvgOne = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="17 1 21 5 17 9"></polyline>
+    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+    <polyline points="7 23 3 19 7 15"></polyline>
+    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+    <text x="12" y="15" font-size="9" font-weight="900" fill="currentColor" text-anchor="middle" stroke="none">1</text>
+  </svg>`;
+
+  if (elements.btnRepeat) {
+    elements.btnRepeat.classList.toggle('active', mode !== 'off');
+    elements.btnRepeat.classList.toggle('repeat-one-active', mode === 'one');
+    elements.btnRepeat.innerHTML = (mode === 'one') ? repeatSvgOne : repeatSvgStandard;
+    elements.btnRepeat.title = (mode === 'one') ? 'Sadece Bu Şarkıyı Tekrarla (Tekrar 1)' : (mode === 'all' ? 'Tümünü Tekrarla' : 'Tekrar Kapalı');
+  }
+
+  if (elements.mfpBtnRepeat) {
+    elements.mfpBtnRepeat.classList.toggle('active', mode !== 'off');
+    elements.mfpBtnRepeat.classList.toggle('repeat-one-active', mode === 'one');
+    elements.mfpBtnRepeat.innerHTML = (mode === 'one') ? mfpRepeatSvgOne : mfpRepeatSvgStandard;
+    elements.mfpBtnRepeat.title = (mode === 'one') ? 'Sadece Bu Şarkıyı Tekrarla (Tekrar 1)' : (mode === 'all' ? 'Tümünü Tekrarla' : 'Tekrar Kapalı');
+  }
 }
 
 function cycleRepeatMode() {
   if (state.repeatMode === 'all') {
     state.repeatMode = 'one';
-    if (elements.btnRepeat) {
-      elements.btnRepeat.classList.add('active');
-      elements.btnRepeat.title = 'Tek Şarkı Tekrarı';
-    }
-    if (elements.mfpBtnRepeat) {
-      elements.mfpBtnRepeat.classList.add('active');
-      elements.mfpBtnRepeat.title = 'Tek Şarkı Tekrarı';
-    }
-    showToast('🔂 Tek Şarkı Tekrarı');
+    updateRepeatUI();
+    showToast('🔂 Sadece Bu Şarkıyı Tekrarla (Tekrar 1)');
   } else if (state.repeatMode === 'one') {
     state.repeatMode = 'off';
-    if (elements.btnRepeat) {
-      elements.btnRepeat.classList.remove('active');
-      elements.btnRepeat.title = 'Tekrar Kapalı';
-    }
-    if (elements.mfpBtnRepeat) {
-      elements.mfpBtnRepeat.classList.remove('active');
-      elements.mfpBtnRepeat.title = 'Tekrar Kapalı';
-    }
+    updateRepeatUI();
     showToast('Tekrar Kapalı');
   } else {
     state.repeatMode = 'all';
-    if (elements.btnRepeat) {
-      elements.btnRepeat.classList.add('active');
-      elements.btnRepeat.title = 'Tümünü Tekrarla';
-    }
-    if (elements.mfpBtnRepeat) {
-      elements.mfpBtnRepeat.classList.add('active');
-      elements.mfpBtnRepeat.title = 'Tümünü Tekrarla';
-    }
+    updateRepeatUI();
     showToast('🔁 Tümünü Tekrarla');
   }
+  updateNativePlaybackState(state.currentSong, state.isPlaying);
 }
 
 // Window global bindings for native Android media controls
@@ -867,8 +968,12 @@ function onSongEnded() {
       localAudio.currentTime = 0;
       localAudio.play();
     } else {
-      ytPlayer.seekTo(0);
-      ytPlayer.playVideo();
+      if (ytReady && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+        ytPlayer.seekTo(0);
+        ytPlayer.playVideo();
+      } else {
+        playSong(state.currentSong);
+      }
     }
   } else {
     playNext();
@@ -2237,7 +2342,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.3.1';
+const CURRENT_APP_VERSION = '1.3.2';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -2337,6 +2442,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (sidebarVer) sidebarVer.textContent = 'v' + CURRENT_APP_VERSION;
 
   setupEventListeners();
+  updateRepeatUI();
+  updateShuffleUI();
   setViewMode(state.viewMode);
   updateCategoryChipsVisibility();
   await loadDownloads();

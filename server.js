@@ -10,8 +10,8 @@ const { spawn } = require('child_process');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = 3456;
-const APP_VERSION = '1.3.1';
-const APP_VERSION_CODE = 13;
+const APP_VERSION = '1.3.2';
+const APP_VERSION_CODE = 14;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
