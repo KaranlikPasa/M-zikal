@@ -7,12 +7,14 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1ed760?style=for-the-badge&logo=android)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.3.1-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.3.7-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
+
+- 🚀 **Tek Tıkla Doğrudan Uygulama İçinden Güncelleme (v1.3.7):** Artık hem Windows hem de Android telefonlarda güncelleme yapmak için tarayıcı açıp kurulum dosyası ya da APK indirmekle uğraşmanıza gerek yok! Güncelleme bildirimi geldiğinde "Doğrudan Uygulamada Güncelle"ye tıklayın; uygulama içi canlı ilerleme çubuğu (%0 ➔ %100) ile paket doğrudan indirilir ve otomatik olarak uygulanır (Android'de sistem paket yükleyicisi açılır, Windows'ta sayfa anında yenilenir).
 
 - 🌟 **Yenilenen Spotify Tarzı Ana Sayfa (v1.3.1):** Ana ekrandan karmaşık trend etiketleri kaldırıldı ve menüdeki "Trendler & Keşif" sekmesine taşındı. Ana sayfada artık doğrudan **Son Dinlenenler**, Spotify tarzı dairesel **Önerilen Sanatçılar** (Semicenk, Sezen Aksu, Duman, Lvbel C5, Manga, Mor ve Ötesi, Gülşen, vb. - tek dokunuşla sanatçının şarkılarına ulaşın) ve **Sana Özel Önerilen Parçalar** yer alır.
 - 🖼️ **Kristal Netliğinde HD Bildirim & Kilit Ekranı Kumandası (v1.3.1):** Bildirim çubuğu ve kilit ekranındaki düşük çözünürlüklü (144p) albüm kapağı sorunu çözüldü! YouTube küçük resimleri yerine 720p/1080p yüksek çözünürlüklü kapaklar ve yerel `MediaMetadata` kullanıldı. Bildirim kumandasına **Karışık Çal (🔀)** ve **Tekrar Çal (🔁)** butonları eklendi.

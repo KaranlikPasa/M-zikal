@@ -2291,15 +2291,115 @@ function setupEventListeners() {
     });
   }
 
-  const btnDlUpdate = document.getElementById('btn-download-update');
-  if (btnDlUpdate) {
-    btnDlUpdate.addEventListener('click', (e) => {
+  const btnStartInAppUpdate = document.getElementById('btn-start-inapp-update');
+  if (btnStartInAppUpdate) {
+    btnStartInAppUpdate.addEventListener('click', async (e) => {
       e.preventDefault();
-      const targetUrl = btnDlUpdate.getAttribute('data-url') || btnDlUpdate.href || 'https://github.com/KaranlikPasa/M-zikal/releases/latest';
-      const modal = document.getElementById('update-modal');
-      if (modal) modal.style.display = 'none';
-      showToast('İndirme sayfası açılıyor...');
-      window.location.href = targetUrl;
+      const targetUrl = btnStartInAppUpdate.getAttribute('data-url') || 'https://github.com/KaranlikPasa/M-zikal/releases/latest';
+      const isAndroid = (window.MuzikalNative && typeof window.MuzikalNative.isNative === 'function') ||
+                        navigator.userAgent.toLowerCase().includes('android');
+
+      const progressContainer = document.getElementById('update-progress-container');
+      const progressFill = document.getElementById('update-progress-fill');
+      const progressPercent = document.getElementById('update-progress-percent');
+      const progressStatus = document.getElementById('update-progress-status');
+      const btnDismiss = document.getElementById('btn-dismiss-update');
+
+      if (progressContainer) progressContainer.style.display = 'block';
+      if (progressFill) progressFill.style.width = '3%';
+      if (progressPercent) progressPercent.textContent = '3%';
+      if (progressStatus) progressStatus.textContent = 'Güncelleme başlatılıyor...';
+
+      btnStartInAppUpdate.disabled = true;
+      if (btnDismiss) btnDismiss.style.display = 'none';
+      btnStartInAppUpdate.innerHTML = '<div class="spinner-sm" style="display:inline-block; margin-right:6px;"></div><span>Güncelleniyor...</span>';
+
+      // 1. Android Native In-App Update
+      if (window.MuzikalNative && typeof window.MuzikalNative.startDirectUpdate === 'function') {
+        window.onUpdateDownloadProgress = function(percent, statusText) {
+          if (progressFill) progressFill.style.width = percent + '%';
+          if (progressPercent) progressPercent.textContent = percent + '%';
+          if (progressStatus) progressStatus.textContent = statusText || (`İndiriliyor: %${percent}`);
+          if (percent >= 100) {
+            if (progressStatus) progressStatus.textContent = 'APK indirildi! Paket yükleyici açılıyor...';
+          }
+        };
+
+        window.onUpdateDownloadError = function(errMsg) {
+          if (progressStatus) progressStatus.textContent = 'Hata: ' + errMsg;
+          showToast('Güncelleme hatası: ' + errMsg);
+          btnStartInAppUpdate.disabled = false;
+          btnStartInAppUpdate.innerHTML = '<span>Tekrar Dene</span>';
+          if (btnDismiss) btnDismiss.style.display = 'inline-block';
+        };
+
+        window.MuzikalNative.startDirectUpdate(targetUrl);
+        return;
+      }
+
+      // 2. Android Browser (Fallback to direct APK download link)
+      if (isAndroid) {
+        showToast('APK doğrudan indiriliyor...');
+        window.location.href = targetUrl;
+        setTimeout(() => {
+          btnStartInAppUpdate.disabled = false;
+          btnStartInAppUpdate.innerHTML = '<span>Doğrudan Uygulamada Güncelle</span>';
+          if (btnDismiss) btnDismiss.style.display = 'inline-block';
+        }, 3000);
+        return;
+      }
+
+      // 3. PC (Windows) In-App Hot Update
+      try {
+        const resp = await fetch('/api/update/in-app-apply', { method: 'POST' });
+        const data = await resp.json();
+        if (!data.success && data.message) {
+          showToast(data.message);
+        }
+      } catch (err) {
+        console.warn('In-app apply request error:', err);
+      }
+
+      // Poll progress every 300ms
+      const pollInterval = setInterval(async () => {
+        try {
+          const pRes = await fetch('/api/update/progress');
+          if (!pRes.ok) return;
+          const progress = await pRes.json();
+
+          if (progressFill) progressFill.style.width = (progress.percent || 0) + '%';
+          if (progressPercent) progressPercent.textContent = (progress.percent || 0) + '%';
+          if (progressStatus) progressStatus.textContent = progress.status || 'Güncelleniyor...';
+
+          if (progress.error) {
+            clearInterval(pollInterval);
+            showToast('Güncelleme hatası: ' + progress.error);
+            btnStartInAppUpdate.disabled = false;
+            btnStartInAppUpdate.innerHTML = '<span>Tekrar Dene</span>';
+            if (btnDismiss) btnDismiss.style.display = 'inline-block';
+            return;
+          }
+
+          if (progress.done) {
+            clearInterval(pollInterval);
+            if (progressFill) progressFill.style.width = '100%';
+            if (progressPercent) progressPercent.textContent = '100%';
+            if (progressStatus) progressStatus.textContent = 'Güncelleme başarıyla tamamlandı! Yeniden başlatılıyor...';
+            showToast('🎉 Güncelleme tamamlandı! Sayfa yenileniyor...');
+
+            setTimeout(async () => {
+              try {
+                await fetch('/api/update/restart', { method: 'POST' });
+              } catch (e) {}
+              setTimeout(() => {
+                window.location.reload(true);
+              }, 1200);
+            }, 1500);
+          }
+        } catch (e) {
+          // Ignore network blips during restart
+        }
+      }, 300);
     });
   }
 }
@@ -2475,7 +2575,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.3.6';
+const CURRENT_APP_VERSION = '1.3.7';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -2509,27 +2609,39 @@ async function checkForAppUpdates(isManual = false) {
         const apkAsset = release.assets && release.assets.find(a => a.name.endsWith('.apk'));
         if (apkAsset) downloadUrl = apkAsset.browser_download_url;
       } else {
-        const setupAsset = release.assets && (
-          release.assets.find(a => a.name.toLowerCase().endsWith('setup.exe') || a.name.endsWith('.exe')) ||
-          release.assets.find(a => a.name.endsWith('.zip'))
+        const zipAsset = release.assets && (
+          release.assets.find(a => a.name.toLowerCase().endsWith('-windows-x64.zip')) ||
+          release.assets.find(a => a.name.toLowerCase().endsWith('.zip')) ||
+          release.assets.find(a => a.name.toLowerCase().endsWith('setup.exe') || a.name.endsWith('.exe'))
         );
-        if (setupAsset) downloadUrl = setupAsset.browser_download_url;
+        if (zipAsset) downloadUrl = zipAsset.browser_download_url;
       }
 
       const titleElem = document.getElementById('update-title');
       const verElem = document.getElementById('update-version-text');
       const notesElem = document.getElementById('update-notes-box');
-      const dlBtn = document.getElementById('btn-download-update');
+      const startInAppBtn = document.getElementById('btn-start-inapp-update');
+      const manualLink = document.getElementById('btn-manual-download-link');
+      const progressContainer = document.getElementById('update-progress-container');
+      const btnDismiss = document.getElementById('btn-dismiss-update');
       const modal = document.getElementById('update-modal');
 
       if (titleElem) titleElem.textContent = release.name || 'Yeni Güncelleme Mevcut!';
       if (verElem) verElem.textContent = `Mevcut: v${CURRENT_APP_VERSION} ➔ Yeni: v${remoteTag}`;
       if (notesElem && release.body) notesElem.textContent = release.body;
-      if (dlBtn) {
-        dlBtn.href = downloadUrl;
-        dlBtn.setAttribute('data-url', downloadUrl);
-        dlBtn.textContent = isAndroid ? 'APK İndir ve Güncelle' : 'Kurulum Dosyasını İndir & Güncelle';
+      if (startInAppBtn) {
+        startInAppBtn.setAttribute('data-url', downloadUrl);
+        startInAppBtn.disabled = false;
+        startInAppBtn.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+          <span>Doğrudan Uygulamada Güncelle</span>
+        `;
       }
+      if (manualLink) {
+        manualLink.href = release.html_url || 'https://github.com/KaranlikPasa/M-zikal/releases/latest';
+      }
+      if (progressContainer) progressContainer.style.display = 'none';
+      if (btnDismiss) btnDismiss.style.display = 'inline-block';
       if (modal) modal.style.display = 'flex';
       if (isManual) showToast(`🚀 Yeni sürüm (v${remoteTag}) bulundu!`);
     } else {

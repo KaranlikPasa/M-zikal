@@ -11,7 +11,7 @@
   <title>Müzikal - Müzik Dinleme Uygulaması</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=1.3.6">
+  <link rel="stylesheet" href="style.css?v=1.3.7">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -560,18 +560,34 @@
         <div class="update-icon-badge">🚀</div>
         <div>
           <h3 id="update-title">Yeni Güncelleme Mevcut!</h3>
-          <p id="update-version-text" style="color:var(--accent); font-weight:700;">Sürüm v1.2.0</p>
+          <p id="update-version-text" style="color:var(--accent); font-weight:700;">Sürüm v1.3.7</p>
         </div>
       </div>
       <p style="font-size:12px; margin-bottom:8px; color:var(--text-muted);">Yenilikler:</p>
       <div class="update-notes-box" id="update-notes-box">
         Uygulama performans iyileştirmeleri ve yeni özellikler içeriyor.
       </div>
-      <div class="modal-actions">
+
+      <!-- Doğrudan Uygulama İçi İndirme & Güncelleme İlerleme Çubuğu -->
+      <div id="update-progress-container" style="display:none; margin-top:16px; margin-bottom:12px; padding:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:13px;">
+          <span id="update-progress-status" style="font-weight:600; color:var(--text-main);">Güncelleme hazırlanıyor...</span>
+          <span id="update-progress-percent" style="font-weight:700; color:var(--accent);">0%</span>
+        </div>
+        <div class="update-progress-track" style="width:100%; height:8px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; position:relative;">
+          <div id="update-progress-fill" style="width:0%; height:100%; background:linear-gradient(90deg, #1db954, #1ed760); border-radius:999px; transition:width 0.2s ease;"></div>
+        </div>
+      </div>
+
+      <div class="modal-actions" id="update-modal-actions">
         <button class="btn-secondary" id="btn-dismiss-update">Daha Sonra</button>
-        <a class="btn-primary" id="btn-download-update" href="#" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
-          <span>Şimdi İndir & Güncelle</span>
-        </a>
+        <button class="btn-primary" id="btn-start-inapp-update" style="display:inline-flex; align-items:center; gap:8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+          <span id="btn-update-text">Doğrudan Uygulamada Güncelle</span>
+        </button>
+      </div>
+      <div style="text-align:center; margin-top:10px;">
+        <a id="btn-manual-download-link" href="#" target="_blank" style="font-size:12px; color:var(--text-muted); text-decoration:underline;">Manuel İndirme Sayfası (GitHub)</a>
       </div>
     </div>
   </div>
@@ -803,7 +819,7 @@
   <div class="toast-notification" id="toast-notification"></div>
 
   <!-- APPLICATION SCRIPT & YOUTUBE API -->
-  <script src="app.js?v=1.3.6"></script>
+  <script src="app.js?v=1.3.7"></script>
   <script id="yt-iframe-api-tag" src="https://www.youtube.com/iframe_api"></script>
 </body>
 </html>

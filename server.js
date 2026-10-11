@@ -10,8 +10,8 @@ const { spawn } = require('child_process');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.3.6';
-const APP_VERSION_CODE = 18;
+const APP_VERSION = '1.3.7';
+const APP_VERSION_CODE = 19;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -473,6 +473,212 @@ const MIME_TYPES = {
   '.m4a': 'audio/mp4',
   '.mp3': 'audio/mpeg'
 };
+
+// --- In-App Updater State & Functions ---
+let inAppUpdateState = {
+  inProgress: false,
+  percent: 0,
+  status: '',
+  done: false,
+  error: null
+};
+
+function downloadFileWithProgress(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    function fetchUrl(currentUrl, redirects = 0) {
+      if (redirects > 10) return reject(new Error('Çok fazla yönlendirme'));
+      const parsed = new URL(currentUrl);
+      const client = parsed.protocol === 'https:' ? https : http;
+      const req = client.get(currentUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.7',
+          'Accept': '*/*'
+        }
+      }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          const nextUrl = new URL(res.headers.location, currentUrl).href;
+          res.resume();
+          return fetchUrl(nextUrl, redirects + 1);
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`İndirme HTTP hatası: ${res.statusCode}`));
+        }
+
+        const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
+        let downloadedBytes = 0;
+        const fileStream = fs.createWriteStream(destPath);
+
+        res.on('data', (chunk) => {
+          downloadedBytes += chunk.length;
+          if (totalBytes > 0 && typeof onProgress === 'function') {
+            const pct = Math.round((downloadedBytes / totalBytes) * 100);
+            onProgress(pct, downloadedBytes, totalBytes);
+          }
+        });
+
+        res.pipe(fileStream);
+
+        fileStream.on('finish', () => {
+          fileStream.close();
+          resolve();
+        });
+
+        fileStream.on('error', (err) => {
+          fs.unlink(destPath, () => {});
+          reject(err);
+        });
+      });
+
+      req.on('error', (err) => {
+        fs.unlink(destPath, () => {});
+        reject(err);
+      });
+    }
+
+    fetchUrl(url);
+  });
+}
+
+function copyDirRecursiveSync(srcDir, destDir) {
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursiveSync(srcPath, destPath);
+    } else {
+      try {
+        fs.copyFileSync(srcPath, destPath);
+      } catch (err) {
+        console.warn(`Could not overwrite ${destPath}:`, err.message);
+      }
+    }
+  }
+}
+
+async function runInAppUpdate() {
+  try {
+    inAppUpdateState.status = 'Son sürüm GitHub üzerinden kontrol ediliyor...';
+    inAppUpdateState.percent = 5;
+
+    const ghRes = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.7' }
+    });
+    if (!ghRes.ok) {
+      throw new Error(`GitHub API hatası: HTTP ${ghRes.status}`);
+    }
+    const release = await ghRes.json();
+    const zipAsset = release.assets && (
+      release.assets.find(a => a.name.toLowerCase().endsWith('-windows-x64.zip')) ||
+      release.assets.find(a => a.name.toLowerCase().endsWith('.zip'))
+    );
+
+    if (!zipAsset) {
+      throw new Error('GitHub sürümünde Windows güncelleme paketi (.zip) bulunamadı.');
+    }
+
+    const tempDir = path.join(__dirname, 'temp_update_' + Date.now());
+    fs.mkdirSync(tempDir, { recursive: true });
+    const zipPath = path.join(tempDir, 'update.zip');
+    const extractDir = path.join(tempDir, 'extracted');
+
+    inAppUpdateState.status = 'Güncelleme paketi indiriliyor (%0)...';
+    inAppUpdateState.percent = 10;
+
+    await downloadFileWithProgress(zipAsset.browser_download_url, zipPath, (pct, downloaded, total) => {
+      inAppUpdateState.percent = Math.min(80, 10 + Math.round((pct * 70) / 100));
+      const mbDl = (downloaded / (1024 * 1024)).toFixed(1);
+      const mbTot = (total / (1024 * 1024)).toFixed(1);
+      inAppUpdateState.status = `İndiriliyor: %${inAppUpdateState.percent} (${mbDl} / ${mbTot} MB)...`;
+    });
+
+    inAppUpdateState.percent = 82;
+    inAppUpdateState.status = 'Güncelleme paketi açılıyor...';
+
+    // Extract using PowerShell Expand-Archive
+    await new Promise((resolve, reject) => {
+      fs.mkdirSync(extractDir, { recursive: true });
+      const ps = spawn('powershell', [
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-Command',
+        `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}' -Force`
+      ]);
+      ps.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`Arşiv açılamadı, çıkış kodu: ${code}`));
+      });
+      ps.on('error', reject);
+    });
+
+    inAppUpdateState.percent = 90;
+    inAppUpdateState.status = 'Uygulama dosyaları güncelleniyor...';
+
+    // Look for files either directly in extractDir or in a single subfolder
+    let sourceRoot = extractDir;
+    const extractedEntries = fs.readdirSync(extractDir);
+    if (extractedEntries.length === 1 && fs.statSync(path.join(extractDir, extractedEntries[0])).isDirectory()) {
+      sourceRoot = path.join(extractDir, extractedEntries[0]);
+    }
+
+    // 1. Copy public directory
+    const srcPublic = path.join(sourceRoot, 'public');
+    if (fs.existsSync(srcPublic)) {
+      copyDirRecursiveSync(srcPublic, PUBLIC_DIR);
+    }
+
+    // 2. Copy server.js
+    const srcServer = path.join(sourceRoot, 'server.js');
+    if (fs.existsSync(srcServer)) {
+      try {
+        fs.copyFileSync(srcServer, path.join(__dirname, 'server.js'));
+      } catch (e) {
+        console.warn('server.js overwrite warning:', e.message);
+      }
+    }
+
+    // 3. Copy Muzikal.bat
+    const srcBat = path.join(sourceRoot, 'Muzikal.bat');
+    if (fs.existsSync(srcBat)) {
+      try {
+        fs.copyFileSync(srcBat, path.join(__dirname, 'Muzikal.bat'));
+      } catch (e) {
+        console.warn('Muzikal.bat overwrite warning:', e.message);
+      }
+    }
+
+    // 4. Copy README.md
+    const srcReadme = path.join(sourceRoot, 'README.md');
+    if (fs.existsSync(srcReadme)) {
+      try {
+        fs.copyFileSync(srcReadme, path.join(__dirname, 'README.md'));
+      } catch (e) {
+        console.warn('README.md overwrite warning:', e.message);
+      }
+    }
+
+    // 5. Cleanup temp directory
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch (e) {
+      console.warn('Temp cleanup warning:', e.message);
+    }
+
+    inAppUpdateState.percent = 100;
+    inAppUpdateState.status = 'Güncelleme başarıyla tamamlandı! Sayfa yenileniyor...';
+    inAppUpdateState.done = true;
+    inAppUpdateState.inProgress = false;
+  } catch (err) {
+    console.error('In-app update error:', err);
+    inAppUpdateState.inProgress = false;
+    inAppUpdateState.error = err.message || 'Bilinmeyen hata';
+    inAppUpdateState.status = 'Hata: ' + inAppUpdateState.error;
+  }
+}
 
 const server = http.createServer(async (req, res) => {
   const host = req.headers.host || '';
@@ -1051,47 +1257,58 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // 16. Windows In-App Silent Auto-Update
-    if (pathname === '/api/app/update-windows' && req.method === 'POST') {
-      try {
-        const ghRes = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest', {
-          headers: { 'User-Agent': 'Muzikal-Updater' }
-        });
-        const release = await ghRes.json();
-        const setupAsset = release.assets && release.assets.find(a => a.name.endsWith('Setup.exe') || a.name.endsWith('.exe'));
-        if (!setupAsset) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, message: 'Kurulum dosyası bulunamadı.' }));
-          return;
-        }
+    // 16. In-App Direct Update Endpoints (Windows PC)
+    if (pathname === '/api/update/progress' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(inAppUpdateState));
+      return;
+    }
 
-        const tempDir = process.env.TEMP || os.tmpdir();
-        const installerPath = path.join(tempDir, 'Muzikal-Setup.exe');
-
-        const fileRes = await fetch(setupAsset.browser_download_url, {
-          headers: { 'User-Agent': 'Muzikal-Updater' }
-        });
-        const arrayBuf = await fileRes.arrayBuffer();
-        fs.writeFileSync(installerPath, Buffer.from(arrayBuf));
-
+    if ((pathname === '/api/update/in-app-apply' || pathname === '/api/app/update-windows') && req.method === 'POST') {
+      if (inAppUpdateState.inProgress) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, message: 'Güncelleme indirildi, kuruluyor...' }));
+        res.end(JSON.stringify({ success: true, message: 'Güncelleme zaten devam ediyor.' }));
+        return;
+      }
 
-        setTimeout(() => {
-          const cp = spawn(installerPath, ['/SILENT', '/UPDATE'], {
+      inAppUpdateState = {
+        inProgress: true,
+        percent: 5,
+        status: 'Güncelleme kontrol ediliyor...',
+        done: false,
+        error: null
+      };
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Güncelleme başlatıldı' }));
+
+      runInAppUpdate().catch(err => {
+        console.error('In-app update failure:', err);
+        inAppUpdateState.inProgress = false;
+        inAppUpdateState.error = err.message || 'Güncelleme başarısız';
+        inAppUpdateState.status = 'Hata: ' + inAppUpdateState.error;
+      });
+      return;
+    }
+
+    if (pathname === '/api/update/restart' && req.method === 'POST') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Sunucu yeniden başlatılıyor...' }));
+      setTimeout(() => {
+        try {
+          const child = spawn(process.argv[0], process.argv.slice(1), {
+            cwd: __dirname,
             detached: true,
             stdio: 'ignore'
           });
-          cp.unref();
+          child.unref();
           process.exit(0);
-        }, 1200);
-        return;
-      } catch (err) {
-        console.error('Windows update error:', err);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
-        return;
-      }
+        } catch (e) {
+          console.error('Restart error:', e);
+          process.exit(0);
+        }
+      }, 1000);
+      return;
     }
 
     // Static File Serving
