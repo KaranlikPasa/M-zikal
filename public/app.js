@@ -48,8 +48,14 @@ const state = {
   currentGenre: 'trendler',
   currentPlaylistId: null,
   isVideoVisible: false,
-  viewMode: localStorage.getItem('muzikal_view_mode') || 'grid'
+  viewMode: localStorage.getItem('muzikal_view_mode') || 'grid',
+  user: null
 };
+
+try {
+  const storedUser = localStorage.getItem('muzikal_user');
+  if (storedUser) state.user = JSON.parse(storedUser);
+} catch (e) {}
 
 let ytPlayer = null;
 let ytReady = false;
@@ -210,7 +216,25 @@ const elements = {
   lyricsLines: document.getElementById('lyrics-lines'),
   lyricsEmpty: document.getElementById('lyrics-empty'),
   lyricsLoading: document.getElementById('lyrics-loading'),
-  sidebarAppVer: document.getElementById('sidebar-app-ver')
+  sidebarAppVer: document.getElementById('sidebar-app-ver'),
+
+  // Google Auth & User Elements
+  btnOpenGoogleLogin: document.getElementById('btn-open-google-login'),
+  userProfileCard: document.getElementById('user-profile-card'),
+  userProfileAvatar: document.getElementById('user-profile-avatar'),
+  userProfileName: document.getElementById('user-profile-name'),
+  userProfileEmail: document.getElementById('user-profile-email'),
+  btnGoogleLogout: document.getElementById('btn-google-logout'),
+  btnTopbarUser: document.getElementById('btn-topbar-user'),
+  topbarGoogleSvg: document.getElementById('topbar-google-svg'),
+  topbarUserAvatar: document.getElementById('topbar-user-avatar'),
+  topbarUserName: document.getElementById('topbar-user-name'),
+  btnMobileUserTop: document.getElementById('btn-mobile-user-top'),
+  googleLoginModal: document.getElementById('google-login-modal'),
+  btnCloseGoogleModal: document.getElementById('btn-close-google-modal'),
+  googleEmailInput: document.getElementById('google-email-input'),
+  googleNameInput: document.getElementById('google-name-input'),
+  btnSubmitGoogleLogin: document.getElementById('btn-submit-google-login')
 };
 
 // --- YOUTUBE IFRAME API INITIALIZATION & FAILSAFE PLAYBACK ---
@@ -253,6 +277,9 @@ function playOnlineYouTubeTrack(song) {
   if (ytPlayer && ytReady && typeof ytPlayer.loadVideoById === 'function') {
     try {
       ytPlayer.loadVideoById({ videoId: song.id, startSeconds: 0 });
+      if (!state.isVideoVisible && typeof ytPlayer.setPlaybackQuality === 'function') {
+        try { ytPlayer.setPlaybackQuality('small'); } catch (qErr) {}
+      }
       ytPlayer.playVideo();
       return;
     } catch (e) {
@@ -291,6 +318,9 @@ function playOnlineYouTubeTrack(song) {
         'onReady': (event) => {
           ytReady = true;
           try { event.target.setVolume(state.volume); } catch (e) {}
+          if (!state.isVideoVisible && typeof event.target.setPlaybackQuality === 'function') {
+            try { event.target.setPlaybackQuality('small'); } catch (qErr) {}
+          }
           try { event.target.playVideo(); } catch (e) {}
         },
         'onStateChange': onPlayerStateChange,
@@ -392,6 +422,13 @@ function persistLibrary(lib) {
     if (window.MuzikalNative && typeof window.MuzikalNative.saveLibrary === 'function') {
       window.MuzikalNative.saveLibrary(json);
     }
+    if (state.user && state.user.email) {
+      fetch('/api/auth/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: state.user.email, library: lib })
+      }).catch(() => {});
+    }
   } catch (e) {}
 }
 
@@ -441,10 +478,25 @@ if ('mediaSession' in navigator) {
   } catch (e) {}
 }
 
+let resumeDebounceTimer = null;
+
 function onPlayerStateChange(event) {
   if (state.isOfflinePlaying) return; // Managed by localAudio
 
+  if (event.data === YT.PlayerState.BUFFERING) {
+    // Smooth buffering: don't interrupt YouTube while it buffers audio chunks
+    if (resumeDebounceTimer) {
+      clearTimeout(resumeDebounceTimer);
+      resumeDebounceTimer = null;
+    }
+    return;
+  }
+
   if (event.data === YT.PlayerState.PLAYING) {
+    if (resumeDebounceTimer) {
+      clearTimeout(resumeDebounceTimer);
+      resumeDebounceTimer = null;
+    }
     userRequestedPause = false;
     state.isPlaying = true;
     updatePlayPauseButton();
@@ -453,23 +505,35 @@ function onPlayerStateChange(event) {
     elements.playingIndicator.classList.add('active');
     updateNativePlaybackState(state.currentSong, true);
   } else if (event.data === YT.PlayerState.PAUSED) {
-    // If YouTube paused itself due to backgrounding/screen lock, keep playing!
+    // If YouTube paused itself due to backgrounding/screen lock, keep playing safely without chopping
     if (!userRequestedPause && state.currentSong && state.isPlaying) {
-      console.log('Background auto-pause intercepted! Resuming playback...');
-      setTimeout(() => {
-        if (!userRequestedPause && ytReady && ytPlayer && ytPlayer.playVideo) {
-          ytPlayer.playVideo();
+      if (resumeDebounceTimer) clearTimeout(resumeDebounceTimer);
+      resumeDebounceTimer = setTimeout(() => {
+        if (!userRequestedPause && ytReady && ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
+          const currentState = ytPlayer.getPlayerState();
+          if (currentState === YT.PlayerState.PAUSED) {
+            console.log('Safe background auto-pause resume...');
+            ytPlayer.playVideo();
+          }
         }
-      }, 50);
+      }, 400);
       return;
     }
 
+    if (resumeDebounceTimer) {
+      clearTimeout(resumeDebounceTimer);
+      resumeDebounceTimer = null;
+    }
     state.isPlaying = false;
     updatePlayPauseButton();
     elements.heroVinyl.classList.add('paused');
     elements.playingIndicator.classList.remove('active');
     updateNativePlaybackState(state.currentSong, false);
   } else if (event.data === YT.PlayerState.ENDED) {
+    if (resumeDebounceTimer) {
+      clearTimeout(resumeDebounceTimer);
+      resumeDebounceTimer = null;
+    }
     updateNativePlaybackState(state.currentSong, false);
     onSongEnded();
   }
@@ -1537,6 +1601,39 @@ async function loadLibrary() {
   } catch (e) {
     state.library = getStoredLibrary();
   }
+
+  // If signed in with Google, pull latest cloud library & merge
+  if (state.user && state.user.email) {
+    try {
+      const cloudRes = await fetch(`/api/auth/google-sync?email=${encodeURIComponent(state.user.email)}`);
+      if (cloudRes.ok) {
+        const cloudData = await cloudRes.json();
+        if (cloudData.success && cloudData.library) {
+          const favMap = new Map();
+          (state.library.favorites || []).forEach(s => favMap.set(s.id, s));
+          (cloudData.library.favorites || []).forEach(s => favMap.set(s.id, s));
+          state.library.favorites = Array.from(favMap.values());
+
+          const plMap = new Map();
+          (state.library.playlists || []).forEach(p => plMap.set(p.name, p));
+          (cloudData.library.playlists || []).forEach(p => {
+            if (!plMap.has(p.name)) plMap.set(p.name, p);
+          });
+          state.library.playlists = Array.from(plMap.values());
+
+          const histMap = new Map();
+          (state.library.history || []).forEach(s => histMap.set(s.id, s));
+          (cloudData.library.history || []).forEach(s => {
+            if (!histMap.has(s.id)) histMap.set(s.id, s);
+          });
+          state.library.history = Array.from(histMap.values()).slice(0, 100);
+
+          persistLibrary(state.library);
+        }
+      }
+    } catch (err) {}
+  }
+
   elements.favCountBadge.textContent = (state.library.favorites || []).length;
   renderSidebarPlaylists();
 }
@@ -2041,12 +2138,18 @@ function setupEventListeners() {
     elements.videoContainer.classList.toggle('active', state.isVideoVisible);
     elements.btnToggleVideo.classList.toggle('active', state.isVideoVisible);
     elements.btnVideoText.textContent = state.isVideoVisible ? 'Klibi Gizle' : 'Klip Modu';
+    if (ytPlayer && typeof ytPlayer.setPlaybackQuality === 'function') {
+      try { ytPlayer.setPlaybackQuality(state.isVideoVisible ? 'default' : 'small'); } catch (e) {}
+    }
   });
   elements.btnCloseVideo.addEventListener('click', () => {
     state.isVideoVisible = false;
     elements.videoContainer.classList.remove('active');
     elements.btnToggleVideo.classList.remove('active');
     elements.btnVideoText.textContent = 'Klip Modu';
+    if (ytPlayer && typeof ytPlayer.setPlaybackQuality === 'function') {
+      try { ytPlayer.setPlaybackQuality('small'); } catch (e) {}
+    }
   });
 
   // Hero play
@@ -2328,7 +2431,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.3.3';
+const CURRENT_APP_VERSION = '1.3.4';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -2422,12 +2525,202 @@ window.addEventListener('focus', () => {
   }
 });
 
+// --- GOOGLE SIGN-IN & PROFILE MANAGEMENT ---
+function renderUserAccount() {
+  if (state.user && state.user.email) {
+    if (elements.btnOpenGoogleLogin) elements.btnOpenGoogleLogin.style.display = 'none';
+    if (elements.userProfileCard) elements.userProfileCard.style.display = 'flex';
+    if (elements.userProfileAvatar) elements.userProfileAvatar.src = state.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(state.user.name || 'Kullanici')}&background=4285F4&color=fff&bold=true`;
+    if (elements.userProfileName) elements.userProfileName.textContent = state.user.name || 'Kullanıcı';
+    if (elements.userProfileEmail) elements.userProfileEmail.textContent = state.user.email;
+
+    if (elements.btnTopbarUser) {
+      if (elements.topbarGoogleSvg) elements.topbarGoogleSvg.style.display = 'none';
+      if (elements.topbarUserAvatar) {
+        elements.topbarUserAvatar.src = state.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(state.user.name || 'Kullanici')}&background=4285F4&color=fff&bold=true`;
+        elements.topbarUserAvatar.style.display = 'block';
+      }
+      if (elements.topbarUserName) {
+        elements.topbarUserName.textContent = (state.user.name || state.user.email.split('@')[0]);
+      }
+    }
+  } else {
+    if (elements.btnOpenGoogleLogin) elements.btnOpenGoogleLogin.style.display = 'flex';
+    if (elements.userProfileCard) elements.userProfileCard.style.display = 'none';
+
+    if (elements.btnTopbarUser) {
+      if (elements.topbarGoogleSvg) elements.topbarGoogleSvg.style.display = 'block';
+      if (elements.topbarUserAvatar) elements.topbarUserAvatar.style.display = 'none';
+      if (elements.topbarUserName) elements.topbarUserName.textContent = 'Google Giriş';
+    }
+  }
+}
+
+async function loginWithGoogle(email, name = '') {
+  email = (email || '').trim().toLowerCase();
+  if (!email || !email.includes('@')) {
+    showToast('Lütfen geçerli bir e-posta adresi girin');
+    return;
+  }
+
+  name = (name || email.split('@')[0]).trim();
+  const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4285F4&color=fff&bold=true`;
+
+  const submitBtn = elements.btnSubmitGoogleLogin;
+  let originalText = '';
+  if (submitBtn) {
+    const textSpan = submitBtn.querySelector('span');
+    if (textSpan) {
+      originalText = textSpan.textContent;
+      textSpan.textContent = 'Giriş yapılıyor...';
+    }
+    submitBtn.disabled = true;
+  }
+
+  try {
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        name,
+        avatar,
+        library: state.library
+      })
+    });
+
+    const data = await res.json();
+    if (data.success && data.user) {
+      state.user = data.user;
+      localStorage.setItem('muzikal_user', JSON.stringify(data.user));
+
+      if (data.library) {
+        state.library = data.library;
+        persistLibrary(state.library);
+      }
+
+      renderUserAccount();
+      if (elements.googleLoginModal) elements.googleLoginModal.style.display = 'none';
+      showToast(`🎉 Google ile giriş yapıldı! (${state.user.email})`);
+      renderSidebarPlaylists();
+      if (state.currentView === 'home' && typeof renderHomeSections === 'function') {
+        renderHomeSections();
+      }
+    } else {
+      showToast(data.error || 'Giriş yapılamadı');
+    }
+  } catch (err) {
+    // Offline / local fallback
+    state.user = { email, name, avatar, local: true };
+    localStorage.setItem('muzikal_user', JSON.stringify(state.user));
+    renderUserAccount();
+    if (elements.googleLoginModal) elements.googleLoginModal.style.display = 'none';
+    showToast(`Google hesabı bağlandı: ${email}`);
+  } finally {
+    if (submitBtn) {
+      const textSpan = submitBtn.querySelector('span');
+      if (textSpan && originalText) textSpan.textContent = originalText;
+      submitBtn.disabled = false;
+    }
+  }
+}
+
+function logoutGoogle() {
+  if (!confirm('Google hesabınızdan çıkış yapmak istediğinize emin misiniz?\n\n(Misafir moduna geçilecek, şarkılarınız cihazınızda kalacaktır)')) {
+    return;
+  }
+
+  state.user = null;
+  localStorage.removeItem('muzikal_user');
+  renderUserAccount();
+  showToast('Google hesabından çıkış yapıldı. Misafir moduna geçildi.');
+}
+
+function initGoogleAuth() {
+  renderUserAccount();
+
+  if (elements.btnOpenGoogleLogin) {
+    elements.btnOpenGoogleLogin.addEventListener('click', () => {
+      if (elements.googleLoginModal) {
+        elements.googleLoginModal.style.display = 'flex';
+        if (elements.googleEmailInput) elements.googleEmailInput.focus();
+      }
+    });
+  }
+
+  if (elements.btnTopbarUser) {
+    elements.btnTopbarUser.addEventListener('click', () => {
+      if (state.user) {
+        logoutGoogle();
+      } else {
+        if (elements.googleLoginModal) {
+          elements.googleLoginModal.style.display = 'flex';
+          if (elements.googleEmailInput) elements.googleEmailInput.focus();
+        }
+      }
+    });
+  }
+
+  if (elements.btnMobileUserTop) {
+    elements.btnMobileUserTop.addEventListener('click', () => {
+      if (state.user) {
+        logoutGoogle();
+      } else {
+        if (elements.googleLoginModal) {
+          elements.googleLoginModal.style.display = 'flex';
+          if (elements.googleEmailInput) elements.googleEmailInput.focus();
+        }
+      }
+    });
+  }
+
+  if (elements.btnCloseGoogleModal) {
+    elements.btnCloseGoogleModal.addEventListener('click', () => {
+      if (elements.googleLoginModal) elements.googleLoginModal.style.display = 'none';
+    });
+  }
+
+  if (elements.googleLoginModal) {
+    elements.googleLoginModal.addEventListener('click', (e) => {
+      if (e.target === elements.googleLoginModal) {
+        elements.googleLoginModal.style.display = 'none';
+      }
+    });
+  }
+
+  if (elements.btnGoogleLogout) {
+    elements.btnGoogleLogout.addEventListener('click', (e) => {
+      e.stopPropagation();
+      logoutGoogle();
+    });
+  }
+
+  if (elements.btnSubmitGoogleLogin) {
+    elements.btnSubmitGoogleLogin.addEventListener('click', () => {
+      const email = elements.googleEmailInput ? elements.googleEmailInput.value : '';
+      const name = elements.googleNameInput ? elements.googleNameInput.value : '';
+      loginWithGoogle(email, name);
+    });
+  }
+
+  if (elements.googleEmailInput) {
+    elements.googleEmailInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const email = elements.googleEmailInput.value;
+        const name = elements.googleNameInput ? elements.googleNameInput.value : '';
+        loginWithGoogle(email, name);
+      }
+    });
+  }
+}
+
 // --- BOOTSTRAP APP ---
 window.addEventListener('DOMContentLoaded', async () => {
   const sidebarVer = document.getElementById('sidebar-app-ver');
   if (sidebarVer) sidebarVer.textContent = 'v' + CURRENT_APP_VERSION;
 
   setupEventListeners();
+  initGoogleAuth();
   updateRepeatUI();
   updateShuffleUI();
   setViewMode(state.viewMode);

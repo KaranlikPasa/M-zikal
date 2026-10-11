@@ -10,8 +10,8 @@ const { spawn } = require('child_process');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.3.3';
-const APP_VERSION_CODE = 14;
+const APP_VERSION = '1.3.4';
+const APP_VERSION_CODE = 16;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -32,8 +32,38 @@ function getLocalNetworkIp() {
 }
 
 // Ensure required directories exist on Drive D
+const USERS_DIR = path.join(__dirname, 'data', 'users');
 if (!fs.existsSync(DOWNLOADS_DIR)) fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
 if (!fs.existsSync(BIN_DIR)) fs.mkdirSync(BIN_DIR, { recursive: true });
+if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR, { recursive: true });
+
+function getUserFilePath(email) {
+  const safe = (email || 'guest').toLowerCase().trim().replace(/[^a-z0-9_.-]/g, '_');
+  return path.join(USERS_DIR, `${safe}.json`);
+}
+
+function readUserData(email) {
+  try {
+    const f = getUserFilePath(email);
+    if (fs.existsSync(f)) {
+      return JSON.parse(fs.readFileSync(f, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Error reading user data:', e);
+  }
+  return null;
+}
+
+function writeUserData(email, data) {
+  try {
+    const f = getUserFilePath(email);
+    fs.writeFileSync(f, JSON.stringify(data, null, 2), 'utf8');
+    return true;
+  } catch (e) {
+    console.error('Error writing user data:', e);
+    return false;
+  }
+}
 
 // In-memory cache for search queries (15 minutes TTL)
 const searchCache = new Map();
@@ -570,6 +600,106 @@ const server = http.createServer(async (req, res) => {
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, message: 'Şarkı sözü bulunamadı' }));
+      return;
+    }
+
+    // --- GOOGLE SIGN-IN & CLOUD SYNC API ---
+    if (pathname === '/api/auth/google' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const email = (body.email || '').trim().toLowerCase();
+      if (!email || !email.includes('@')) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Geçerli bir Google e-posta adresi gereklidir' }));
+        return;
+      }
+
+      const name = (body.name || email.split('@')[0]).trim();
+      const avatar = body.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4285F4&color=fff&bold=true`;
+      
+      let existingUser = readUserData(email);
+      let incomingLibrary = body.library || { favorites: [], playlists: [], history: [] };
+
+      if (!existingUser) {
+        existingUser = {
+          user: { email, name, avatar, createdAt: Date.now() },
+          library: {
+            favorites: incomingLibrary.favorites || [],
+            playlists: incomingLibrary.playlists || [],
+            history: incomingLibrary.history || []
+          }
+        };
+      } else {
+        // Merge favorites (preserve unique)
+        const favMap = new Map();
+        (existingUser.library.favorites || []).forEach(s => favMap.set(s.id, s));
+        (incomingLibrary.favorites || []).forEach(s => favMap.set(s.id, s));
+        existingUser.library.favorites = Array.from(favMap.values());
+
+        // Merge playlists
+        const plMap = new Map();
+        (existingUser.library.playlists || []).forEach(p => plMap.set(p.name, p));
+        (incomingLibrary.playlists || []).forEach(p => {
+          if (!plMap.has(p.name)) plMap.set(p.name, p);
+        });
+        existingUser.library.playlists = Array.from(plMap.values());
+
+        // Merge history (preserve unique, keep recent first)
+        const histMap = new Map();
+        (incomingLibrary.history || []).forEach(s => histMap.set(s.id, s));
+        (existingUser.library.history || []).forEach(s => {
+          if (!histMap.has(s.id)) histMap.set(s.id, s);
+        });
+        existingUser.library.history = Array.from(histMap.values()).slice(0, 100);
+
+        // Update profile details if provided
+        existingUser.user.name = name;
+        if (body.avatar) existingUser.user.avatar = body.avatar;
+        existingUser.user.lastSync = Date.now();
+      }
+
+      writeUserData(email, existingUser);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        user: existingUser.user,
+        library: existingUser.library
+      }));
+      return;
+    }
+
+    if (pathname === '/api/auth/google-sync' && req.method === 'GET') {
+      const email = (url.searchParams.get('email') || '').trim().toLowerCase();
+      if (!email) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'E-posta gerekli' }));
+        return;
+      }
+
+      const userData = readUserData(email);
+      if (userData) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, user: userData.user, library: userData.library }));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Kullanıcı bulunamadı' }));
+      }
+      return;
+    }
+
+    if (pathname === '/api/auth/sync' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const email = (body.email || '').trim().toLowerCase();
+      if (email && body.library) {
+        let userData = readUserData(email);
+        if (userData) {
+          userData.library = body.library;
+          userData.user.lastSync = Date.now();
+          writeUserData(email, userData);
+        }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
       return;
     }
 
