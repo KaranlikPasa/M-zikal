@@ -433,10 +433,20 @@ function persistLibrary(lib) {
 }
 
 // --- BACKGROUND PLAYBACK & NATIVE NOTIFICATION SYNC ---
+let lastNativeState = { songId: null, isPlaying: null, shuffleMode: null, repeatMode: null };
+
 function updateNativePlaybackState(song, isPlaying) {
   if (!song) return;
   const shuffleMode = state.shuffleMode || (state.isShuffled ? 'standard' : 'off');
   const repeatMode = state.repeatMode || 'all';
+
+  if (lastNativeState.songId === song.id &&
+      lastNativeState.isPlaying === isPlaying &&
+      lastNativeState.shuffleMode === shuffleMode &&
+      lastNativeState.repeatMode === repeatMode) {
+    return;
+  }
+  lastNativeState = { songId: song.id, isPlaying, shuffleMode, repeatMode };
 
   if (window.MuzikalNative && typeof window.MuzikalNative.updatePlaybackState === 'function') {
     try {
@@ -479,6 +489,8 @@ if ('mediaSession' in navigator) {
 }
 
 let resumeDebounceTimer = null;
+let autoResumeAttempts = 0;
+let lastAutoResumeTime = 0;
 
 function onPlayerStateChange(event) {
   if (state.isOfflinePlaying) return; // Managed by localAudio
@@ -497,6 +509,7 @@ function onPlayerStateChange(event) {
       clearTimeout(resumeDebounceTimer);
       resumeDebounceTimer = null;
     }
+    autoResumeAttempts = 0;
     userRequestedPause = false;
     state.isPlaying = true;
     updatePlayPauseButton();
@@ -507,17 +520,26 @@ function onPlayerStateChange(event) {
   } else if (event.data === YT.PlayerState.PAUSED) {
     // If YouTube paused itself due to backgrounding/screen lock, keep playing safely without chopping
     if (!userRequestedPause && state.currentSong && state.isPlaying) {
-      if (resumeDebounceTimer) clearTimeout(resumeDebounceTimer);
-      resumeDebounceTimer = setTimeout(() => {
-        if (!userRequestedPause && ytReady && ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
-          const currentState = ytPlayer.getPlayerState();
-          if (currentState === YT.PlayerState.PAUSED) {
-            console.log('Safe background auto-pause resume...');
-            ytPlayer.playVideo();
+      const now = Date.now();
+      if (now - lastAutoResumeTime > 4000) {
+        autoResumeAttempts = 0;
+      }
+      lastAutoResumeTime = now;
+      autoResumeAttempts++;
+
+      if (autoResumeAttempts <= 3) {
+        if (resumeDebounceTimer) clearTimeout(resumeDebounceTimer);
+        resumeDebounceTimer = setTimeout(() => {
+          if (!userRequestedPause && ytReady && ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
+            const currentState = ytPlayer.getPlayerState();
+            if (currentState === YT.PlayerState.PAUSED) {
+              console.log('Safe background auto-pause resume attempt:', autoResumeAttempts);
+              ytPlayer.playVideo();
+            }
           }
-        }
-      }, 400);
-      return;
+        }, 300);
+        return;
+      }
     }
 
     if (resumeDebounceTimer) {
@@ -2431,7 +2453,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.3.4';
+const CURRENT_APP_VERSION = '1.3.5';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {

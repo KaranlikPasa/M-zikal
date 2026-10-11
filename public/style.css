@@ -515,7 +515,7 @@ body {
   right: 16px;
   width: 240px;
   height: 140px;
-  opacity: 0.01;
+  opacity: 1;
   pointer-events: none;
   z-index: -10;
   overflow: hidden;
