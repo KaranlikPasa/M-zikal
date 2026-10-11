@@ -134,25 +134,43 @@ namespace MuzikalInstaller
             }
 
             Assembly asm = Assembly.GetExecutingAssembly();
-            using (Stream stream = asm.GetManifestResourceStream("MuzikalPayload.zip"))
+            Stream stream = asm.GetManifestResourceStream("MuzikalPayload.zip");
+            if (stream == null)
             {
-                if (stream == null)
+                stream = asm.GetManifestResourceStream("MuzikalPayload");
+            }
+            if (stream == null)
+            {
+                foreach (string rName in asm.GetManifestResourceNames())
                 {
-                    // Fallback: check if zip file exists next to exe
-                    string localZip = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Muzikal-Windows-x64.zip");
-                    if (File.Exists(localZip))
+                    if (rName.IndexOf("Payload", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        rName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                     {
-                        ExtractZipFile(localZip, targetDir, progressCallback);
+                        stream = asm.GetManifestResourceStream(rName);
+                        break;
                     }
-                    else
-                    {
-                        throw new FileNotFoundException("Gömülü kurulum arşivi (MuzikalPayload.zip) bulunamadı!");
-                    }
+                }
+            }
+
+            if (stream == null)
+            {
+                // Fallback: check if zip file exists next to exe
+                string localZip = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Muzikal-Windows-x64.zip");
+                if (File.Exists(localZip))
+                {
+                    ExtractZipFile(localZip, targetDir, progressCallback);
+                    return;
                 }
                 else
                 {
-                    using (ZipArchive archive = new ZipArchive(stream))
-                    {
+                    throw new FileNotFoundException("Gömülü kurulum arşivi (MuzikalPayload.zip) bulunamadı!");
+                }
+            }
+
+            using (stream)
+            {
+                using (ZipArchive archive = new ZipArchive(stream))
+                {
                         int total = archive.Entries.Count;
                         int cur = 0;
                         foreach (ZipArchiveEntry entry in archive.Entries)
@@ -193,7 +211,6 @@ namespace MuzikalInstaller
                         }
                     }
                 }
-            }
 
             // Copy setup executable as uninstaller
             try
