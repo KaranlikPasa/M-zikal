@@ -10,8 +10,8 @@ const { spawn } = require('child_process');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.3.8';
-const APP_VERSION_CODE = 20;
+const APP_VERSION = '1.3.9';
+const APP_VERSION_CODE = 21;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -525,6 +525,68 @@ async function fetchSpotifyPlaylist(playlistId) {
   };
 }
 
+// YouTube Music Playlist Scraper / Extractor
+function formatDurationSecs(secs) {
+  if (!secs || isNaN(secs)) return '3:30';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+async function fetchYouTubeMusicPlaylist(urlOrId) {
+  const match = urlOrId.match(/[?&]list=([a-zA-Z0-9_-]+)/) || urlOrId.match(/^([a-zA-Z0-9_-]{10,})$/);
+  const playlistId = match ? (match[1] || match[0]) : null;
+  if (!playlistId) {
+    throw new Error('Geçerli bir YouTube Music çalma listesi bağlantısı veya ID bulunamadı.');
+  }
+
+  const targetUrl = `https://music.youtube.com/playlist?list=${playlistId}`;
+
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(YT_DLP_PATH)) {
+      return reject(new Error('yt-dlp motoru bulunamadı.'));
+    }
+
+    const { execFile } = require('child_process');
+    execFile(YT_DLP_PATH, ['--flat-playlist', '-J', targetUrl], { maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        return reject(new Error(`YouTube Music listesi alınamadı: ${err.message}`));
+      }
+      try {
+        const data = JSON.parse(stdout);
+        const title = data.title || 'YouTube Music Çalma Listesi';
+        const uploader = data.uploader || data.channel || 'YouTube Music';
+        const rawEntries = Array.isArray(data.entries) ? data.entries : [];
+        const coverUrl = data.thumbnails?.[0]?.url ||
+          (rawEntries[0]?.thumbnails?.[0]?.url) ||
+          (rawEntries[0]?.id ? `https://i.ytimg.com/vi/${rawEntries[0].id}/hqdefault.jpg` : 'https://music.youtube.com/favicon.ico');
+
+        const tracks = rawEntries.map(e => ({
+          id: e.id,
+          title: e.title || 'Bilinmeyen Şarkı',
+          artist: e.uploader || e.channel || uploader || 'Bilinmeyen Sanatçı',
+          duration: typeof e.duration === 'number' ? formatDurationSecs(e.duration) : (e.duration || '3:30'),
+          thumbnail: (e.thumbnails && e.thumbnails.length > 0) ? e.thumbnails[e.thumbnails.length - 1].url : `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`
+        })).filter(t => t.id);
+
+        if (tracks.length === 0) {
+          throw new Error('Çalma listesinde oynatılabilir şarkı bulunamadı. Liste gizli veya boş olabilir.');
+        }
+
+        resolve({
+          id: playlistId,
+          title,
+          uploader,
+          coverUrl,
+          tracks
+        });
+      } catch (parseErr) {
+        reject(new Error(`Playlist verisi ayrıştırılamadı: ${parseErr.message}`));
+      }
+    });
+  });
+}
+
 // Download Track Worker using yt-dlp to D:\müzikal\downloads
 function startTrackDownload(song) {
   if (!song || !song.id) return Promise.reject(new Error('Invalid song'));
@@ -639,7 +701,7 @@ function downloadFileWithProgress(url, destPath, onProgress) {
       const client = parsed.protocol === 'https:' ? https : http;
       const req = client.get(currentUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.9',
           'Accept': '*/*'
         }
       }, (res) => {
@@ -714,7 +776,7 @@ async function runInAppUpdate() {
     inAppUpdateState.percent = 10;
 
     const ghRes = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.8' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.9' }
     });
     if (!ghRes.ok) {
       throw new Error(`GitHub API hatası: HTTP ${ghRes.status}`);
@@ -742,7 +804,7 @@ async function runInAppUpdate() {
 
       for (let i = 0; i < updateFiles.length; i++) {
         const item = updateFiles[i];
-        const res = await fetch(item.remote, { headers: { 'User-Agent': 'Muzikal-Updater/1.3.8' } });
+        const res = await fetch(item.remote, { headers: { 'User-Agent': 'Muzikal-Updater/1.3.9' } });
         if (res.ok) {
           const buf = Buffer.from(await res.arrayBuffer());
           fs.writeFileSync(item.local, buf);
@@ -1066,11 +1128,23 @@ const server = http.createServer(async (req, res) => {
         (incomingLibrary.favorites || []).forEach(s => favMap.set(s.id, s));
         existingUser.library.favorites = Array.from(favMap.values());
 
-        // Merge playlists
+        // Deep merge playlists (match by name or ID, merge all songs without duplicates)
         const plMap = new Map();
-        (existingUser.library.playlists || []).forEach(p => plMap.set(p.name, p));
+        (existingUser.library.playlists || []).forEach(p => {
+          plMap.set(p.name, { ...p, songs: [...(p.songs || [])] });
+        });
         (incomingLibrary.playlists || []).forEach(p => {
-          if (!plMap.has(p.name)) plMap.set(p.name, p);
+          if (!plMap.has(p.name)) {
+            plMap.set(p.name, p);
+          } else {
+            const targetPl = plMap.get(p.name);
+            const songMap = new Map();
+            (targetPl.songs || []).forEach(s => songMap.set(s.id, s));
+            (p.songs || []).forEach(s => songMap.set(s.id, s));
+            targetPl.songs = Array.from(songMap.values());
+            if (p.cover && !targetPl.cover) targetPl.cover = p.cover;
+            if (p.description && !targetPl.description) targetPl.description = p.description;
+          }
         });
         existingUser.library.playlists = Array.from(plMap.values());
 
@@ -1131,6 +1205,62 @@ const server = http.createServer(async (req, res) => {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true }));
+      return;
+    }
+
+    // Explicit Push Local Library to Cloud Account
+    if (pathname === '/api/auth/push-library' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const email = (body.email || '').trim().toLowerCase();
+      if (!email || !body.library) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Email ve kütüphane gereklidir' }));
+        return;
+      }
+      let userData = readUserData(email);
+      if (!userData) {
+        userData = {
+          user: { email, name: (body.name || email.split('@')[0]), avatar: body.avatar || '', createdAt: Date.now() },
+          library: body.library
+        };
+      } else {
+        userData.library = body.library;
+        userData.user.lastSync = Date.now();
+      }
+      writeUserData(email, userData);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        message: 'Tüm çalma listeleri ve favoriler Google hesabınıza başarıyla aktarıldı!',
+        lastSync: userData.user.lastSync,
+        playlistCount: (userData.library.playlists || []).length,
+        favoriteCount: (userData.library.favorites || []).length
+      }));
+      return;
+    }
+
+    // Explicit Pull Cloud Library from Account
+    if (pathname === '/api/auth/pull-library' && req.method === 'GET') {
+      const email = (parsedUrl.searchParams.get('email') || '').trim().toLowerCase();
+      if (!email) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Email gereklidir' }));
+        return;
+      }
+      const userData = readUserData(email);
+      if (!userData) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Bu hesaba ait bulut kaydı bulunamadı' }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        user: userData.user,
+        library: userData.library,
+        playlistCount: (userData.library.playlists || []).length,
+        favoriteCount: (userData.library.favorites || []).length
+      }));
       return;
     }
 
@@ -1338,6 +1468,63 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ result: best }));
       return;
+    }
+
+    // 10.1 YouTube Music Playlist Import
+    if ((pathname === '/api/ytmusic/import' || pathname === '/api/ytmusic/playlist') && req.method === 'POST') {
+      const body = await parseBody(req);
+      const ytmUrl = (body.url || '').trim();
+      const email = (body.email || '').trim().toLowerCase();
+
+      if (!ytmUrl) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'YouTube Music çalma listesi bağlantısı gereklidir.' }));
+        return;
+      }
+
+      try {
+        const ytmData = await fetchYouTubeMusicPlaylist(ytmUrl);
+        const library = readLibrary();
+
+        const songs = ytmData.tracks.map(t => ({
+          id: t.id,
+          title: t.title,
+          channel: t.artist,
+          duration: t.duration,
+          thumbnail: t.thumbnail
+        }));
+
+        const newPlaylist = {
+          id: 'ytm_pl_' + Date.now(),
+          name: ytmData.title,
+          description: `${ytmData.uploader} üzerinden aktarıldı (${songs.length} şarkı)`,
+          cover: ytmData.coverUrl,
+          isYtMusic: true,
+          ytmId: ytmData.id,
+          songs: songs
+        };
+
+        library.playlists.push(newPlaylist);
+        writeLibrary(library);
+
+        // If user is signed in with Google, also sync directly to cloud user file
+        if (email) {
+          const userData = readUserData(email);
+          if (userData) {
+            userData.library = library;
+            userData.user.lastSync = Date.now();
+            writeUserData(email, userData);
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, playlist: newPlaylist, count: songs.length }));
+        return;
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message || 'YouTube Music listesi aktarılamadı' }));
+        return;
+      }
     }
 
     // --- OFFLINE DOWNLOADS ---
