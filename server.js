@@ -1059,7 +1059,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/auth/google-sync' && req.method === 'GET') {
-      const email = (url.searchParams.get('email') || '').trim().toLowerCase();
+      const email = (parsedUrl.searchParams.get('email') || '').trim().toLowerCase();
       if (!email) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: 'E-posta gerekli' }));
