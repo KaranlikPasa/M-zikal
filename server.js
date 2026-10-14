@@ -10,8 +10,8 @@ const { spawn } = require('child_process');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.3.9';
-const APP_VERSION_CODE = 21;
+const APP_VERSION = '1.4.0';
+const APP_VERSION_CODE = 22;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -67,20 +67,21 @@ function writeUserData(email, data) {
 
 // In-memory cache for search queries (15 minutes TTL)
 const searchCache = new Map();
+const lyricsCache = new Map();
 const CACHE_TTL = 15 * 60 * 1000;
 
 // Download status tracker
 const activeDownloads = new Map(); // songId -> { status: 'downloading'|'done'|'error', progress: 0, title: '' }
 
-// Preset explore categories (pure music hit queries without marathon mix clutter)
+// Preset explore categories (constantly updated modern hit queries)
 const EXPLORE_GENRES = {
-  'trendler': 'türkiye top müzik hit şarkılar official audio klip',
-  'turkce-pop': 'türkçe pop hit şarkılar audio klip',
-  'turkce-rap': 'türkçe rap hip hop şarkılar audio klip',
-  'rock': 'türkçe rock ve klasik rock hit şarkılar',
-  'akustik': 'türkçe akustik canlı performans şarkılar',
+  'trendler': 'netd müzik yeni klipler official',
+  'turkce-pop': 'türkçe pop yeni çıkanlar hit şarkılar official video',
+  'turkce-rap': 'türkçe rap yeni çıkanlar official video hip hop',
+  'rock': 'türkçe rock yeni ve hit şarkılar official audio',
+  'akustik': 'türkçe akustik canlı performans yeni',
   'lofi': 'lofi hip hop radio beats to relax study to',
-  'global': 'top billboard global hit songs official video'
+  'global': 'billboard hot 100 global top hits official music video'
 };
 
 // Helper to read library
@@ -1030,65 +1031,164 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 2. Explore / Genres API
+    // 2. Explore / Genres API (Dynamic live trends + refresh support)
     if (pathname === '/api/explore' && req.method === 'GET') {
       const genre = parsedUrl.searchParams.get('genre') || 'trendler';
+      const forceRefresh = parsedUrl.searchParams.get('refresh') === '1' || parsedUrl.searchParams.get('refresh') === 'true';
       const query = EXPLORE_GENRES[genre] || EXPLORE_GENRES['trendler'];
+      if (forceRefresh) {
+        searchCache.delete(query);
+      }
       const results = await searchYouTube(query);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ genre, results }));
+      res.end(JSON.stringify({ genre, results, refreshedAt: Date.now() }));
       return;
     }
 
-    // 2.1 Lyrics API (Spotify-style synchronized & plain lyrics via LRCLIB)
+    // 2.1 Lyrics API (Multi-pass intelligent Spotify-style synchronized lyrics)
     if (pathname === '/api/lyrics' && req.method === 'GET') {
       const rawTitle = (parsedUrl.searchParams.get('title') || '').trim();
       const rawArtist = (parsedUrl.searchParams.get('artist') || '').trim();
 
-      // Clean up common video/clutter suffixes
-      let cleanTitle = rawTitle
-        .replace(/\s*[\[\(](official|video|klip|audio|lyric|remix|feat|ft\.|prod|hd|4k|hq|remastered|video klip)[^\)\]]*[\)\]]/gi, '')
-        .replace(/[-–—]\s*(official|video|klip|audio|lyric).*/gi, '')
-        .trim();
-
-      let searchArtist = rawArtist;
-      if (cleanTitle.includes(' - ')) {
-        const parts = cleanTitle.split(' - ');
-        if (!searchArtist || searchArtist === 'Bilinmeyen Sanatçı' || searchArtist.toLowerCase().includes('topic')) {
-          searchArtist = parts[0].trim();
-        }
-        cleanTitle = parts.slice(1).join(' - ').trim();
-      }
-
-      const q = `${searchArtist} ${cleanTitle}`.trim();
-      if (!q) {
+      const cacheKey = `${rawArtist}:::${rawTitle}`.toLowerCase();
+      if (lyricsCache.has(cacheKey)) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: 'Başlık belirtilmedi' }));
+        res.end(JSON.stringify(lyricsCache.get(cacheKey)));
         return;
       }
 
-      try {
-        const lrclibUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(q)}`;
-        const fetchRes = await fetch(lrclibUrl, {
-          headers: { 'User-Agent': 'Muzikal/1.3.0 (https://github.com/KaranlikPasa/M-zikal)' }
-        });
-        const items = await fetchRes.json();
-        if (Array.isArray(items) && items.length > 0) {
-          const item = items[0];
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            success: true,
-            trackName: item.trackName,
-            artistName: item.artistName,
-            albumName: item.albumName,
-            duration: item.duration,
-            plainLyrics: item.plainLyrics || null,
-            syncedLyrics: item.syncedLyrics || null
-          }));
-          return;
+      // 1. Clean up title
+      let cleanTitle = rawTitle
+        .replace(/\s*[\[\(](official|video|klip|audio|lyric|remix|feat|ft\.|prod|hd|4k|hq|remastered|video klip|canlı|live|akustik)[^\)\]]*[\)\]]/gi, '')
+        .replace(/[-–—]\s*(official|video|klip|audio|lyric|canlı|live).*/gi, '')
+        .trim();
+
+      // Extract primary artist and title if title contains separator
+      let primaryArtist = rawArtist;
+      let trackName = cleanTitle;
+
+      if (cleanTitle.includes(' - ')) {
+        const parts = cleanTitle.split(' - ');
+        if (!primaryArtist || primaryArtist === 'Bilinmeyen Sanatçı' || primaryArtist.toLowerCase().includes('topic')) {
+          primaryArtist = parts[0].trim();
         }
-      } catch (e) {
-        console.warn('Lyrics fetch error:', e.message);
+        trackName = parts.slice(1).join(' - ').trim();
+      }
+
+      // Clean artist: remove collaboration suffixes like 'x poizi', 'ft. ...', '& ...'
+      const cleanArtist = (primaryArtist || '')
+        .replace(/\s*(?:x|&|,|feat\.?|ft\.?|featuring)\s+.*$/i, '')
+        .replace(/\s*-\s*topic$/i, '')
+        .trim();
+
+      // Clean trackName further
+      const finalTrackName = trackName
+        .replace(/\s*[\[\(][^\)\]]*[\)\]]/g, '')
+        .replace(/["'"]/g, '')
+        .trim();
+
+      // Candidate search queries in order of precision:
+      const queriesToTry = [];
+      if (cleanArtist && finalTrackName) {
+        queriesToTry.push(`${cleanArtist} ${finalTrackName}`);
+      }
+      if (primaryArtist && trackName && primaryArtist !== cleanArtist) {
+        queriesToTry.push(`${primaryArtist} ${trackName}`);
+      }
+      if (finalTrackName) {
+        queriesToTry.push(finalTrackName);
+      }
+      if (rawTitle) {
+        queriesToTry.push(rawTitle.replace(/\s*[\[\(][^\)\]]*[\)\]]/g, '').trim());
+      }
+
+      const headers = { 'User-Agent': 'Muzikal/1.4.0 (https://github.com/KaranlikPasa/M-zikal)' };
+
+      // Helper to try LRCLIB search
+      async function tryLrclib(query) {
+        try {
+          const url = `https://lrclib.net/api/search?q=${encodeURIComponent(query)}`;
+          const fetchRes = await fetch(url, { headers });
+          if (!fetchRes.ok) return null;
+          const items = await fetchRes.json();
+          if (Array.isArray(items) && items.length > 0) {
+            // Find best matching item that has lyrics (preferably synced)
+            const withSynced = items.find(it => it && it.syncedLyrics && it.syncedLyrics.trim().length > 0);
+            if (withSynced) return withSynced;
+            const withPlain = items.find(it => it && it.plainLyrics && it.plainLyrics.trim().length > 0);
+            if (withPlain) return withPlain;
+            return items[0];
+          }
+        } catch (e) {}
+        return null;
+      }
+
+      // Helper to try LRCLIB direct get
+      async function tryLrclibGet(artist, track) {
+        try {
+          const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(track)}`;
+          const fetchRes = await fetch(url, { headers });
+          if (!fetchRes.ok) return null;
+          const data = await fetchRes.json();
+          if (data && (data.syncedLyrics || data.plainLyrics)) return data;
+        } catch (e) {}
+        return null;
+      }
+
+      let matchedItem = null;
+
+      // Pass 1: Direct get if both artist and track exist
+      if (cleanArtist && finalTrackName) {
+        matchedItem = await tryLrclibGet(cleanArtist, finalTrackName);
+      }
+
+      // Pass 2: Search queries in order
+      if (!matchedItem || (!matchedItem.syncedLyrics && !matchedItem.plainLyrics)) {
+        const uniqueQueries = Array.from(new Set(queriesToTry)).filter(Boolean);
+        for (const q of uniqueQueries) {
+          const resItem = await tryLrclib(q);
+          if (resItem && (resItem.syncedLyrics || resItem.plainLyrics)) {
+            matchedItem = resItem;
+            break;
+          }
+        }
+      }
+
+      // Pass 3: lyrics.ovh fallback for plain lyrics
+      if (!matchedItem || (!matchedItem.syncedLyrics && !matchedItem.plainLyrics)) {
+        if (cleanArtist && finalTrackName) {
+          try {
+            const ovhUrl = `https://api.lyrics.ovh/v1/${encodeURIComponent(cleanArtist)}/${encodeURIComponent(finalTrackName)}`;
+            const ovhRes = await fetch(ovhUrl);
+            if (ovhRes.ok) {
+              const ovhData = await ovhRes.json();
+              if (ovhData && ovhData.lyrics) {
+                matchedItem = {
+                  trackName: finalTrackName,
+                  artistName: cleanArtist,
+                  plainLyrics: ovhData.lyrics,
+                  syncedLyrics: null
+                };
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (matchedItem && (matchedItem.syncedLyrics || matchedItem.plainLyrics)) {
+        const payload = {
+          success: true,
+          trackName: matchedItem.trackName || finalTrackName,
+          artistName: matchedItem.artistName || cleanArtist,
+          albumName: matchedItem.albumName || null,
+          duration: matchedItem.duration || null,
+          plainLyrics: matchedItem.plainLyrics || null,
+          syncedLyrics: matchedItem.syncedLyrics || null
+        };
+        lyricsCache.set(cacheKey, payload);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(payload));
+        return;
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
