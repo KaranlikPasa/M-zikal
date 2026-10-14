@@ -2531,28 +2531,46 @@ function setupEventListeners() {
       // 3. PC (Windows) In-App Hot Update
       try {
         const resp = await fetch('/api/update/in-app-apply', { method: 'POST' });
+        if (!resp.ok) {
+          throw new Error(`Sunucu yanıt vermedi (HTTP ${resp.status})`);
+        }
         const data = await resp.json();
         if (!data.success && data.message) {
           showToast(data.message);
         }
       } catch (err) {
-        console.warn('In-app apply request error:', err);
+        console.error('In-app apply request error:', err);
+        if (progressStatus) progressStatus.textContent = 'Bağlantı hatası: Sunucuya ulaşılamadı. Lütfen uygulamayı yeniden başlatıp tekrar deneyin.';
+        btnStartInAppUpdate.disabled = false;
+        btnStartInAppUpdate.innerHTML = '<span>Tekrar Dene</span>';
+        if (btnDismiss) btnDismiss.style.display = 'inline-block';
+        return;
       }
 
-      // Poll progress every 300ms
+      let pollFailures = 0;
+      let lastReportedPercent = 5;
+      // Poll progress every 350ms
       const pollInterval = setInterval(async () => {
         try {
           const pRes = await fetch('/api/update/progress');
-          if (!pRes.ok) return;
+          if (!pRes.ok) {
+            pollFailures++;
+            if (pollFailures > 12) throw new Error('Güncelleme sunucusundan yanıt alınamadı');
+            return;
+          }
+          pollFailures = 0;
           const progress = await pRes.json();
 
-          if (progressFill) progressFill.style.width = (progress.percent || 0) + '%';
-          if (progressPercent) progressPercent.textContent = (progress.percent || 0) + '%';
-          if (progressStatus) progressStatus.textContent = progress.status || 'Güncelleniyor...';
+          const curPercent = Math.max(lastReportedPercent, progress.percent || 0);
+          lastReportedPercent = curPercent;
+          if (progressFill) progressFill.style.width = curPercent + '%';
+          if (progressPercent) progressPercent.textContent = curPercent + '%';
+          if (progressStatus && progress.status) progressStatus.textContent = progress.status;
 
           if (progress.error) {
             clearInterval(pollInterval);
             showToast('Güncelleme hatası: ' + progress.error);
+            if (progressStatus) progressStatus.textContent = 'Hata: ' + progress.error;
             btnStartInAppUpdate.disabled = false;
             btnStartInAppUpdate.innerHTML = '<span>Tekrar Dene</span>';
             if (btnDismiss) btnDismiss.style.display = 'inline-block';
@@ -2573,12 +2591,19 @@ function setupEventListeners() {
               setTimeout(() => {
                 window.location.reload(true);
               }, 1200);
-            }, 1500);
+            }, 1200);
           }
         } catch (e) {
-          // Ignore network blips during restart
+          pollFailures++;
+          if (pollFailures > 12) {
+            clearInterval(pollInterval);
+            if (progressStatus) progressStatus.textContent = 'Sunucu bağlantısı koptu. Lütfen sayfayı yenileyip tekrar deneyin.';
+            btnStartInAppUpdate.disabled = false;
+            btnStartInAppUpdate.innerHTML = '<span>Tekrar Dene</span>';
+            if (btnDismiss) btnDismiss.style.display = 'inline-block';
+          }
         }
-      }, 300);
+      }, 350);
     });
   }
 }
@@ -2754,7 +2779,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.3.7';
+const CURRENT_APP_VERSION = '1.3.8';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
