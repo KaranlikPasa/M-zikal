@@ -714,13 +714,14 @@ async function runInAppUpdate() {
     inAppUpdateState.percent = 5;
 
     const ghRes = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.7' }
+      headers: { 'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/${APP_VERSION}` }
     });
     if (!ghRes.ok) {
       throw new Error(`GitHub API hatası: HTTP ${ghRes.status}`);
     }
     const release = await ghRes.json();
     const zipAsset = release.assets && (
+      release.assets.find(a => a.name.toLowerCase().includes('light') && a.name.endsWith('.zip')) ||
       release.assets.find(a => a.name.toLowerCase().endsWith('-windows-x64.zip')) ||
       release.assets.find(a => a.name.toLowerCase().endsWith('.zip'))
     );
