@@ -3099,5 +3099,230 @@ html, body {
   object-fit: cover;
 }
 
+/* ==========================================================================
+   YOUTUBE MUSIC IMPORT STYLES
+   ========================================================================== */
+.btn-ytm-action {
+  border-color: rgba(255, 0, 0, 0.3) !important;
+}
+.btn-ytm-action:hover {
+  background: rgba(255, 0, 0, 0.12) !important;
+  border-color: #ff0000 !important;
+  box-shadow: 0 0 12px rgba(255, 0, 0, 0.3);
+}
+.btn-ytm-hero {
+  border-color: rgba(255, 0, 0, 0.4) !important;
+}
+.btn-ytm-hero:hover {
+  background: rgba(255, 0, 0, 0.15) !important;
+  border-color: #ff0000 !important;
+}
+.modal-box-ytm {
+  width: 500px;
+  background: #141215;
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7), 0 0 24px rgba(255, 0, 0, 0.15);
+}
+.modal-ytm-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.ytm-logo-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(255, 0, 0, 0.12);
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.btn-ytm-red {
+  background: #ff0000 !important;
+  color: #fff !important;
+  font-weight: 700;
+  border: none;
+}
+.btn-ytm-red:hover {
+  background: #cc0000 !important;
+  box-shadow: 0 4px 14px rgba(255, 0, 0, 0.4);
+}
+
+/* ==========================================================================
+   GOOGLE ACCOUNT & SYNC HUB MODAL STYLES
+   ========================================================================== */
+.user-account-modal-box {
+  width: 520px;
+  max-width: calc(100% - 32px);
+  background: #12141c;
+  border: 1px solid rgba(66, 133, 244, 0.3);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 24px rgba(66, 133, 244, 0.15);
+  padding: 24px;
+}
+.account-modal-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.account-modal-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid #4285F4;
+  object-fit: cover;
+}
+.account-modal-profile h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+.account-modal-profile p {
+  margin: 2px 0 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.account-sync-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin: 18px 0;
+}
+.sync-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1ed760;
+  margin-bottom: 12px;
+}
+.status-dot-green {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1ed760;
+  box-shadow: 0 0 8px #1ed760;
+  display: inline-block;
+}
+.account-stats-row {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.account-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat-num {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+.stat-lbl {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.account-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.account-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+.account-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(66, 133, 244, 0.4);
+  transform: translateY(-1px);
+}
+.account-action-btn.primary {
+  background: rgba(66, 133, 244, 0.12);
+  border-color: rgba(66, 133, 244, 0.4);
+}
+.account-action-btn.primary:hover {
+  background: rgba(66, 133, 244, 0.22);
+  border-color: #4285F4;
+}
+.account-action-btn strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+.account-action-btn span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.account-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+.account-action-subbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.account-action-subbtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.account-modal-bottom-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.btn-danger-outline {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-danger-outline:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+}
+
 
 
