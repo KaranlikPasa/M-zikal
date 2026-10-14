@@ -702,7 +702,7 @@ function downloadFileWithProgress(url, destPath, onProgress) {
       const client = parsed.protocol === 'https:' ? https : http;
       const req = client.get(currentUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.9',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.4.0',
           'Accept': '*/*'
         }
       }, (res) => {
@@ -777,7 +777,7 @@ async function runInAppUpdate() {
     inAppUpdateState.percent = 10;
 
     const ghRes = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.9' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.4.0' }
     });
     if (!ghRes.ok) {
       throw new Error(`GitHub API hatası: HTTP ${ghRes.status}`);
@@ -805,7 +805,13 @@ async function runInAppUpdate() {
 
       for (let i = 0; i < updateFiles.length; i++) {
         const item = updateFiles[i];
-        const res = await fetch(item.remote, { headers: { 'User-Agent': 'Muzikal-Updater/1.3.9' } });
+        const res = await fetch(`${item.remote}?t=${Date.now()}`, {
+          headers: {
+            'User-Agent': 'Muzikal-Updater/1.4.0',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
         if (res.ok) {
           const buf = Buffer.from(await res.arrayBuffer());
           fs.writeFileSync(item.local, buf);
