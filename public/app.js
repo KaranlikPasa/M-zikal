@@ -239,7 +239,34 @@ const elements = {
   btnCloseGoogleModal: document.getElementById('btn-close-google-modal'),
   googleEmailInput: document.getElementById('google-email-input'),
   googleNameInput: document.getElementById('google-name-input'),
-  btnSubmitGoogleLogin: document.getElementById('btn-submit-google-login')
+  btnSubmitGoogleLogin: document.getElementById('btn-submit-google-login'),
+
+  // YouTube Music Modal Elements
+  ytmusicModal: document.getElementById('ytmusic-modal'),
+  modalYtmUrl: document.getElementById('modal-ytm-url'),
+  btnCancelYtmModal: document.getElementById('btn-cancel-ytm-modal'),
+  btnImportYtmModal: document.getElementById('btn-import-ytm-modal'),
+  ytmBtnText: document.getElementById('ytm-btn-text'),
+  ytmSpinner: document.getElementById('ytm-spinner'),
+  btnOpenYtmModal: document.getElementById('btn-open-ytm-modal'),
+  btnHeroYtm: document.getElementById('btn-hero-ytm'),
+
+  // Google Account Hub Elements
+  userAccountModal: document.getElementById('user-account-modal'),
+  btnCloseAccountModal: document.getElementById('btn-close-account-modal'),
+  accountHubAvatar: document.getElementById('account-hub-avatar'),
+  accountHubName: document.getElementById('account-hub-name'),
+  accountHubEmail: document.getElementById('account-hub-email'),
+  accountStatPlaylists: document.getElementById('account-stat-playlists'),
+  accountStatFavorites: document.getElementById('account-stat-favorites'),
+  accountStatTime: document.getElementById('account-stat-time'),
+  btnHubSyncPush: document.getElementById('btn-hub-sync-push'),
+  btnHubSyncPull: document.getElementById('btn-hub-sync-pull'),
+  btnExportPlaylistsJson: document.getElementById('btn-export-playlists-json'),
+  btnImportPlaylistsJson: document.getElementById('btn-import-playlists-json'),
+  fileImportPlaylists: document.getElementById('file-import-playlists'),
+  btnSwitchAccount: document.getElementById('btn-switch-account'),
+  btnHubLogout: document.getElementById('btn-hub-logout')
 };
 
 // --- YOUTUBE IFRAME API INITIALIZATION & FAILSAFE PLAYBACK ---
@@ -1838,9 +1865,19 @@ async function loadLibrary() {
           state.library.favorites = Array.from(favMap.values());
 
           const plMap = new Map();
-          (state.library.playlists || []).forEach(p => plMap.set(p.name, p));
+          (state.library.playlists || []).forEach(p => plMap.set(p.id || p.name, { ...p, songs: [...(p.songs || [])] }));
           (cloudData.library.playlists || []).forEach(p => {
-            if (!plMap.has(p.name)) plMap.set(p.name, p);
+            const key = p.id || p.name;
+            if (plMap.has(key)) {
+              const existing = plMap.get(key);
+              const songMap = new Map();
+              (existing.songs || []).forEach(s => songMap.set(s.id, s));
+              (p.songs || []).forEach(s => songMap.set(s.id, s));
+              existing.songs = Array.from(songMap.values());
+              if (p.cover && !existing.cover) existing.cover = p.cover;
+            } else {
+              plMap.set(key, p);
+            }
           });
           state.library.playlists = Array.from(plMap.values());
 
@@ -2052,6 +2089,52 @@ async function handleSpotifyImport() {
   }
 }
 
+// --- YOUTUBE MUSIC PLAYLIST IMPORT HANDLER ---
+
+async function handleYouTubeMusicImport() {
+  const url = elements.modalYtmUrl ? elements.modalYtmUrl.value.trim() : '';
+  if (!url) {
+    showToast('Lütfen geçerli bir YouTube Music çalma listesi bağlantısı girin.');
+    return;
+  }
+
+  if (elements.ytmBtnText) elements.ytmBtnText.textContent = 'Aktarılıyor...';
+  if (elements.ytmSpinner) elements.ytmSpinner.style.display = 'inline-block';
+  if (elements.btnImportYtmModal) elements.btnImportYtmModal.disabled = true;
+
+  try {
+    const res = await fetch('/api/ytmusic/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        email: state.user ? state.user.email : ''
+      })
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'İçe aktarma başarısız');
+    }
+
+    if (elements.ytmusicModal) elements.ytmusicModal.style.display = 'none';
+    if (elements.modalYtmUrl) elements.modalYtmUrl.value = '';
+    showToast(`🎉 "${data.playlist.name}" (${data.count} şarkı) başarıyla aktarıldı!`);
+
+    await loadLibrary();
+    if (data.playlist && data.playlist.id) {
+      openPlaylistView(data.playlist.id);
+    }
+  } catch (err) {
+    console.error('YouTube Music import error:', err);
+    showToast(`Hata: ${err.message}`);
+  } finally {
+    if (elements.ytmBtnText) elements.ytmBtnText.textContent = 'Listeyi İçe Aktar';
+    if (elements.ytmSpinner) elements.ytmSpinner.style.display = 'none';
+    if (elements.btnImportYtmModal) elements.btnImportYtmModal.disabled = false;
+  }
+}
+
 // --- EVENT LISTENERS & SETUP ---
 
 function navigateTo(view) {
@@ -2161,6 +2244,18 @@ function setupEventListeners() {
     elements.btnMobileSpotifyTop.addEventListener('click', openSpModal);
   }
 
+  // YouTube Music Modals triggers
+  const openYtmModal = () => {
+    if (elements.modalYtmUrl) elements.modalYtmUrl.value = '';
+    if (elements.ytmusicModal) elements.ytmusicModal.style.display = 'flex';
+    if (elements.modalYtmUrl) elements.modalYtmUrl.focus();
+    if (elements.sidebar) elements.sidebar.classList.remove('mobile-open');
+    if (elements.sidebarBackdrop) elements.sidebarBackdrop.classList.remove('active');
+  };
+
+  if (elements.btnOpenYtmModal) elements.btnOpenYtmModal.addEventListener('click', openYtmModal);
+  if (elements.btnHeroYtm) elements.btnHeroYtm.addEventListener('click', openYtmModal);
+
   // Mobile Full-Screen Player Open / Close
   if (elements.playerTrackInfo) {
     elements.playerTrackInfo.addEventListener('click', () => {
@@ -2237,6 +2332,29 @@ function setupEventListeners() {
   elements.modalSpUrl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleSpotifyImport();
   });
+
+  if (elements.btnCancelYtmModal) {
+    elements.btnCancelYtmModal.addEventListener('click', () => {
+      if (elements.ytmusicModal) elements.ytmusicModal.style.display = 'none';
+    });
+  }
+
+  if (elements.ytmusicModal) {
+    elements.ytmusicModal.addEventListener('click', (e) => {
+      if (e.target === elements.ytmusicModal) {
+        elements.ytmusicModal.style.display = 'none';
+      }
+    });
+  }
+
+  if (elements.btnImportYtmModal) {
+    elements.btnImportYtmModal.addEventListener('click', handleYouTubeMusicImport);
+  }
+  if (elements.modalYtmUrl) {
+    elements.modalYtmUrl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleYouTubeMusicImport();
+    });
+  }
 
   // Search input debounced
   elements.searchInput.addEventListener('input', (e) => {
@@ -2754,7 +2872,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.3.8';
+const CURRENT_APP_VERSION = '1.3.9';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -2960,6 +3078,216 @@ async function loginWithGoogle(email, name = '') {
   }
 }
 
+function openUserAccountHub() {
+  if (!state.user || !state.user.email) {
+    if (elements.googleLoginModal) {
+      elements.googleLoginModal.style.display = 'flex';
+      if (elements.googleEmailInput) elements.googleEmailInput.focus();
+    }
+    return;
+  }
+
+  if (elements.accountHubAvatar) {
+    elements.accountHubAvatar.src = state.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(state.user.name || 'Kullanici')}&background=4285F4&color=fff&bold=true`;
+  }
+  if (elements.accountHubName) {
+    elements.accountHubName.textContent = state.user.name || 'Kullanıcı';
+  }
+  if (elements.accountHubEmail) {
+    elements.accountHubEmail.textContent = state.user.email;
+  }
+  updateAccountHubStats();
+
+  if (elements.userAccountModal) {
+    elements.userAccountModal.style.display = 'flex';
+  }
+}
+
+function updateAccountHubStats() {
+  const plCount = (state.library && state.library.playlists) ? state.library.playlists.length : 0;
+  const favCount = (state.library && state.library.favorites) ? state.library.favorites.length : 0;
+  if (elements.accountStatPlaylists) elements.accountStatPlaylists.textContent = plCount;
+  if (elements.accountStatFavorites) elements.accountStatFavorites.textContent = favCount;
+  if (elements.accountStatTime) {
+    if (state.user && state.user.lastSync) {
+      const d = new Date(state.user.lastSync);
+      elements.accountStatTime.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else {
+      elements.accountStatTime.textContent = 'Az önce';
+    }
+  }
+}
+
+async function syncPushToCloud() {
+  if (!state.user || !state.user.email) {
+    showToast('Bulut eşitlemesi için önce Google ile giriş yapın.');
+    return;
+  }
+  const btn = elements.btnHubSyncPush;
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/auth/push-library', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: state.user.email,
+        name: state.user.name,
+        avatar: state.user.avatar,
+        library: state.library
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      state.user.lastSync = data.lastSync || Date.now();
+      localStorage.setItem('muzikal_user', JSON.stringify(state.user));
+      updateAccountHubStats();
+      showToast('☁️ Tüm çalma listeleriniz başarıyla Google hesabınıza aktarıldı!');
+    } else {
+      showToast(data.error || 'Aktarma başarısız');
+    }
+  } catch (err) {
+    console.error('Push error:', err);
+    showToast('Aktarma sırasında bağlantı hatası oluştu.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function syncPullFromCloud() {
+  if (!state.user || !state.user.email) {
+    showToast('Buluttan liste çekmek için önce Google ile giriş yapın.');
+    return;
+  }
+  const btn = elements.btnHubSyncPull;
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch(`/api/auth/pull-library?email=${encodeURIComponent(state.user.email)}`);
+    const data = await res.json();
+    if (data.success && data.library) {
+      // Merge favorites
+      const favMap = new Map();
+      (state.library.favorites || []).forEach(s => favMap.set(s.id, s));
+      (data.library.favorites || []).forEach(s => favMap.set(s.id, s));
+      state.library.favorites = Array.from(favMap.values());
+
+      // Merge playlists with song preservation
+      const plMap = new Map();
+      (state.library.playlists || []).forEach(p => plMap.set(p.id || p.name, { ...p, songs: [...(p.songs || [])] }));
+      (data.library.playlists || []).forEach(p => {
+        const key = p.id || p.name;
+        if (plMap.has(key)) {
+          const existing = plMap.get(key);
+          const songMap = new Map();
+          (existing.songs || []).forEach(s => songMap.set(s.id, s));
+          (p.songs || []).forEach(s => songMap.set(s.id, s));
+          existing.songs = Array.from(songMap.values());
+          if (p.cover && !existing.cover) existing.cover = p.cover;
+        } else {
+          plMap.set(key, p);
+        }
+      });
+      state.library.playlists = Array.from(plMap.values());
+
+      persistLibrary(state.library);
+      renderSidebarPlaylists();
+      if (elements.favCountBadge) elements.favCountBadge.textContent = state.library.favorites.length;
+      updateAccountHubStats();
+      if (state.currentView === 'home' && typeof renderHomeSections === 'function') {
+        renderHomeSections();
+      }
+      showToast(`☁️ Hesaptaki ${data.playlistCount} liste ve ${data.favoriteCount} favori bu cihaza aktarıldı!`);
+    } else {
+      showToast(data.error || 'Buluttan veri çekilemedi.');
+    }
+  } catch (err) {
+    console.error('Pull error:', err);
+    showToast('Buluttan veri çekilirken hata oluştu.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function exportPlaylistsToJson() {
+  try {
+    const backupData = {
+      app: 'Müzikal',
+      version: CURRENT_APP_VERSION,
+      exportDate: new Date().toISOString(),
+      user: state.user ? state.user.email : null,
+      playlists: state.library.playlists || [],
+      favorites: state.library.favorites || []
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `muzikal_yedek_calma_listeleri_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('📁 Çalma listeleri ve favoriler JSON dosyasına yedeklendi!');
+  } catch (err) {
+    console.error('Export error:', err);
+    showToast('Yedek dosyası oluşturulamadı.');
+  }
+}
+
+function importPlaylistsFromJson(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      const incomingPlaylists = parsed.playlists || [];
+      const incomingFavorites = parsed.favorites || [];
+
+      if (!incomingPlaylists.length && !incomingFavorites.length) {
+        showToast('Yedek dosyasında geçerli bir çalma listesi veya favori bulunamadı.');
+        return;
+      }
+
+      // Merge favorites
+      const favMap = new Map();
+      (state.library.favorites || []).forEach(s => favMap.set(s.id, s));
+      incomingFavorites.forEach(s => favMap.set(s.id, s));
+      state.library.favorites = Array.from(favMap.values());
+
+      // Merge playlists
+      const plMap = new Map();
+      (state.library.playlists || []).forEach(p => plMap.set(p.id || p.name, { ...p, songs: [...(p.songs || [])] }));
+      incomingPlaylists.forEach(p => {
+        const key = p.id || p.name;
+        if (plMap.has(key)) {
+          const existing = plMap.get(key);
+          const songMap = new Map();
+          (existing.songs || []).forEach(s => songMap.set(s.id, s));
+          (p.songs || []).forEach(s => songMap.set(s.id, s));
+          existing.songs = Array.from(songMap.values());
+        } else {
+          plMap.set(key, p);
+        }
+      });
+      state.library.playlists = Array.from(plMap.values());
+
+      persistLibrary(state.library);
+      renderSidebarPlaylists();
+      if (elements.favCountBadge) elements.favCountBadge.textContent = state.library.favorites.length;
+      updateAccountHubStats();
+      if (state.currentView === 'home' && typeof renderHomeSections === 'function') {
+        renderHomeSections();
+      }
+      showToast(`✅ Yedekten ${incomingPlaylists.length} çalma listesi başarıyla yüklendi!`);
+    } catch (err) {
+      console.error('Import parse error:', err);
+      showToast('Yedek dosyası okunamadı veya biçimi hatalı.');
+    }
+  };
+  reader.readAsText(file);
+}
+
 function logoutGoogle() {
   if (!confirm('Google hesabınızdan çıkış yapmak istediğinize emin misiniz?\n\n(Misafir moduna geçilecek, şarkılarınız cihazınızda kalacaktır)')) {
     return;
@@ -2967,6 +3295,7 @@ function logoutGoogle() {
 
   state.user = null;
   localStorage.removeItem('muzikal_user');
+  if (elements.userAccountModal) elements.userAccountModal.style.display = 'none';
   renderUserAccount();
   showToast('Google hesabından çıkış yapıldı. Misafir moduna geçildi.');
 }
@@ -2983,10 +3312,11 @@ function initGoogleAuth() {
     });
   }
 
+  // Clicking user avatar or profile card opens Account Hub (or login if guest)
   if (elements.btnTopbarUser) {
     elements.btnTopbarUser.addEventListener('click', () => {
-      if (state.user) {
-        logoutGoogle();
+      if (state.user && state.user.email) {
+        openUserAccountHub();
       } else {
         if (elements.googleLoginModal) {
           elements.googleLoginModal.style.display = 'flex';
@@ -2998,14 +3328,21 @@ function initGoogleAuth() {
 
   if (elements.btnMobileUserTop) {
     elements.btnMobileUserTop.addEventListener('click', () => {
-      if (state.user) {
-        logoutGoogle();
+      if (state.user && state.user.email) {
+        openUserAccountHub();
       } else {
         if (elements.googleLoginModal) {
           elements.googleLoginModal.style.display = 'flex';
           if (elements.googleEmailInput) elements.googleEmailInput.focus();
         }
       }
+    });
+  }
+
+  if (elements.userProfileCard) {
+    elements.userProfileCard.addEventListener('click', (e) => {
+      if (e.target && e.target.closest('#btn-google-logout')) return;
+      openUserAccountHub();
     });
   }
 
@@ -3045,6 +3382,65 @@ function initGoogleAuth() {
         const name = elements.googleNameInput ? elements.googleNameInput.value : '';
         loginWithGoogle(email, name);
       }
+    });
+  }
+
+  // Account Hub Modal Handlers
+  if (elements.btnCloseAccountModal) {
+    elements.btnCloseAccountModal.addEventListener('click', () => {
+      if (elements.userAccountModal) elements.userAccountModal.style.display = 'none';
+    });
+  }
+
+  if (elements.userAccountModal) {
+    elements.userAccountModal.addEventListener('click', (e) => {
+      if (e.target === elements.userAccountModal) {
+        elements.userAccountModal.style.display = 'none';
+      }
+    });
+  }
+
+  if (elements.btnHubSyncPush) {
+    elements.btnHubSyncPush.addEventListener('click', syncPushToCloud);
+  }
+
+  if (elements.btnHubSyncPull) {
+    elements.btnHubSyncPull.addEventListener('click', syncPullFromCloud);
+  }
+
+  if (elements.btnExportPlaylistsJson) {
+    elements.btnExportPlaylistsJson.addEventListener('click', exportPlaylistsToJson);
+  }
+
+  if (elements.btnImportPlaylistsJson && elements.fileImportPlaylists) {
+    elements.btnImportPlaylistsJson.addEventListener('click', () => {
+      elements.fileImportPlaylists.click();
+    });
+    elements.fileImportPlaylists.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        importPlaylistsFromJson(e.target.files[0]);
+        e.target.value = '';
+      }
+    });
+  }
+
+  if (elements.btnSwitchAccount) {
+    elements.btnSwitchAccount.addEventListener('click', () => {
+      if (elements.userAccountModal) elements.userAccountModal.style.display = 'none';
+      if (elements.googleLoginModal) {
+        elements.googleLoginModal.style.display = 'flex';
+        if (elements.googleEmailInput) {
+          elements.googleEmailInput.value = '';
+          elements.googleEmailInput.focus();
+        }
+        if (elements.googleNameInput) elements.googleNameInput.value = '';
+      }
+    });
+  }
+
+  if (elements.btnHubLogout) {
+    elements.btnHubLogout.addEventListener('click', () => {
+      logoutGoogle();
     });
   }
 }
