@@ -32,6 +32,11 @@ const state = {
   shuffleMode: 'off', // 'off', 'standard', 'smart'
   smartShuffleCounter: 0,
   shuffledIndices: [],
+  playedTrackIds: new Set(),
+  playedArtists: [],
+  smartQueue: [],
+  unplayedShuffleIndices: [],
+  isFetchingSmartQueue: false,
   isOfflinePlaying: false,
   downloadedIds: new Set(),
   activeDownloads: new Map(),
@@ -702,8 +707,33 @@ async function playSong(song, playlist = null, index = -1) {
 
   state.currentSong = song;
   if (playlist) {
+    const isNewPlaylist = state.currentPlaylist !== playlist;
     state.currentPlaylist = playlist;
     state.currentIndex = index >= 0 ? index : playlist.findIndex(s => s.id === song.id);
+    if (isNewPlaylist) {
+      initShufflePool(true);
+    }
+  }
+
+  // Record playback history for anti-repetition & artist diversity
+  if (song && song.id) {
+    state.playedTrackIds.add(song.id);
+    if (state.playedTrackIds.size > 60) {
+      const firstVal = state.playedTrackIds.values().next().value;
+      state.playedTrackIds.delete(firstVal);
+    }
+    const songArtists = extractClientArtists(song);
+    songArtists.forEach(a => {
+      state.playedArtists.push(a);
+    });
+    if (state.playedArtists.length > 20) {
+      state.playedArtists = state.playedArtists.slice(-20);
+    }
+  }
+
+  // If Smart Shuffle is active, proactively prefetch next recommendations in background
+  if (state.shuffleMode === 'smart') {
+    setTimeout(() => prefetchSmartRecommendations(), 500);
   }
 
   // Update UI Metadata
@@ -852,7 +882,104 @@ function updatePlayPauseButton() {
   }
 }
 
+// --- ADVANCED SHUFFLE & SMART RECOMMENDATION ENGINE ---
+
+function extractClientArtists(song) {
+  const artists = new Set();
+  if (!song) return [];
+  const c = (song.channel || '').toLowerCase().trim();
+  if (c && !/(records|müzik|muzik|music|vevo|entertainment|official|audio|yapım|yapim|netd|video|tv)/i.test(c)) {
+    artists.add(c);
+  }
+  if (song.title) {
+    const parts = song.title.split(/\s*[-–—:]\s*/);
+    if (parts.length > 1) {
+      const lead = parts[0].replace(/[\(\[].*?[\)\]]/g, '').trim().toLowerCase();
+      const subs = lead.split(/\s*(?:&|feat\.?|ft\.?|\bx\b|,|\/)\s*/i);
+      subs.forEach(s => {
+        const clean = s.trim();
+        if (clean.length > 1 && !/(official|video|klip|audio|hd|4k)/i.test(clean)) artists.add(clean);
+      });
+    }
+  }
+  return Array.from(artists);
+}
+
+function isSameArtistAsRecent(song) {
+  if (!song) return false;
+  const songArtists = extractClientArtists(song);
+  const songStr = `${song.title || ''} ${song.channel || ''}`.toLowerCase();
+  
+  // Check against last 5 played artists
+  const recent = (state.playedArtists || []).slice(-5);
+  for (const prev of recent) {
+    const p = (prev || '').toLowerCase().trim();
+    if (!p || p.length < 2) continue;
+    if (songStr.includes(p)) return true;
+    for (const a of songArtists) {
+      if (a === p || a.includes(p) || p.includes(a)) return true;
+    }
+  }
+  return false;
+}
+
+function initShufflePool(forceReset = false) {
+  if (!state.currentPlaylist || state.currentPlaylist.length === 0) {
+    state.unplayedShuffleIndices = [];
+    return;
+  }
+  if (forceReset || !state.unplayedShuffleIndices || state.unplayedShuffleIndices.length === 0) {
+    const indices = [];
+    for (let i = 0; i < state.currentPlaylist.length; i++) {
+      if (i !== state.currentIndex) indices.push(i);
+    }
+    // Fisher-Yates shuffle
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    state.unplayedShuffleIndices = indices;
+  }
+}
+
+async function prefetchSmartRecommendations() {
+  if (!state.currentSong || state.isOfflinePlaying || state.isFetchingSmartQueue) return;
+  if (state.smartQueue && state.smartQueue.length >= 3) return;
+
+  state.isFetchingSmartQueue = true;
+  try {
+    const excludeIds = Array.from(new Set([
+      ...(state.currentPlaylist ? state.currentPlaylist.map(s => s.id) : []),
+      ...Array.from(state.playedTrackIds || []),
+      ...(state.smartQueue ? state.smartQueue.map(s => s.id) : [])
+    ])).filter(Boolean).slice(-40);
+
+    const excludeArtists = Array.from(new Set([
+      ...(state.playedArtists || []).slice(-8),
+      ...extractClientArtists(state.currentSong)
+    ])).filter(Boolean);
+
+    const url = `/api/recommendations?videoId=${encodeURIComponent(state.currentSong.id || '')}&artist=${encodeURIComponent(state.currentSong.channel || '')}&title=${encodeURIComponent(state.currentSong.title || '')}&excludeArtists=${encodeURIComponent(JSON.stringify(excludeArtists))}&excludeIds=${encodeURIComponent(JSON.stringify(excludeIds))}`;
+
+    const res = await apiFetch(url);
+    if (res && res.recommendations && res.recommendations.length > 0) {
+      const existingQueueIds = new Set((state.smartQueue || []).map(s => s.id));
+      for (const rec of res.recommendations) {
+        if (!existingQueueIds.has(rec.id) && !state.playedTrackIds.has(rec.id)) {
+          state.smartQueue.push({ ...rec, isSmartRecommendation: true });
+          existingQueueIds.add(rec.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Smart recommendations prefetch warning:', err);
+  } finally {
+    state.isFetchingSmartQueue = false;
+  }
+}
+
 async function playNext() {
+  // 1. Explicit user queue
   if (state.queue.length > 0) {
     const nextSong = state.queue.shift();
     elements.queueBadge.textContent = state.queue.length;
@@ -860,45 +987,97 @@ async function playNext() {
     return;
   }
 
-  if (state.currentPlaylist.length === 0) return;
-
-  // SMART SHUFFLE: every ~3 tracks, fetch and play a related recommendation
+  // 2. SMART SHUFFLE: Intelligent cross-artist discovery in the same genre
   if (state.shuffleMode === 'smart') {
-    state.smartShuffleCounter = (state.smartShuffleCounter || 0) + 1;
-    if (state.smartShuffleCounter % 3 === 0 && state.currentSong && !state.isOfflinePlaying) {
+    let smartCandidate = null;
+
+    // A. Use pre-fetched candidate if ready in queue
+    if (state.smartQueue && state.smartQueue.length > 0) {
+      smartCandidate = state.smartQueue.shift();
+    } else if (state.currentSong && !state.isOfflinePlaying) {
+      // B. Fetch on the fly if queue was empty
       try {
-        const queryTerm = (state.currentSong.channel || state.currentSong.title || '').replace(/[^\w\sğüşıöçĞÜŞİÖÇ]/g, ' ').trim();
-        const searchData = await apiFetch(`/api/search?q=${encodeURIComponent(queryTerm + ' popüler şarkıları')}`);
-        const recs = searchData.results || (Array.isArray(searchData) ? searchData : []);
-        const existingIds = new Set(state.currentPlaylist.map(s => s.id));
-        if (state.currentSong) existingIds.add(state.currentSong.id);
-        const candidates = recs.filter(s => s && s.id && !existingIds.has(s.id));
-        if (candidates.length > 0) {
-          const picked = { ...candidates[Math.floor(Math.random() * Math.min(candidates.length, 5))], isSmartRecommendation: true };
-          showToast(`✨ Akıllı Öneri: ${picked.title}`);
-          playSong(picked, state.currentPlaylist, state.currentIndex);
-          return;
+        const excludeIds = Array.from(new Set([
+          ...(state.currentPlaylist ? state.currentPlaylist.map(s => s.id) : []),
+          ...Array.from(state.playedTrackIds || [])
+        ])).filter(Boolean).slice(-40);
+
+        const excludeArtists = Array.from(new Set([
+          ...(state.playedArtists || []).slice(-8),
+          ...extractClientArtists(state.currentSong)
+        ])).filter(Boolean);
+
+        const url = `/api/recommendations?videoId=${encodeURIComponent(state.currentSong.id || '')}&artist=${encodeURIComponent(state.currentSong.channel || '')}&title=${encodeURIComponent(state.currentSong.title || '')}&excludeArtists=${encodeURIComponent(JSON.stringify(excludeArtists))}&excludeIds=${encodeURIComponent(JSON.stringify(excludeIds))}`;
+        const res = await apiFetch(url);
+        if (res && res.recommendations && res.recommendations.length > 0) {
+          const valid = res.recommendations.filter(r => !state.playedTrackIds.has(r.id));
+          if (valid.length > 0) {
+            smartCandidate = { ...valid[0], isSmartRecommendation: true };
+            state.smartQueue = valid.slice(1).map(r => ({ ...r, isSmartRecommendation: true }));
+          }
         }
-      } catch (err) {
-        console.warn('Smart shuffle recommendation fallback:', err);
+      } catch (e) {
+        console.warn('Smart shuffle on-demand fetch fallback:', e);
       }
     }
 
-    const nextIdx = Math.floor(Math.random() * state.currentPlaylist.length);
-    const nextSong = { ...state.currentPlaylist[nextIdx], isSmartRecommendation: false };
-    playSong(nextSong, state.currentPlaylist, nextIdx);
-    return;
+    // Play smart recommendation by a different artist!
+    if (smartCandidate) {
+      showToast(`✨ Akıllı Mix: ${smartCandidate.title}`);
+      playSong(smartCandidate, state.currentPlaylist, state.currentIndex);
+      return;
+    }
+
+    // Fallback: if offline or no recs found, play from playlist with diversity
+    if (state.currentPlaylist && state.currentPlaylist.length > 0) {
+      initShufflePool();
+      let pickedIdx = -1;
+      for (let i = 0; i < state.unplayedShuffleIndices.length; i++) {
+        const testIdx = state.unplayedShuffleIndices[i];
+        const testSong = state.currentPlaylist[testIdx];
+        if (!isSameArtistAsRecent(testSong)) {
+          pickedIdx = state.unplayedShuffleIndices.splice(i, 1)[0];
+          break;
+        }
+      }
+      if (pickedIdx === -1 && state.unplayedShuffleIndices.length > 0) {
+        pickedIdx = state.unplayedShuffleIndices.shift();
+      }
+      if (pickedIdx >= 0) {
+        const nextSong = { ...state.currentPlaylist[pickedIdx], isSmartRecommendation: false };
+        playSong(nextSong, state.currentPlaylist, pickedIdx);
+        return;
+      }
+    }
   }
 
-  // STANDARD SHUFFLE
+  // 3. STANDARD SHUFFLE: Non-repeating fair deck shuffle with artist diversity
   if (state.isShuffled || state.shuffleMode === 'standard') {
-    const nextIdx = Math.floor(Math.random() * state.currentPlaylist.length);
-    const nextSong = { ...state.currentPlaylist[nextIdx], isSmartRecommendation: false };
-    playSong(nextSong, state.currentPlaylist, nextIdx);
-    return;
+    if (state.currentPlaylist && state.currentPlaylist.length > 0) {
+      initShufflePool();
+      let pickedIdx = -1;
+      // Prefer a song by a different artist than recent
+      for (let i = 0; i < state.unplayedShuffleIndices.length; i++) {
+        const testIdx = state.unplayedShuffleIndices[i];
+        const testSong = state.currentPlaylist[testIdx];
+        if (!isSameArtistAsRecent(testSong)) {
+          pickedIdx = state.unplayedShuffleIndices.splice(i, 1)[0];
+          break;
+        }
+      }
+      if (pickedIdx === -1 && state.unplayedShuffleIndices.length > 0) {
+        pickedIdx = state.unplayedShuffleIndices.shift();
+      }
+      if (pickedIdx >= 0) {
+        const nextSong = { ...state.currentPlaylist[pickedIdx], isSmartRecommendation: false };
+        playSong(nextSong, state.currentPlaylist, pickedIdx);
+        return;
+      }
+    }
   }
 
-  // SEQUENTIAL
+  // 4. SEQUENTIAL
+  if (!state.currentPlaylist || state.currentPlaylist.length === 0) return;
   let nextIdx = state.currentIndex + 1;
   if (nextIdx >= state.currentPlaylist.length) {
     if (state.repeatMode === 'off') return;
