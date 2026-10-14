@@ -54,6 +54,8 @@ const state = {
   currentPlaylistId: null,
   isVideoVisible: false,
   viewMode: localStorage.getItem('muzikal_view_mode') || 'grid',
+  hideUpcomingQueue: localStorage.getItem('muzikal_hide_upcoming_queue') === 'true',
+  selectedSongForPlaylist: null,
   user: null
 };
 
@@ -67,6 +69,7 @@ let ytReady = false;
 let progressInterval = null;
 let searchDebounceTimer = null;
 let pollDownloadsTimer = null;
+let queueSearchDebounceTimer = null;
 
 // Local HTML5 Audio player for offline playback
 const localAudio = document.getElementById('local-audio-player');
@@ -79,6 +82,7 @@ const elements = {
   favCountBadge: document.getElementById('fav-count-badge'),
   downloadsCountBadge: document.getElementById('downloads-count-badge'),
   btnNewPlaylist: document.getElementById('btn-new-playlist'),
+  btnSidebarCreatePlaylist: document.getElementById('btn-sidebar-create-playlist'),
   btnSidebarSpotify: document.getElementById('btn-sidebar-spotify'),
   
   // Sidebar NP
@@ -103,6 +107,7 @@ const elements = {
   btnCloseVideo: document.getElementById('btn-close-video'),
 
   // Content Views
+  contentScroll: document.getElementById('content-scroll'),
   heroBanner: document.getElementById('hero-banner'),
   heroVinyl: document.getElementById('hero-vinyl'),
   btnHeroPlay: document.getElementById('btn-hero-play'),
@@ -129,9 +134,23 @@ const elements = {
   // Queue Drawer
   queueDrawer: document.getElementById('queue-drawer'),
   btnCloseQueue: document.getElementById('btn-close-queue'),
+  btnToggleQueueSpoiler: document.getElementById('btn-toggle-queue-spoiler'),
+  queueSpoilerIcon: document.getElementById('queue-spoiler-icon'),
+  queueSpoilerText: document.getElementById('queue-spoiler-text'),
+  queueQuickSearchInput: document.getElementById('queue-quick-search-input'),
+  queueQuickSearchDropdown: document.getElementById('queue-quick-search-dropdown'),
+  btnClearQueueSearch: document.getElementById('btn-clear-queue-search'),
   queueNpItem: document.getElementById('queue-np-item'),
+  queueManualSection: document.getElementById('queue-manual-section'),
+  queueManualCount: document.getElementById('queue-manual-count'),
   queueItems: document.getElementById('queue-items'),
   btnClearQueue: document.getElementById('btn-clear-queue'),
+  queueUpcomingSection: document.getElementById('queue-upcoming-section'),
+  queueUpcomingTitle: document.getElementById('queue-upcoming-title'),
+  queueUpcomingSource: document.getElementById('queue-upcoming-source'),
+  queueUpcomingItems: document.getElementById('queue-upcoming-items'),
+  queueSpoilerMask: document.getElementById('queue-spoiler-mask'),
+  btnRevealQueue: document.getElementById('btn-reveal-queue'),
 
   // Player Bar
   playerThumb: document.getElementById('player-thumb'),
@@ -141,6 +160,7 @@ const elements = {
   playerSmartBadge: document.getElementById('player-smart-badge'),
   smartShuffleDot: document.getElementById('smart-shuffle-dot'),
   playerFavBtn: document.getElementById('player-fav-btn'),
+  playerAddPlBtn: document.getElementById('player-add-pl-btn'),
   playingIndicator: document.getElementById('playing-indicator'),
   btnShuffle: document.getElementById('btn-shuffle'),
   btnPrev: document.getElementById('btn-prev'),
@@ -164,6 +184,16 @@ const elements = {
   modalPlDesc: document.getElementById('modal-pl-desc'),
   btnCancelModal: document.getElementById('btn-cancel-modal'),
   btnSaveModal: document.getElementById('btn-save-modal'),
+
+  // Add to Playlist Modal
+  addToPlaylistModal: document.getElementById('add-to-playlist-modal'),
+  btnCloseAddPlModal: document.getElementById('btn-close-add-pl-modal'),
+  addPlSongThumb: document.getElementById('add-pl-song-thumb'),
+  addPlSongTitle: document.getElementById('add-pl-song-title'),
+  addPlSongArtist: document.getElementById('add-pl-song-artist'),
+  inputAddPlNewName: document.getElementById('input-add-pl-new-name'),
+  btnAddPlCreateAndAdd: document.getElementById('btn-add-pl-create-and-add'),
+  addPlPlaylistsContainer: document.getElementById('add-pl-playlists-container'),
 
   spotifyModal: document.getElementById('spotify-modal'),
   modalSpUrl: document.getElementById('modal-sp-url'),
@@ -1397,7 +1427,7 @@ function formatTime(sec) {
   return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
 
-// --- QUEUE MANAGEMENT ---
+// --- QUEUE & UPCOMING TRACKS ENGINE ---
 
 function addToQueue(song) {
   state.queue.push(song);
@@ -1406,14 +1436,58 @@ function addToQueue(song) {
   showToast(`"${song.title}" sıraya eklendi.`);
 }
 
+function getUpcomingTracks(limit = 20) {
+  let source = 'Sırada şarkı yok';
+  let tracks = [];
+
+  if (state.shuffleMode === 'smart') {
+    source = '✨ Akıllı Mix & Keşif';
+    const smarts = (state.smartQueue || []).map(s => ({ ...s, isSmartRecommendation: true }));
+    tracks.push(...smarts);
+
+    if (state.currentPlaylist && state.unplayedShuffleIndices) {
+      for (const idx of state.unplayedShuffleIndices) {
+        const s = state.currentPlaylist[idx];
+        if (s && !tracks.some(t => t.id === s.id) && s.id !== (state.currentSong && state.currentSong.id)) {
+          tracks.push({ ...s, isSmartRecommendation: false });
+        }
+      }
+    }
+  } else if (state.shuffleMode === 'standard' || state.isShuffled) {
+    source = '🔀 Karışık Çalma';
+    if (state.currentPlaylist && state.unplayedShuffleIndices) {
+      for (const idx of state.unplayedShuffleIndices) {
+        const s = state.currentPlaylist[idx];
+        if (s && s.id !== (state.currentSong && state.currentSong.id)) {
+          tracks.push({ ...s, isSmartRecommendation: false });
+        }
+      }
+    }
+  } else if (state.currentPlaylist && state.currentPlaylist.length > 0 && state.currentIndex >= 0) {
+    source = '▶️ Sırayla Çalma';
+    const nextSlice = state.currentPlaylist.slice(state.currentIndex + 1);
+    tracks.push(...nextSlice);
+    if (state.repeatMode === 'all') {
+      const wrapped = state.currentPlaylist.slice(0, state.currentIndex);
+      tracks.push(...wrapped);
+    }
+  }
+
+  return { source, tracks: tracks.slice(0, limit) };
+}
+
 function updateQueueDrawer() {
+  // 1. Currently Playing Item
   if (state.currentSong) {
     elements.queueNpItem.innerHTML = `
-      <div class="queue-item">
-        <img src="${state.currentSong.thumbnail}" class="queue-item-thumb">
+      <div class="queue-item" style="border-color: rgba(30, 215, 96, 0.4);">
+        <img src="${state.currentSong.thumbnail || 'https://via.placeholder.com/60'}" class="queue-item-thumb">
         <div class="queue-item-info">
-          <div class="queue-item-title">${state.currentSong.title}</div>
-          <div class="queue-item-artist">${state.currentSong.channel}</div>
+          <div class="queue-item-title" style="color: var(--accent);">${escapeHtml(state.currentSong.title)}</div>
+          <div class="queue-item-artist">${escapeHtml(state.currentSong.channel)}</div>
+        </div>
+        <div class="playing-indicator" style="display: flex;">
+          <span></span><span></span><span></span>
         </div>
       </div>
     `;
@@ -1421,29 +1495,191 @@ function updateQueueDrawer() {
     elements.queueNpItem.innerHTML = `<span style="font-size:12px;color:var(--text-muted)">Şu an şarkı çalmıyor</span>`;
   }
 
+  // 2. Manual User Queue (Plays first)
+  if (elements.queueManualCount) {
+    elements.queueManualCount.textContent = state.queue.length;
+  }
+
   if (state.queue.length === 0) {
-    elements.queueItems.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:10px 0;">Sırada şarkı yok. Bir şarkıyı sıraya ekleyebilirsiniz.</div>`;
+    elements.queueItems.innerHTML = `
+      <div style="font-size:12px;color:var(--text-muted);padding:8px 0;">
+        Kullanıcı sırası boş. Yukarıdaki arama kutusundan hızlıca ekleyebilirsiniz.
+      </div>
+    `;
+  } else {
+    elements.queueItems.innerHTML = state.queue.map((song, i) => `
+      <div class="queue-item" data-idx="${i}">
+        <img src="${song.thumbnail || 'https://via.placeholder.com/60'}" class="queue-item-thumb">
+        <div class="queue-item-info">
+          <div class="queue-item-title">${escapeHtml(song.title)}</div>
+          <div class="queue-item-artist">${escapeHtml(song.channel)}</div>
+        </div>
+        <button class="btn-icon-subtle btn-remove-queue" data-idx="${i}" title="Sıradan Çıkar">✕</button>
+      </div>
+    `).join('');
+
+    elements.queueItems.querySelectorAll('.queue-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-remove-queue')) return;
+        const idx = parseInt(item.dataset.idx, 10);
+        const song = state.queue.splice(idx, 1)[0];
+        elements.queueBadge.textContent = state.queue.length;
+        playSong(song);
+        updateQueueDrawer();
+      });
+    });
+
+    elements.queueItems.querySelectorAll('.btn-remove-queue').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.idx, 10);
+        state.queue.splice(idx, 1);
+        elements.queueBadge.textContent = state.queue.length;
+        updateQueueDrawer();
+      });
+    });
+  }
+
+  // 3. Upcoming Tracks (Playlist / Smart Mix)
+  const upcoming = getUpcomingTracks(25);
+  if (elements.queueUpcomingSource) {
+    elements.queueUpcomingSource.textContent = upcoming.source;
+  }
+
+  // Check Spoiler / Surprise Mode
+  if (state.hideUpcomingQueue) {
+    if (elements.queueUpcomingItems) elements.queueUpcomingItems.style.display = 'none';
+    if (elements.queueSpoilerMask) elements.queueSpoilerMask.style.display = 'flex';
+    if (elements.queueSpoilerIcon) elements.queueSpoilerIcon.textContent = '👁️';
+    if (elements.queueSpoilerText) elements.queueSpoilerText.textContent = 'Sıradakileri Göster';
+    if (elements.btnToggleQueueSpoiler) elements.btnToggleQueueSpoiler.classList.add('active');
+  } else {
+    if (elements.queueSpoilerMask) elements.queueSpoilerMask.style.display = 'none';
+    if (elements.queueUpcomingItems) elements.queueUpcomingItems.style.display = 'flex';
+    if (elements.queueSpoilerIcon) elements.queueSpoilerIcon.textContent = '🙈';
+    if (elements.queueSpoilerText) elements.queueSpoilerText.textContent = 'Sıradakileri Gizle';
+    if (elements.btnToggleQueueSpoiler) elements.btnToggleQueueSpoiler.classList.remove('active');
+
+    if (upcoming.tracks.length === 0) {
+      elements.queueUpcomingItems.innerHTML = `
+        <div style="font-size:12px;color:var(--text-muted);padding:8px 0;">
+          Sırada bekleyen başka şarkı yok.
+        </div>
+      `;
+    } else {
+      elements.queueUpcomingItems.innerHTML = upcoming.tracks.map((song, i) => `
+        <div class="queue-item" data-upidx="${i}" title="Hemen Çal">
+          <img src="${song.thumbnail || 'https://via.placeholder.com/60'}" class="queue-item-thumb">
+          <div class="queue-item-info">
+            <div class="queue-item-title">${escapeHtml(song.title)}</div>
+            <div class="queue-item-artist">
+              ${song.isSmartRecommendation ? '<span style="color:var(--accent);font-weight:700;">✨ Akıllı Öneri • </span>' : ''}
+              ${escapeHtml(song.channel)}
+            </div>
+          </div>
+          <button class="btn-icon-subtle btn-pin-queue" data-upidx="${i}" title="Kullanıcı Sırasına Ekle (Öncelikli Yap)">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      `).join('');
+
+      elements.queueUpcomingItems.querySelectorAll('.queue-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          if (e.target.closest('.btn-pin-queue')) return;
+          const upIdx = parseInt(item.dataset.upidx, 10);
+          const song = upcoming.tracks[upIdx];
+          if (song) {
+            playSong(song, state.currentPlaylist, state.currentPlaylist ? state.currentPlaylist.findIndex(s => s.id === song.id) : -1);
+            updateQueueDrawer();
+          }
+        });
+      });
+
+      elements.queueUpcomingItems.querySelectorAll('.btn-pin-queue').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const upIdx = parseInt(btn.dataset.upidx, 10);
+          const song = upcoming.tracks[upIdx];
+          if (song) {
+            addToQueue(song);
+          }
+        });
+      });
+    }
+  }
+}
+
+// --- ADD SONG TO PLAYLIST MODAL LOGIC ---
+
+function openAddToPlaylistModal(song) {
+  if (!song) return;
+  state.selectedSongForPlaylist = song;
+  if (elements.addPlSongThumb) elements.addPlSongThumb.src = song.thumbnail || 'https://via.placeholder.com/60';
+  if (elements.addPlSongTitle) elements.addPlSongTitle.textContent = song.title || 'Şarkı';
+  if (elements.addPlSongArtist) elements.addPlSongArtist.textContent = song.channel || 'Sanatçı';
+  if (elements.inputAddPlNewName) elements.inputAddPlNewName.value = '';
+
+  renderAddToPlaylistItems();
+  if (elements.addToPlaylistModal) elements.addToPlaylistModal.style.display = 'flex';
+}
+
+function renderAddToPlaylistItems() {
+  if (!elements.addPlPlaylistsContainer) return;
+  const song = state.selectedSongForPlaylist;
+  if (!song) return;
+
+  const playlists = state.library.playlists || [];
+  if (playlists.length === 0) {
+    elements.addPlPlaylistsContainer.innerHTML = `
+      <div style="font-size:12px;color:var(--text-muted);padding:14px;text-align:center;">
+        Henüz kayıtlı çalma listeniz yok. Yukarıdan hemen yeni bir liste oluşturup şarkıyı ekleyin!
+      </div>
+    `;
     return;
   }
 
-  elements.queueItems.innerHTML = state.queue.map((song, i) => `
-    <div class="queue-item" data-idx="${i}">
-      <img src="${song.thumbnail}" class="queue-item-thumb">
-      <div class="queue-item-info">
-        <div class="queue-item-title">${song.title}</div>
-        <div class="queue-item-artist">${song.channel}</div>
+  elements.addPlPlaylistsContainer.innerHTML = playlists.map(pl => {
+    const isAlreadyIn = (pl.songs || []).some(s => s.id === song.id);
+    return `
+      <div class="add-pl-item" data-plid="${pl.id}">
+        <div class="add-pl-item-info">
+          <span class="add-pl-item-name">${pl.isSpotify ? '🟢' : (pl.isYtm ? '🔴' : '📁')} ${escapeHtml(pl.name)}</span>
+          <span class="add-pl-item-count">${(pl.songs || []).length} şarkı</span>
+        </div>
+        <button class="btn-add-pl-action ${isAlreadyIn ? 'added' : ''}" data-plid="${pl.id}">
+          ${isAlreadyIn ? '✓ Eklendi' : '+ Ekle'}
+        </button>
       </div>
-      <button class="btn-icon-subtle btn-remove-queue" data-idx="${i}" title="Sıradan Çıkar">✕</button>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
-  elements.queueItems.querySelectorAll('.btn-remove-queue').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+  elements.addPlPlaylistsContainer.querySelectorAll('.btn-add-pl-action').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const idx = parseInt(btn.dataset.idx, 10);
-      state.queue.splice(idx, 1);
-      elements.queueBadge.textContent = state.queue.length;
-      updateQueueDrawer();
+      const plId = btn.dataset.plid;
+      const pl = state.library.playlists.find(p => p.id === plId);
+      if (!pl) return;
+      if (!pl.songs) pl.songs = [];
+
+      const alreadyIn = pl.songs.some(s => s.id === song.id);
+      if (alreadyIn) {
+        pl.songs = pl.songs.filter(s => s.id !== song.id);
+        btn.textContent = '+ Ekle';
+        btn.classList.remove('added');
+        showToast(`"${song.title}" "${pl.name}" listesinden kaldırıldı.`);
+      } else {
+        pl.songs.push(song);
+        btn.textContent = '✓ Eklendi';
+        btn.classList.add('added');
+        showToast(`"${song.title}" "${pl.name}" listesine eklendi! ✨`);
+      }
+
+      await persistLibrary(state.library);
+      renderSidebarPlaylists();
+      renderAddToPlaylistItems();
     });
   });
 }
@@ -1624,6 +1860,12 @@ function renderSongs(songs, isSearching = false) {
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
+          <button class="btn-icon-subtle btn-card-add-pl" title="Çalma Listesine Ekle">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
           <button class="btn-icon-subtle btn-card-download ${isDownloaded ? 'downloaded' : ''}" title="${isDownloaded ? 'Çevrimdışı İndirildi' : 'Çevrimdışı İndir'}">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               ${isDownloaded 
@@ -1656,6 +1898,14 @@ function renderSongs(songs, isSearching = false) {
       e.stopPropagation();
       addToQueue(song);
     });
+
+    const addPlBtn = card.querySelector('.btn-card-add-pl');
+    if (addPlBtn) {
+      addPlBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openAddToPlaylistModal(song);
+      });
+    }
 
     const dlBtn = card.querySelector('.btn-card-download');
     dlBtn.addEventListener('click', (e) => {
@@ -1777,8 +2027,31 @@ function updateCategoryChipsVisibility() {
   }
 }
 
-async function fetchExploreGenre(genreKey) {
-  elements.sectionActions.innerHTML = '';
+async function fetchExploreGenre(genreKey, forceRefresh = false) {
+  if (state.currentView === 'home' || state.currentView === 'explore') {
+    elements.sectionActions.innerHTML = `
+      <button class="btn-refresh-trends" id="btn-refresh-explore-trends" title="En yeni şarkıları YouTube Music üzerinden anlık yenile">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6"></path>
+          <path d="M1 20v-6h6"></path>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>Trendleri Yenile</span>
+      </button>
+    `;
+    const btnRef = document.getElementById('btn-refresh-explore-trends');
+    if (btnRef) {
+      btnRef.addEventListener('click', async () => {
+        btnRef.classList.add('spinning');
+        showToast('🔥 En yeni trendler YouTube Music üzerinden taranıyor...');
+        await fetchExploreGenre(genreKey, true);
+        showToast('✨ Trendler başarıyla güncellendi!');
+      });
+    }
+  } else {
+    elements.sectionActions.innerHTML = '';
+  }
+
   elements.songsGrid.innerHTML = '';
   elements.emptyState.style.display = 'none';
   elements.loadingState.style.display = 'flex';
@@ -1791,7 +2064,8 @@ async function fetchExploreGenre(genreKey) {
   }
 
   try {
-    const data = await apiFetch(`/api/explore?genre=${encodeURIComponent(genreKey)}`);
+    const refreshParam = forceRefresh ? '&refresh=1' : '';
+    const data = await apiFetch(`/api/explore?genre=${encodeURIComponent(genreKey)}${refreshParam}`);
     let songs = data && (data.results || (Array.isArray(data) ? data : []));
     if (!songs || songs.length === 0) {
       songs = BUNDLED_EXPLORE_SONGS;
@@ -2153,6 +2427,7 @@ function navigateTo(view) {
   if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
 
   updateCategoryChipsVisibility();
+  if (elements.contentScroll) elements.contentScroll.scrollTop = 0;
 
   if (view === 'home') {
     elements.heroBanner.style.display = 'flex';
@@ -2473,6 +2748,98 @@ function setupEventListeners() {
     updateQueueDrawer();
   });
 
+  // Queue Spoiler Toggle (Surprise Mode)
+  if (elements.btnToggleQueueSpoiler) {
+    elements.btnToggleQueueSpoiler.addEventListener('click', () => {
+      state.hideUpcomingQueue = !state.hideUpcomingQueue;
+      localStorage.setItem('muzikal_hide_queue', state.hideUpcomingQueue ? '1' : '0');
+      updateQueueDrawer();
+    });
+  }
+  if (elements.btnRevealQueue) {
+    elements.btnRevealQueue.addEventListener('click', () => {
+      state.hideUpcomingQueue = false;
+      localStorage.setItem('muzikal_hide_queue', '0');
+      updateQueueDrawer();
+    });
+  }
+
+  // Queue Quick Search & Add
+  let queueSearchDebounce = null;
+  if (elements.queueQuickSearchInput) {
+    elements.queueQuickSearchInput.addEventListener('input', (e) => {
+      const q = e.target.value.trim();
+      if (elements.btnClearQueueSearch) {
+        elements.btnClearQueueSearch.style.display = q ? 'block' : 'none';
+      }
+      clearTimeout(queueSearchDebounce);
+      if (!q) {
+        if (elements.queueQuickSearchDropdown) elements.queueQuickSearchDropdown.style.display = 'none';
+        return;
+      }
+      queueSearchDebounce = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+          const data = await res.json();
+          if (data && data.results && data.results.length > 0 && elements.queueQuickSearchDropdown) {
+            elements.queueQuickSearchDropdown.innerHTML = data.results.slice(0, 5).map(s => `
+              <div class="queue-quick-search-item" data-song='${JSON.stringify(s).replace(/'/g, "&apos;")}'>
+                <img src="${escapeHtml(s.thumbnail || '')}" alt="${escapeHtml(s.title)}" />
+                <div class="info">
+                  <div class="title">${escapeHtml(s.title)}</div>
+                  <div class="artist">${escapeHtml(s.artist || s.channel || '')}</div>
+                </div>
+                <button class="btn-quick-add" title="Sıraya Ekle">➕</button>
+              </div>
+            `).join('');
+            elements.queueQuickSearchDropdown.style.display = 'block';
+
+            elements.queueQuickSearchDropdown.querySelectorAll('.queue-quick-search-item').forEach(item => {
+              item.addEventListener('click', () => {
+                const song = JSON.parse(item.dataset.song);
+                addToQueue(song);
+                elements.queueQuickSearchInput.value = '';
+                if (elements.btnClearQueueSearch) elements.btnClearQueueSearch.style.display = 'none';
+                elements.queueQuickSearchDropdown.style.display = 'none';
+                showToast(`"${song.title}" sıraya eklendi.`);
+              });
+            });
+          } else if (elements.queueQuickSearchDropdown) {
+            elements.queueQuickSearchDropdown.style.display = 'none';
+          }
+        } catch (err) {
+          console.error('Queue quick search error:', err);
+        }
+      }, 350);
+    });
+  }
+
+  if (elements.btnClearQueueSearch) {
+    elements.btnClearQueueSearch.addEventListener('click', () => {
+      if (elements.queueQuickSearchInput) elements.queueQuickSearchInput.value = '';
+      elements.btnClearQueueSearch.style.display = 'none';
+      if (elements.queueQuickSearchDropdown) elements.queueQuickSearchDropdown.style.display = 'none';
+    });
+  }
+
+  // Close queue quick search dropdown if clicking outside
+  document.addEventListener('click', (e) => {
+    if (elements.queueQuickSearchDropdown && !e.target.closest('#queue-drawer')) {
+      elements.queueQuickSearchDropdown.style.display = 'none';
+    }
+  });
+
+  // Player Add to Playlist Button
+  if (elements.playerAddPlBtn) {
+    elements.playerAddPlBtn.addEventListener('click', () => {
+      if (state.currentSong) {
+        openAddToPlaylistModal(state.currentSong);
+      } else {
+        showToast('Şu anda çalan bir şarkı yok');
+      }
+    });
+  }
+
   // Video mode toggle
   elements.btnToggleVideo.addEventListener('click', () => {
     state.isVideoVisible = !state.isVideoVisible;
@@ -2530,6 +2897,79 @@ function setupEventListeners() {
       console.error(e);
     }
   });
+
+  // Sidebar Create Playlist Button ("+ Yeni Çalma Listesi")
+  if (elements.btnSidebarCreatePlaylist) {
+    elements.btnSidebarCreatePlaylist.addEventListener('click', () => {
+      elements.modalPlName.value = '';
+      elements.modalPlDesc.value = '';
+      elements.playlistModal.style.display = 'flex';
+      elements.modalPlName.focus();
+    });
+  }
+
+  // Add to Playlist Modal Events
+  if (elements.btnCloseAddPlModal) {
+    elements.btnCloseAddPlModal.addEventListener('click', () => {
+      if (elements.addToPlaylistModal) elements.addToPlaylistModal.style.display = 'none';
+      state.selectedSongForPlaylist = null;
+    });
+  }
+
+  if (elements.addToPlaylistModal) {
+    elements.addToPlaylistModal.addEventListener('click', (e) => {
+      if (e.target === elements.addToPlaylistModal) {
+        elements.addToPlaylistModal.style.display = 'none';
+        state.selectedSongForPlaylist = null;
+      }
+    });
+  }
+
+  if (elements.btnAddPlCreateAndAdd) {
+    elements.btnAddPlCreateAndAdd.addEventListener('click', async () => {
+      const name = elements.inputAddPlNewName ? elements.inputAddPlNewName.value.trim() : '';
+      if (!name) {
+        showToast('Lütfen bir çalma listesi adı girin');
+        return;
+      }
+      try {
+        const res = await fetch('/api/library/playlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const data = await res.json();
+        if (data.success && data.playlist) {
+          state.library.playlists.push(data.playlist);
+          renderSidebarPlaylists();
+          if (elements.inputAddPlNewName) elements.inputAddPlNewName.value = '';
+          if (state.selectedSongForPlaylist) {
+            const pl = state.library.playlists.find(p => p.id === data.playlist.id);
+            if (pl) {
+              if (!pl.songs) pl.songs = [];
+              pl.songs.push(state.selectedSongForPlaylist);
+              await persistLibrary(state.library);
+            }
+            renderAddToPlaylistItems();
+            showToast(`"${data.playlist.name}" oluşturuldu ve şarkı eklendi! ✨`);
+          } else {
+            showToast(`"${data.playlist.name}" oluşturuldu!`);
+          }
+        }
+      } catch (err) {
+        console.error('Create and add playlist error:', err);
+        showToast('Çalma listesi oluşturulamadı');
+      }
+    });
+  }
+
+  if (elements.inputAddPlNewName) {
+    elements.inputAddPlNewName.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        if (elements.btnAddPlCreateAndAdd) elements.btnAddPlCreateAndAdd.click();
+      }
+    });
+  }
 
   // Keyboard Shortcuts
   window.addEventListener('keydown', (e) => {
