@@ -3129,7 +3129,7 @@ function setupEventListeners() {
                 await fetch('/api/update/restart', { method: 'POST' });
               } catch (e) {}
               setTimeout(() => {
-                window.location.reload(true);
+                window.location.href = window.location.origin + window.location.pathname + '?t=' + Date.now();
               }, 1200);
             }, 1500);
           }
@@ -3312,10 +3312,23 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-const CURRENT_APP_VERSION = '1.3.9';
+let CURRENT_APP_VERSION = '1.4.0';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
+  // Sync current version dynamically with backend if available
+  try {
+    const vRes = await fetch('/api/version');
+    if (vRes.ok) {
+      const vData = await vRes.json();
+      if (vData && vData.version) {
+        CURRENT_APP_VERSION = vData.version;
+        const sidebarVer = document.getElementById('sidebar-app-ver');
+        if (sidebarVer) sidebarVer.textContent = 'v' + CURRENT_APP_VERSION;
+      }
+    }
+  } catch (e) {}
+
   const btnCheckUpdates = document.getElementById('btn-check-updates');
   if (isManual) {
     if (btnCheckUpdates) btnCheckUpdates.classList.add('checking');
@@ -3887,6 +3900,16 @@ function initGoogleAuth() {
 
 // --- BOOTSTRAP APP ---
 window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const vRes = await fetch('/api/version');
+    if (vRes.ok) {
+      const vData = await vRes.json();
+      if (vData && vData.version) {
+        CURRENT_APP_VERSION = vData.version;
+      }
+    }
+  } catch (e) {}
+
   const sidebarVer = document.getElementById('sidebar-app-ver');
   if (sidebarVer) sidebarVer.textContent = 'v' + CURRENT_APP_VERSION;
 
