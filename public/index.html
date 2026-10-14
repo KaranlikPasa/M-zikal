@@ -107,7 +107,7 @@
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
           </svg>
           <span>Güncellemeleri Kontrol Et</span>
-          <span class="badge" id="sidebar-app-ver">v1.3.9</span>
+          <span class="badge" id="sidebar-app-ver">v1.4.0</span>
         </button>
       </nav>
 
@@ -128,6 +128,13 @@
             </button>
           </div>
         </div>
+        <button class="sidebar-btn-create-playlist" id="btn-sidebar-create-playlist" title="Yeni Çalma Listesi Oluştur">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Yeni Çalma Listesi</span>
+        </button>
         <div class="playlists-list" id="sidebar-playlist-items">
           <!-- Dynamic Playlists -->
         </div>
@@ -395,22 +402,73 @@
     <!-- SAĞ YAN PANEL: ÇALMA SIRASI (QUEUE DRAWER) -->
     <aside class="queue-drawer" id="queue-drawer">
       <div class="queue-header">
-        <h3>Çalma Sırası</h3>
-        <button class="btn-icon-subtle" id="btn-close-queue">✕</button>
-      </div>
-      <div class="queue-now-playing" id="queue-np-box">
-        <span class="queue-subhead">ŞU ANDA ÇALINIYOR</span>
-        <div class="queue-np-item" id="queue-np-item">
-          <!-- Populated dynamically -->
+        <div class="queue-header-titles">
+          <h3>Çalma Sırası</h3>
+          <button class="btn-queue-spoiler" id="btn-toggle-queue-spoiler" title="Sıradaki Şarkıları Gizle/Göster">
+            <span id="queue-spoiler-icon">🙈</span>
+            <span id="queue-spoiler-text">Sıradakileri Gizle</span>
+          </button>
         </div>
+        <button class="btn-icon-subtle" id="btn-close-queue" title="Kapat">✕</button>
       </div>
-      <div class="queue-list-section">
-        <div class="queue-subhead-row">
-          <span class="queue-subhead">SIRADAKİLER</span>
-          <button class="btn-text-subtle" id="btn-clear-queue">Temizle</button>
+
+      <!-- HIZLI SIRAYA ŞARKI ARAMA VE EKLEME -->
+      <div class="queue-quick-search-box">
+        <div class="queue-search-input-wrap">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="queue-quick-search-input" placeholder="Sıraya hızlı şarkı ekle..." autocomplete="off">
+          <button class="btn-clear-queue-search" id="btn-clear-queue-search" style="display: none;">✕</button>
         </div>
-        <div class="queue-items" id="queue-items">
-          <!-- Queued songs -->
+        <div class="queue-quick-search-dropdown" id="queue-quick-search-dropdown" style="display: none;"></div>
+      </div>
+
+      <div class="queue-scrollable-content">
+        <div class="queue-now-playing" id="queue-np-box">
+          <span class="queue-subhead">ŞU ANDA ÇALINIYOR</span>
+          <div class="queue-np-item" id="queue-np-item">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- 1. KULLANICI SIRASI (MANUAL QUEUE) -->
+        <div class="queue-list-section" id="queue-manual-section">
+          <div class="queue-subhead-row">
+            <span class="queue-subhead">KULLANICI SIRASI <span class="queue-count-tag" id="queue-manual-count">0</span></span>
+            <button class="btn-text-subtle" id="btn-clear-queue">Temizle</button>
+          </div>
+          <div class="queue-items" id="queue-items">
+            <!-- Queued songs -->
+          </div>
+        </div>
+
+        <!-- 2. SIRADAKİ PARÇALAR (UPCOMING TRACKS / SMART MIX) -->
+        <div class="queue-list-section" id="queue-upcoming-section">
+          <div class="queue-subhead-row">
+            <span class="queue-subhead" id="queue-upcoming-title">SIRADAKİ PARÇALAR</span>
+            <span class="queue-upcoming-source" id="queue-upcoming-source"></span>
+          </div>
+
+          <!-- NORMAL UPCOMING SONGS LIST -->
+          <div class="queue-items" id="queue-upcoming-items">
+            <!-- Upcoming songs -->
+          </div>
+
+          <!-- SÜRPRİZ MODU MASKESİ (SPOILER MASK) -->
+          <div class="queue-spoiler-mask" id="queue-spoiler-mask" style="display: none;">
+            <div class="spoiler-icon">🙈</div>
+            <div class="spoiler-title">Sürpriz Modu Aktif</div>
+            <p class="spoiler-desc">Sıradaki parçalar gizlendi. Müziğin akışı sana sürpriz olsun!</p>
+            <button class="btn-reveal-queue" id="btn-reveal-queue">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <span>Şarkıları Göster</span>
+            </button>
+          </div>
         </div>
       </div>
     </aside>
@@ -437,6 +495,12 @@
       <button class="btn-icon-subtle btn-heart" id="player-fav-btn" title="Favorilere Ekle">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" id="player-fav-icon">
           <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+      </button>
+      <button class="btn-icon-subtle btn-add-pl" id="player-add-pl-btn" title="Çalma Listesine Ekle">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
         </svg>
       </button>
     </div>
@@ -535,6 +599,51 @@
       <div class="modal-actions">
         <button class="btn-secondary" id="btn-cancel-modal">İptal</button>
         <button class="btn-primary" id="btn-save-modal">Oluştur</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ÇALMA LİSTESİNE ŞARKI EKLEME MODAL (ADD SONG TO PLAYLIST) -->
+  <div class="modal-overlay" id="add-to-playlist-modal" style="display: none;">
+    <div class="modal-box modal-box-add-to-pl">
+      <div class="modal-header-row">
+        <div class="modal-icon-badge">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </div>
+        <div style="flex: 1;">
+          <h3>Çalma Listesine Ekle</h3>
+          <p id="add-pl-song-info">Şarkıyı eklemek istediğiniz listeyi seçin</p>
+        </div>
+        <button class="btn-icon-subtle" id="btn-close-add-pl-modal" title="Kapat">✕</button>
+      </div>
+
+      <!-- SEÇİLİ ŞARKI ÖNİZLEMESİ -->
+      <div class="add-pl-target-song" id="add-pl-target-song">
+        <img src="" id="add-pl-song-thumb" class="add-pl-thumb" alt="Kapak">
+        <div class="add-pl-song-meta">
+          <div class="add-pl-song-title" id="add-pl-song-title">Şarkı Adı</div>
+          <div class="add-pl-song-artist" id="add-pl-song-artist">Sanatçı</div>
+        </div>
+      </div>
+
+      <!-- YENİ LİSTE HIZLI OLUŞTURMA SATIRI -->
+      <div class="add-pl-create-row">
+        <input type="text" id="input-add-pl-new-name" placeholder="Yeni liste oluşturup ekle..." maxlength="50">
+        <button class="btn-primary" id="btn-add-pl-create-and-add">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Oluştur</span>
+        </button>
+      </div>
+
+      <div class="add-pl-list-label">MEVCUT ÇALMA LİSTELERİNİZ</div>
+      <div class="add-pl-playlists-container" id="add-pl-playlists-container">
+        <!-- Rendered dynamically -->
       </div>
     </div>
   </div>
