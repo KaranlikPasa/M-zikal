@@ -159,7 +159,8 @@ function isGenuineMusicVideo(title, channel, duration, query = '') {
     'gameplay', 'lets play', "let's play", 'walkthrough', 'oyun', 'oyunlar', 'gamer',
     'pubg', 'valorant', 'fortnite', 'minecraft', 'gta 5', 'gta v', 'roblox', 'brawl stars',
     'twitch', 'canlı yayın', 'tepki', 'reaction', 'vlog', 'bölüm', 'fragman', 'trailer',
-    'dizi', 'film izle', 'özet', 'full izle', 'shorts'
+    'dizi', 'film izle', 'özet', 'full izle', 'shorts', 'takas', 'iphone', 'kutu açılımı',
+    'challenge', 'satın aldım', 'gün 1', 'gün 2', 'röportaj', 'podcast'
   ];
 
   for (const word of blacklist) {
@@ -322,6 +323,153 @@ async function searchYouTubeInnerTube(query) {
     console.error('InnerTube search error:', e);
     return [];
   }
+}
+
+// --- SMART RECOMMENDATIONS & ARTIST DIVERSITY ENGINE ---
+function extractArtistNames(title, channel) {
+  const set = new Set();
+  const cLower = (channel || '').toLowerCase().trim();
+  // Filter out record labels and generic channel markers
+  if (cLower && !/(records|müzik|muzik|music|vevo|entertainment|official|audio|yapım|yapim|netd|video|tv)/i.test(cLower)) {
+    set.add(cLower);
+  }
+  if (title) {
+    // Look for separators like " - " or " : "
+    const parts = title.split(/\s*[-–—:]\s*/);
+    if (parts.length > 1) {
+      const lead = parts[0].replace(/[\(\[].*?[\)\]]/g, '').trim().toLowerCase();
+      // Split collaborations by &, feat, ft, x, virgül
+      const subs = lead.split(/\s*(?:&|feat\.?|ft\.?|\bx\b|,|\/)\s*/i);
+      subs.forEach(s => {
+        const c = s.trim();
+        if (c.length > 1 && !/(official|video|klip|audio|hd|4k)/i.test(c)) set.add(c);
+      });
+    }
+  }
+  return Array.from(set);
+}
+
+function matchesAnyArtist(candidateTitle, candidateChannel, targetArtists) {
+  if (!targetArtists || targetArtists.length === 0) return false;
+  const candArtists = extractArtistNames(candidateTitle, candidateChannel);
+  const candStr = `${candidateTitle || ''} ${candidateChannel || ''}`.toLowerCase();
+  for (const target of targetArtists) {
+    const t = (target || '').toLowerCase().trim();
+    if (!t || t.length < 2) continue;
+    if (candStr.includes(t)) return true;
+    for (const c of candArtists) {
+      if (c === t || c.includes(t) || t.includes(c)) return true;
+    }
+  }
+  return false;
+}
+
+async function getRelatedRecommendations(videoId, currentArtist, currentTitle, excludeArtists = [], excludeIds = []) {
+  const currentArtists = extractArtistNames(currentTitle, currentArtist);
+  const allExcludedArtists = [
+    ...new Set([
+      ...currentArtists,
+      (currentArtist || '').toLowerCase().trim(),
+      ...(excludeArtists || []).map(a => (a || '').toLowerCase().trim()).filter(Boolean)
+    ])
+  ];
+  const seenIds = new Set((excludeIds || []).filter(Boolean));
+  if (videoId) seenIds.add(videoId);
+
+  let candidates = [];
+
+  // 1. YouTube InnerTube Watch-Next / Radio API (YouTube's genre & style algorithm)
+  if (videoId) {
+    try {
+      const res = await fetch('https://www.youtube.com/youtubei/v1/next?prettyPrint=false', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'X-YouTube-Client-Name': '1',
+          'X-YouTube-Client-Version': '2.20240101.00.00',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+        },
+        body: JSON.stringify({
+          context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'tr', gl: 'TR' } },
+          videoId: videoId
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const results = data.contents?.twoColumnWatchNextResults?.secondaryResults?.secondaryResults?.results || [];
+        for (const it of results) {
+          let id = '', title = '', channel = '', duration = '', thumb = '';
+          if (it.lockupViewModel) {
+            const vm = it.lockupViewModel;
+            id = vm.contentId || '';
+            const meta = vm.metadata?.lockupMetadataViewModel;
+            title = meta?.title?.content || '';
+            channel = meta?.metadata?.contentMetadataViewModel?.metadataRows?.[0]?.metadataParts?.[0]?.text?.content || '';
+            const overlays = vm.contentImage?.thumbnailViewModel?.overlays || vm.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel?.overlays || [];
+            for (const ov of overlays) {
+              const badge = ov?.thumbnailBottomOverlayViewModel?.badges?.[0]?.thumbnailBadgeViewModel;
+              if (badge && badge.text) {
+                duration = badge.text;
+                break;
+              }
+            }
+            thumb = vm.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel?.image?.sources?.[0]?.url ||
+                    vm.contentImage?.thumbnailViewModel?.image?.sources?.[0]?.url ||
+                    (id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : '');
+          } else if (it.compactVideoRenderer) {
+            const v = it.compactVideoRenderer;
+            id = v.videoId || '';
+            title = v.title?.simpleText || v.title?.runs?.map(x => x.text).join('') || '';
+            channel = v.shortBylineText?.runs?.map(x => x.text).join('') || '';
+            duration = v.lengthText?.simpleText || '';
+            thumb = v.thumbnail?.thumbnails?.[0]?.url || (id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : '');
+          }
+
+          if (!id || !title || seenIds.has(id)) continue;
+          if (!isGenuineMusicVideo(title, channel, duration, '')) continue;
+          // Filter out the same artist and recently played artists!
+          if (matchesAnyArtist(title, channel, allExcludedArtists)) continue;
+
+          seenIds.add(id);
+          candidates.push({ id, title: title.trim(), channel: channel.trim(), duration, thumbnail: thumb });
+        }
+      }
+    } catch (e) {
+      console.warn('InnerTube next recommendations error:', e.message);
+    }
+  }
+
+  // 2. High-quality genre/vibe fallback search if candidates are insufficient
+  if (candidates.length < 6) {
+    try {
+      const combined = `${currentTitle || ''} ${currentArtist || ''}`.toLowerCase();
+      let genreQuery = 'türkiye top popüler hit müzik şarkılar';
+      if (/rap|trap|hiphop|hip hop|drill|flow|r&b|rb/i.test(combined)) {
+        genreQuery = 'türkçe rap hip hop hit şarkılar official audio';
+      } else if (/rock|metal|anadolu rock/i.test(combined)) {
+        genreQuery = 'türkçe rock hit şarkılar';
+      } else if (/akustik|slow|hüzün|cover|romantik/i.test(combined)) {
+        genreQuery = 'türkçe akustik slow popüler şarkılar';
+      } else if (currentArtists[0]) {
+        genreQuery = `${currentArtists[0]} benzeri şarkılar hit`;
+      }
+
+      const searchHits = await searchYouTube(genreQuery);
+      for (const t of searchHits) {
+        if (!t || !t.id || seenIds.has(t.id)) continue;
+        if (matchesAnyArtist(t.title, t.channel, allExcludedArtists)) continue;
+        seenIds.add(t.id);
+        candidates.push(t);
+        if (candidates.length >= 15) break;
+      }
+    } catch (e) {
+      console.warn('Fallback recommendations error:', e.message);
+    }
+  }
+
+  return candidates;
 }
 
 // Spotify Playlist Scraper
@@ -749,6 +897,33 @@ const server = http.createServer(async (req, res) => {
       const results = await searchYouTube(q);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ query: q, results }));
+      return;
+    }
+
+    // 1.5 Smart Recommendations API (Diverse artists in same genre for Smart Shuffle)
+    if (pathname === '/api/recommendations' && req.method === 'GET') {
+      const videoId = (parsedUrl.searchParams.get('videoId') || '').trim();
+      const artist = (parsedUrl.searchParams.get('artist') || '').trim();
+      const title = (parsedUrl.searchParams.get('title') || '').trim();
+      const rawExcludeArtists = parsedUrl.searchParams.get('excludeArtists') || '';
+      const rawExcludeIds = parsedUrl.searchParams.get('excludeIds') || '';
+
+      let excludeArtists = [];
+      let excludeIds = [];
+      try {
+        excludeArtists = rawExcludeArtists.startsWith('[') ? JSON.parse(rawExcludeArtists) : rawExcludeArtists.split(',').map(s => s.trim()).filter(Boolean);
+      } catch (e) {
+        excludeArtists = rawExcludeArtists.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      try {
+        excludeIds = rawExcludeIds.startsWith('[') ? JSON.parse(rawExcludeIds) : rawExcludeIds.split(',').map(s => s.trim()).filter(Boolean);
+      } catch (e) {
+        excludeIds = rawExcludeIds.split(',').map(s => s.trim()).filter(Boolean);
+      }
+
+      const recommendations = await getRelatedRecommendations(videoId, artist, title, excludeArtists, excludeIds);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, count: recommendations.length, recommendations }));
       return;
     }
 
