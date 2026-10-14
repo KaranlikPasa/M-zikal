@@ -639,7 +639,7 @@ function downloadFileWithProgress(url, destPath, onProgress) {
       const client = parsed.protocol === 'https:' ? https : http;
       const req = client.get(currentUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.7',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.8',
           'Accept': '*/*'
         }
       }, (res) => {
@@ -711,17 +711,57 @@ function copyDirRecursiveSync(srcDir, destDir) {
 async function runInAppUpdate() {
   try {
     inAppUpdateState.status = 'Son sürüm GitHub üzerinden kontrol ediliyor...';
-    inAppUpdateState.percent = 5;
+    inAppUpdateState.percent = 10;
 
     const ghRes = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest', {
-      headers: { 'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/${APP_VERSION}` }
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Muzikal-Updater/1.3.8' }
     });
     if (!ghRes.ok) {
       throw new Error(`GitHub API hatası: HTTP ${ghRes.status}`);
     }
     const release = await ghRes.json();
+
+    // 1. FAST IN-APP UPDATE: Hızlı Doğrudan Dosya Güncellemesi (Boyut: ~250 KB, Süre: ~1 sn)
+    try {
+      inAppUpdateState.status = 'Güncelleme dosyaları indiriliyor (%20)...';
+      inAppUpdateState.percent = 20;
+
+      const rawBase = 'https://raw.githubusercontent.com/KaranlikPasa/M-zikal/main';
+      const updateFiles = [
+        { remote: `${rawBase}/server.js`, local: path.join(__dirname, 'server.js') },
+        { remote: `${rawBase}/Muzikal.bat`, local: path.join(__dirname, 'Muzikal.bat') },
+        { remote: `${rawBase}/README.md`, local: path.join(__dirname, 'README.md') },
+        { remote: `${rawBase}/public/app.js`, local: path.join(PUBLIC_DIR, 'app.js') },
+        { remote: `${rawBase}/public/index.html`, local: path.join(PUBLIC_DIR, 'index.html') },
+        { remote: `${rawBase}/public/style.css`, local: path.join(PUBLIC_DIR, 'style.css') },
+        { remote: `${rawBase}/public/favicon.ico`, local: path.join(PUBLIC_DIR, 'favicon.ico') },
+        { remote: `${rawBase}/public/favicon.png`, local: path.join(PUBLIC_DIR, 'favicon.png') },
+        { remote: `${rawBase}/public/favicon-32.png`, local: path.join(PUBLIC_DIR, 'favicon-32.png') },
+        { remote: `${rawBase}/public/apple-touch-icon.png`, local: path.join(PUBLIC_DIR, 'apple-touch-icon.png') }
+      ];
+
+      for (let i = 0; i < updateFiles.length; i++) {
+        const item = updateFiles[i];
+        const res = await fetch(item.remote, { headers: { 'User-Agent': 'Muzikal-Updater/1.3.8' } });
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          fs.writeFileSync(item.local, buf);
+        }
+        inAppUpdateState.percent = 20 + Math.round(((i + 1) / updateFiles.length) * 75);
+        inAppUpdateState.status = `Dosyalar güncelleniyor: %${inAppUpdateState.percent} (${i + 1}/${updateFiles.length})...`;
+      }
+
+      inAppUpdateState.percent = 100;
+      inAppUpdateState.status = 'Güncelleme başarıyla tamamlandı! Sayfa yenileniyor...';
+      inAppUpdateState.done = true;
+      inAppUpdateState.inProgress = false;
+      return;
+    } catch (fastErr) {
+      console.warn('Hızlı güncelleme başarısız oldu, tam arşiv yöntemine geçiliyor:', fastErr.message);
+    }
+
+    // 2. FALLBACK: Tam Zip Paketi İndirme ve Açma
     const zipAsset = release.assets && (
-      release.assets.find(a => a.name.toLowerCase().includes('light') && a.name.endsWith('.zip')) ||
       release.assets.find(a => a.name.toLowerCase().endsWith('-windows-x64.zip')) ||
       release.assets.find(a => a.name.toLowerCase().endsWith('.zip'))
     );
