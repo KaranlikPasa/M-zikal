@@ -7,13 +7,15 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1ed760?style=for-the-badge&logo=android)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.3.8-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.3.9-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
+- 🔴 **YouTube Music Çalma Listesi Aktarma (v1.3.9):** YouTube Music ve YouTube çalma listesi bağlantılarını doğrudan yapıştırarak saniyeler içinde tüm şarkıları, albüm kapaklarını ve süreleri kayıpsız içe aktarın.
+- ☁️ **Gelişmiş Google Hesap Senkronizasyonu & Çalma Listesi Yedekleme Hub'ı (v1.3.9):** Tüm cihazlarınızdaki çalma listelerini Google hesabınıza tek tıkla yükleyin ("Buluta Aktar"), başka bir bilgisayar veya telefondaki listelerinizi cihazınıza çekin ("Buluttan İndir"), derin şarkı birleştirme koruması sayesinde hiçbir şarkınızı kaybetmeyin ve offline kullanım için `.json` dosyası olarak yedekleyip geri yükleyin.
 - 🚀 **Tek Tıkla Doğrudan Uygulama İçinden Güncelleme (v1.3.7):** Artık hem Windows hem de Android telefonlarda güncelleme yapmak için tarayıcı açıp kurulum dosyası ya da APK indirmekle uğraşmanıza gerek yok! Güncelleme bildirimi geldiğinde "Doğrudan Uygulamada Güncelle"ye tıklayın; uygulama içi canlı ilerleme çubuğu (%0 ➔ %100) ile paket doğrudan indirilir ve otomatik olarak uygulanır (Android'de sistem paket yükleyicisi açılır, Windows'ta sayfa anında yenilenir).
 
 - 🌟 **Yenilenen Spotify Tarzı Ana Sayfa (v1.3.1):** Ana ekrandan karmaşık trend etiketleri kaldırıldı ve menüdeki "Trendler & Keşif" sekmesine taşındı. Ana sayfada artık doğrudan **Son Dinlenenler**, Spotify tarzı dairesel **Önerilen Sanatçılar** (Semicenk, Sezen Aksu, Duman, Lvbel C5, Manga, Mor ve Ötesi, Gülşen, vb. - tek dokunuşla sanatçının şarkılarına ulaşın) ve **Sana Özel Önerilen Parçalar** yer alır.
