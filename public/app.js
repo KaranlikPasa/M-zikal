@@ -28,8 +28,8 @@ const state = {
   isMuted: false,
   volume: 80,
   repeatMode: 'all', // 'off', 'all', 'one'
-  isShuffled: false,
-  shuffleMode: 'off', // 'off', 'standard', 'smart'
+  isShuffled: (function() { try { const m = localStorage.getItem('muzikal_shuffle_mode'); return m === 'standard' || m === 'smart'; } catch(e) { return false; } })(),
+  shuffleMode: (function() { try { return localStorage.getItem('muzikal_shuffle_mode') || 'off'; } catch(e) { return 'off'; } })(),
   smartShuffleCounter: 0,
   shuffledIndices: [],
   playedTrackIds: new Set(),
@@ -769,6 +769,7 @@ async function playSong(song, playlist = null, index = -1) {
     state.currentIndex = index >= 0 ? index : playlist.findIndex(s => s.id === song.id);
     if (isNewPlaylist) {
       initShufflePool(true);
+      state.smartQueue = [];
     }
   }
 
@@ -961,12 +962,49 @@ function updatePlayPauseButton() {
 
 // --- ADVANCED SHUFFLE & SMART RECOMMENDATION ENGINE ---
 
+const SMART_GENRE_AFFINITIES = [
+  {
+    genre: 'rap',
+    keywords: ['rap', 'trap', 'drill', 'hiphop', 'flow', 'diss', 'freestyle', 'lvbel', 'level', 'c5', 'uzi', 'cakal', 'çakal', 'reckol', 'motive', 'batuflex', 'blok3', 'ati242', 'heijan', 'mavi', 'organize', 'şehinşah', 'hidra', 'ceza', 'sagopa', 'ezhel', 'murda', 'sefo', 'era7capone', 'poizi', 'deha', 'defkhan', 'sansar', 'aspova', 'khontkar', 'batu', 'anıl piyancı'],
+    peers: ['Uzi', 'Cakal', 'Blok3', 'Motive', 'Batuflex', 'Reckol', 'Organize', 'Ati242', 'Heijan', 'Mavi', 'Sefo', 'Murda', 'Era7capone', 'Poizi', 'Şehinşah', 'Ezhel'],
+    fallbackQueries: ['türkçe rap hit şarkılar', 'türkçe trap drill popüler']
+  },
+  {
+    genre: 'pop',
+    keywords: ['pop', 'hit', 'semicenk', 'tuğba yurt', 'tugba yurt', 'ikilem', 'reynmen', 'burak bulut', 'kurtuluş kuş', 'doğu swag', 'simge', 'zeynep bastık', 'edis', 'merve özbey', 'irem derici', 'derya uluğ', 'mustafa sandal', 'tarkan', 'hadise', 'gülşen', 'aleyna tilki', 'buray', 'oğuzhan koç', 'yalın', 'kenan doğulu', 'hande yener', 'demet akalın', 'murat boz', 'ziynet sali'],
+    peers: ['Semicenk', 'Tuğba Yurt', 'İkilem', 'Doğu Swag', 'Reynmen', 'Burak Bulut', 'Kurtuluş Kuş', 'Simge', 'Zeynep Bastık', 'Edis', 'Merve Özbey', 'İrem Derici', 'Derya Uluğ', 'Buray'],
+    fallbackQueries: ['türkçe pop hit 2025 2026', 'en çok dinlenen türkçe pop']
+  },
+  {
+    genre: 'rock',
+    keywords: ['rock', 'metal', 'anadolu rock', 'duman', 'mor ve ötesi', 'manga', 'teoman', 'şebnem ferah', 'sebnem ferah', 'dolu kadehi ters tut', 'yüzyüzeyken konuşuruz', 'madrigal', 'adamlar', 'kaan boşnak', 'hayko cepkin', 'gripin', 'yüksek sadakat', 'haluk levent', 'barış manço', 'cem karaca', 'erkin koray'],
+    peers: ['Duman', 'Mor ve Ötesi', 'maNga', 'Teoman', 'Şebnem Ferah', 'Dolu Kadehi Ters Tut', 'Yüzyüzeyken Konuşuruz', 'Madrigal', 'Adamlar', 'Gripin', 'Yüksek Sadakat', 'Haluk Levent'],
+    fallbackQueries: ['türkçe rock hit şarkılar', 'anadolu rock efsaneleri']
+  },
+  {
+    genre: 'slow',
+    keywords: ['akustik', 'slow', 'hüzün', 'sezen aksu', 'nilüfer', 'sertab erener', 'sıla', 'sila', 'yıldız tilbe', 'ebru gündeş', 'funda arar', 'tan taşçı', 'emir can iğrek', 'kalben', 'mabel matiz', 'ahmet kaya', 'müslüm gürses', 'ferdi tayfur', 'cengiz kurtoğlu', 'hakan altun', 'ibrahim tatlıses'],
+    peers: ['Sezen Aksu', 'Sertab Erener', 'Sıla', 'Yıldız Tilbe', 'Tan Taşçı', 'Emir Can İğrek', 'Mabel Matiz', 'Nilüfer', 'Funda Arar', 'Kalben', 'Ahmet Kaya'],
+    fallbackQueries: ['türkçe akustik slow popüler', 'duygusal türkçe şarkılar']
+  }
+];
+
+function normalizeArtistQuery(str) {
+  if (!str) return '';
+  return str.toLowerCase()
+    .replace(/\blevel\b/g, 'lvbel')
+    .replace(/\bçakal\b/g, 'cakal')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function extractClientArtists(song) {
   const artists = new Set();
   if (!song) return [];
   const c = (song.channel || '').toLowerCase().trim();
   if (c && !/(records|müzik|muzik|music|vevo|entertainment|official|audio|yapım|yapim|netd|video|tv)/i.test(c)) {
     artists.add(c);
+    artists.add(normalizeArtistQuery(c));
   }
   if (song.title) {
     const parts = song.title.split(/\s*[-–—:]\s*/);
@@ -975,26 +1013,41 @@ function extractClientArtists(song) {
       const subs = lead.split(/\s*(?:&|feat\.?|ft\.?|\bx\b|,|\/)\s*/i);
       subs.forEach(s => {
         const clean = s.trim();
-        if (clean.length > 1 && !/(official|video|klip|audio|hd|4k)/i.test(clean)) artists.add(clean);
+        if (clean.length > 1 && !/(official|video|klip|audio|hd|4k)/i.test(clean)) {
+          artists.add(clean);
+          artists.add(normalizeArtistQuery(clean));
+        }
       });
     }
   }
-  return Array.from(artists);
+  return Array.from(artists).filter(Boolean);
+}
+
+function matchesAnyArtist(candidateTitle, candidateChannel, targetArtists) {
+  if (!targetArtists || targetArtists.length === 0) return false;
+  const candStr = normalizeArtistQuery(`${candidateTitle || ''} ${candidateChannel || ''}`);
+  for (const target of targetArtists) {
+    const t = normalizeArtistQuery(target);
+    if (!t || t.length < 2) continue;
+    if (candStr.includes(t)) return true;
+  }
+  return false;
 }
 
 function isSameArtistAsRecent(song) {
   if (!song) return false;
   const songArtists = extractClientArtists(song);
-  const songStr = `${song.title || ''} ${song.channel || ''}`.toLowerCase();
+  const songStr = normalizeArtistQuery(`${song.title || ''} ${song.channel || ''}`);
   
-  // Check against last 5 played artists
-  const recent = (state.playedArtists || []).slice(-5);
+  // Check against last 8 played artists
+  const recent = (state.playedArtists || []).slice(-8);
   for (const prev of recent) {
-    const p = (prev || '').toLowerCase().trim();
+    const p = normalizeArtistQuery(prev);
     if (!p || p.length < 2) continue;
     if (songStr.includes(p)) return true;
     for (const a of songArtists) {
-      if (a === p || a.includes(p) || p.includes(a)) return true;
+      const normA = normalizeArtistQuery(a);
+      if (normA === p || normA.includes(p) || p.includes(normA)) return true;
     }
   }
   return false;
@@ -1019,29 +1072,126 @@ function initShufflePool(forceReset = false) {
   }
 }
 
+async function fetchMobileNativeSmartMix(currentSong, excludeArtists = [], excludeIds = []) {
+  if (!currentSong) return [];
+
+  const rawArtists = extractClientArtists(currentSong);
+  const normArtists = rawArtists.map(a => normalizeArtistQuery(a)).filter(Boolean);
+  
+  // Expand alias exclusions (e.g. Lvbel C5 <-> Level C5)
+  const allExcluded = new Set([...excludeArtists.map(a => normalizeArtistQuery(a)).filter(Boolean), ...normArtists]);
+  for (const a of normArtists) {
+    if (a.includes('lvbel') || a.includes('c5')) {
+      allExcluded.add('lvbel c5');
+      allExcluded.add('level c5');
+      allExcluded.add('lvbel');
+      allExcluded.add('level');
+      allExcluded.add('c5');
+    }
+    if (a.includes('cakal') || a.includes('çakal')) {
+      allExcluded.add('cakal');
+      allExcluded.add('çakal');
+    }
+  }
+  const excludeList = Array.from(allExcluded);
+  const seenIds = new Set([...(excludeIds || []), currentSong.id]);
+
+  // Detect Genre/Vibe
+  const combined = normalizeArtistQuery(`${currentSong.title || ''} ${currentSong.channel || ''}`);
+  let matchedGroup = SMART_GENRE_AFFINITIES.find(g => g.keywords.some(k => combined.includes(k)));
+  if (!matchedGroup) {
+    matchedGroup = SMART_GENRE_AFFINITIES[0]; // Default to top rap/pop
+  }
+
+  // Pick 2-3 distinct peer artists that are NOT excluded
+  const candidatePeers = matchedGroup.peers.filter(p => !matchesAnyArtist(p, p, excludeList));
+  for (let i = candidatePeers.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidatePeers[i], candidatePeers[j]] = [candidatePeers[j], candidatePeers[i]];
+  }
+
+  const selectedPeers = candidatePeers.slice(0, 3);
+  const searchQueries = [];
+  selectedPeers.forEach(peer => {
+    searchQueries.push(`${peer} en çok dinlenen hit şarkılar official audio`);
+  });
+  if (searchQueries.length < 2) {
+    searchQueries.push(matchedGroup.fallbackQueries[0]);
+  }
+
+  const collectedTracks = [];
+
+  for (const q of searchQueries) {
+    try {
+      const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const results = (data && data.results) ? data.results : (Array.isArray(data) ? data : []);
+      for (const t of results) {
+        if (!t || !t.id || seenIds.has(t.id)) continue;
+        // Strictly filter out the current artist and all excluded artists
+        if (matchesAnyArtist(t.title, t.channel, excludeList)) continue;
+        if (state.playedTrackIds && state.playedTrackIds.has(t.id)) continue;
+        seenIds.add(t.id);
+        collectedTracks.push({
+          id: t.id,
+          title: t.title || '',
+          channel: t.channel || '',
+          duration: t.duration || '3:30',
+          thumbnail: t.thumbnail || `https://i.ytimg.com/vi/${t.id}/mqdefault.jpg`,
+          isSmartRecommendation: true
+        });
+        if (collectedTracks.length >= 8) break;
+      }
+    } catch (e) {
+      console.warn('Native smart mix search error:', e);
+    }
+    if (collectedTracks.length >= 6) break;
+  }
+
+  return collectedTracks;
+}
+
+async function fetchSmartDiverseRecommendations(currentSong) {
+  if (!currentSong) return [];
+
+  const excludeIds = Array.from(new Set([
+    ...(state.currentPlaylist ? state.currentPlaylist.map(s => s.id) : []),
+    ...Array.from(state.playedTrackIds || []),
+    ...(state.smartQueue ? state.smartQueue.map(s => s.id) : [])
+  ])).filter(Boolean).slice(-40);
+
+  const excludeArtists = Array.from(new Set([
+    ...(state.playedArtists || []).slice(-8),
+    ...extractClientArtists(currentSong)
+  ])).filter(Boolean);
+
+  // 1. Try server endpoint first (works on desktop / node server)
+  try {
+    const url = `/api/recommendations?videoId=${encodeURIComponent(currentSong.id || '')}&artist=${encodeURIComponent(currentSong.channel || '')}&title=${encodeURIComponent(currentSong.title || '')}&excludeArtists=${encodeURIComponent(JSON.stringify(excludeArtists))}&excludeIds=${encodeURIComponent(JSON.stringify(excludeIds))}`;
+    const res = await apiFetch(url);
+    if (res && res.recommendations && res.recommendations.length > 0) {
+      const valid = res.recommendations.filter(r => !state.playedTrackIds.has(r.id));
+      if (valid.length > 0) {
+        return valid.map(r => ({ ...r, isSmartRecommendation: true }));
+      }
+    }
+  } catch (e) {
+    console.warn('Server recommendations unavailable, falling back to mobile smart mix:', e);
+  }
+
+  // 2. Mobile Native & Client-Side Smart Mix Engine (works 100% on Android APK!)
+  return await fetchMobileNativeSmartMix(currentSong, excludeArtists, excludeIds);
+}
+
 async function prefetchSmartRecommendations() {
   if (!state.currentSong || state.isOfflinePlaying || state.isFetchingSmartQueue) return;
   if (state.smartQueue && state.smartQueue.length >= 3) return;
 
   state.isFetchingSmartQueue = true;
   try {
-    const excludeIds = Array.from(new Set([
-      ...(state.currentPlaylist ? state.currentPlaylist.map(s => s.id) : []),
-      ...Array.from(state.playedTrackIds || []),
-      ...(state.smartQueue ? state.smartQueue.map(s => s.id) : [])
-    ])).filter(Boolean).slice(-40);
-
-    const excludeArtists = Array.from(new Set([
-      ...(state.playedArtists || []).slice(-8),
-      ...extractClientArtists(state.currentSong)
-    ])).filter(Boolean);
-
-    const url = `/api/recommendations?videoId=${encodeURIComponent(state.currentSong.id || '')}&artist=${encodeURIComponent(state.currentSong.channel || '')}&title=${encodeURIComponent(state.currentSong.title || '')}&excludeArtists=${encodeURIComponent(JSON.stringify(excludeArtists))}&excludeIds=${encodeURIComponent(JSON.stringify(excludeIds))}`;
-
-    const res = await apiFetch(url);
-    if (res && res.recommendations && res.recommendations.length > 0) {
+    const recs = await fetchSmartDiverseRecommendations(state.currentSong);
+    if (recs && recs.length > 0) {
       const existingQueueIds = new Set((state.smartQueue || []).map(s => s.id));
-      for (const rec of res.recommendations) {
+      for (const rec of recs) {
         if (!existingQueueIds.has(rec.id) && !state.playedTrackIds.has(rec.id)) {
           state.smartQueue.push({ ...rec, isSmartRecommendation: true });
           existingQueueIds.add(rec.id);
@@ -1074,24 +1224,10 @@ async function playNext() {
     } else if (state.currentSong && !state.isOfflinePlaying) {
       // B. Fetch on the fly if queue was empty
       try {
-        const excludeIds = Array.from(new Set([
-          ...(state.currentPlaylist ? state.currentPlaylist.map(s => s.id) : []),
-          ...Array.from(state.playedTrackIds || [])
-        ])).filter(Boolean).slice(-40);
-
-        const excludeArtists = Array.from(new Set([
-          ...(state.playedArtists || []).slice(-8),
-          ...extractClientArtists(state.currentSong)
-        ])).filter(Boolean);
-
-        const url = `/api/recommendations?videoId=${encodeURIComponent(state.currentSong.id || '')}&artist=${encodeURIComponent(state.currentSong.channel || '')}&title=${encodeURIComponent(state.currentSong.title || '')}&excludeArtists=${encodeURIComponent(JSON.stringify(excludeArtists))}&excludeIds=${encodeURIComponent(JSON.stringify(excludeIds))}`;
-        const res = await apiFetch(url);
-        if (res && res.recommendations && res.recommendations.length > 0) {
-          const valid = res.recommendations.filter(r => !state.playedTrackIds.has(r.id));
-          if (valid.length > 0) {
-            smartCandidate = { ...valid[0], isSmartRecommendation: true };
-            state.smartQueue = valid.slice(1).map(r => ({ ...r, isSmartRecommendation: true }));
-          }
+        const recs = await fetchSmartDiverseRecommendations(state.currentSong);
+        if (recs && recs.length > 0) {
+          smartCandidate = recs[0];
+          state.smartQueue = recs.slice(1);
         }
       } catch (e) {
         console.warn('Smart shuffle on-demand fetch fallback:', e);
@@ -1116,6 +1252,19 @@ async function playNext() {
           pickedIdx = state.unplayedShuffleIndices.splice(i, 1)[0];
           break;
         }
+      }
+      // If all songs in playlist are the same artist (e.g. searched Level C5), fetch diverse tracks rather than repeating!
+      if (pickedIdx === -1 && state.currentSong && !state.isOfflinePlaying) {
+        try {
+          const diverse = await fetchSmartDiverseRecommendations(state.currentSong);
+          if (diverse && diverse.length > 0) {
+            const nextSong = diverse[0];
+            state.smartQueue = diverse.slice(1);
+            showToast(`✨ Akıllı Mix: ${nextSong.title}`);
+            playSong(nextSong, state.currentPlaylist, state.currentIndex);
+            return;
+          }
+        } catch (e) {}
       }
       if (pickedIdx === -1 && state.unplayedShuffleIndices.length > 0) {
         pickedIdx = state.unplayedShuffleIndices.shift();
@@ -1225,14 +1374,19 @@ function updateShuffleUI() {
 function cycleShuffleMode() {
   if (state.shuffleMode === 'off' || !state.shuffleMode) {
     state.shuffleMode = 'standard';
+    try { localStorage.setItem('muzikal_shuffle_mode', 'standard'); } catch(e) {}
     updateShuffleUI();
     showToast('🔀 Karışık Çalma Açık');
   } else if (state.shuffleMode === 'standard') {
     state.shuffleMode = 'smart';
+    try { localStorage.setItem('muzikal_shuffle_mode', 'smart'); } catch(e) {}
     updateShuffleUI();
-    showToast('✨ Akıllı Karışık Çalma Açık (Öneriler Dahil)');
+    showToast('✨ Akıllı Mix Açık (Benzer Sanatçılar & Hit Şarkılar)');
+    if (state.currentSong) prefetchSmartRecommendations();
   } else {
     state.shuffleMode = 'off';
+    try { localStorage.setItem('muzikal_shuffle_mode', 'off'); } catch(e) {}
+    state.smartQueue = [];
     updateShuffleUI();
     showToast('Karışık Çalma Kapalı');
   }
