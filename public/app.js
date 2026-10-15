@@ -2533,7 +2533,8 @@ function setupEventListeners() {
 
   // Mobile Full-Screen Player Open / Close
   if (elements.playerTrackInfo) {
-    elements.playerTrackInfo.addEventListener('click', () => {
+    elements.playerTrackInfo.addEventListener('click', (e) => {
+      if (e.target.closest('#player-fav-btn') || e.target.closest('#player-add-pl-btn')) return;
       if (window.innerWidth <= 768 && state.currentSong) {
         elements.mobileFullPlayer.classList.add('open');
       }
@@ -3321,11 +3322,11 @@ async function checkForAppUpdates(isManual = false) {
     const vRes = await fetch('/api/version');
     if (vRes.ok) {
       const vData = await vRes.json();
-      if (vData && vData.version) {
+      if (vData && vData.version && compareSemver(vData.version, CURRENT_APP_VERSION) >= 0) {
         CURRENT_APP_VERSION = vData.version;
-        const sidebarVer = document.getElementById('sidebar-app-ver');
-        if (sidebarVer) sidebarVer.textContent = 'v' + CURRENT_APP_VERSION;
       }
+      const sidebarVer = document.getElementById('sidebar-app-ver');
+      if (sidebarVer) sidebarVer.textContent = 'v' + CURRENT_APP_VERSION;
     }
   } catch (e) {}
 
@@ -3904,7 +3905,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const vRes = await fetch('/api/version');
     if (vRes.ok) {
       const vData = await vRes.json();
-      if (vData && vData.version) {
+      if (vData && vData.version && compareSemver(vData.version, CURRENT_APP_VERSION) >= 0) {
         CURRENT_APP_VERSION = vData.version;
       }
     }
