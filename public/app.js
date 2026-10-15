@@ -856,35 +856,55 @@ async function playSong(song, playlist = null, index = -1) {
     playOnlineYouTubeTrack(song);
   }
 
-  // Highlight active song in grid
-  document.querySelectorAll('.song-card').forEach(card => {
-    if (card.dataset.id === song.id) {
-      card.classList.add('playing');
-    } else {
-      card.classList.remove('playing');
-    }
-  });
+  // Fast highlight active song in grid without full DOM scan (O(1))
+  const prevPlaying = document.querySelector('.song-card.playing');
+  if (prevPlaying && prevPlaying.dataset.id !== song.id) {
+    prevPlaying.classList.remove('playing');
+  }
+  const currPlaying = document.querySelector(`.song-card[data-id="${song.id}"]`);
+  if (currPlaying) {
+    currPlaying.classList.add('playing');
+  }
 
-  // Record history locally and persist to storage
+  // Record history locally
   if (!state.library.history) state.library.history = [];
   state.library.history = state.library.history.filter(s => s.id !== song.id);
   state.library.history.unshift(song);
   if (state.library.history.length > 50) state.library.history = state.library.history.slice(0, 50);
-  persistLibrary(state.library);
-  if (state.currentView === 'home' && typeof renderHomeSections === 'function') {
-    renderHomeSections();
-  }
-
-  // Record history to backend
-  fetch('/api/library/history', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ song })
-  }).catch(() => {});
 
   updateNativePlaybackState(song, true);
-  updateQueueDrawer();
-  fetchLyricsForSong(song);
+
+  // Defer non-critical tasks so audio playback and player UI transition with zero frame drop
+  setTimeout(() => {
+    persistLibrary(state.library);
+    if (state.currentView === 'home' && elements.homeRecentGrid && elements.homeRecentSection) {
+      elements.homeRecentSection.style.display = 'flex';
+      const recents = state.library.history.slice(0, 6);
+      elements.homeRecentGrid.innerHTML = recents.map((s, idx) => `
+        <div class="recent-track-card" data-idx="${idx}">
+          <img src="${s.thumbnail || 'https://via.placeholder.com/60'}" class="recent-track-thumb" alt="${escapeHtml(s.title)}" loading="lazy" decoding="async">
+          <div class="recent-track-info">
+            <div class="recent-track-title">${escapeHtml(s.title)}</div>
+            <div class="recent-track-artist">${escapeHtml(s.channel)}</div>
+          </div>
+          <div class="recent-track-play">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    fetch('/api/library/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ song })
+    }).catch(() => {});
+
+    updateQueueDrawer();
+    fetchLyricsForSong(song);
+  }, 60);
 }
 
 function togglePlayPause() {
@@ -1839,7 +1859,7 @@ function renderSongs(songs, isSearching = false) {
     return `
       <div class="song-card ${isPlaying ? 'playing' : ''}" data-id="${song.id}" data-index="${idx}">
         <div class="song-card-thumb-wrap">
-          <img src="${song.thumbnail || 'https://via.placeholder.com/240x135'}" class="song-card-thumb" loading="lazy">
+          <img src="${song.thumbnail || 'https://via.placeholder.com/240x135'}" class="song-card-thumb" loading="lazy" decoding="async">
           ${song.duration ? `<span class="song-card-duration">${song.duration}</span>` : ''}
           <div class="song-card-hover-play" title="Çal">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -1856,8 +1876,10 @@ function renderSongs(songs, isSearching = false) {
           <div class="song-card-actions">
           <button class="btn-icon-subtle btn-add-q" title="Sıraya Ekle">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <line x1="4" y1="6" x2="14" y2="6"></line>
+              <line x1="4" y1="12" x2="14" y2="12"></line>
+              <line x1="4" y1="18" x2="11" y2="18"></line>
+              <polyline points="15 15 18 18 22 14"></polyline>
             </svg>
           </button>
           <button class="btn-icon-subtle btn-card-add-pl" title="Çalma Listesine Ekle">
