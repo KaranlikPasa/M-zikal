@@ -69,16 +69,20 @@ body {
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  padding: 24px 16px 16px 16px;
+  padding: 18px 14px 14px 14px;
   flex-shrink: 0;
   z-index: 10;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 8px 24px 8px;
+  padding: 0 8px 14px 8px;
+  flex-shrink: 0;
 }
 
 .brand-logo {
@@ -120,30 +124,31 @@ body {
 }
 
 .nav-section-label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--text-subtle);
   letter-spacing: 1px;
-  padding: 16px 12px 8px 12px;
+  padding: 10px 10px 4px 10px;
 }
 
 .nav-menu {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
+  gap: 10px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -180,7 +185,7 @@ body {
 }
 
 .nav-update-btn {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .nav-update-btn:hover {
@@ -206,30 +211,31 @@ body {
 }
 
 .sidebar-playlists {
-  flex: 1;
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
-  margin-top: 12px;
-  overflow: hidden;
+  margin-top: 8px;
+  min-height: 170px;
 }
 
 .playlists-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px;
+  padding: 8px 10px;
   font-size: 11px;
   font-weight: 700;
   color: var(--text-subtle);
   letter-spacing: 1px;
+  flex-shrink: 0;
 }
 
 .playlists-list {
-  flex: 1;
-  overflow-y: auto;
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding-bottom: 8px;
 }
 
 .playlist-item {
@@ -4135,20 +4141,39 @@ html, body {
   transform: scale(1.08);
 }
 
-/* MEDIUM SCREEN TOPBAR RESPONSIVENESS (Prevent button wrapping and crowding) */
-@media (max-width: 1250px) {
+/* MEDIUM SCREEN TOPBAR RESPONSIVENESS (Prevent button clipping at 100% zoom) */
+@media (max-width: 1450px) {
   .topbar {
     padding: 12px 18px;
     gap: 10px;
   }
   .search-box {
-    max-width: 300px;
-    height: 42px;
+    max-width: 340px;
+    min-width: 150px;
+    height: 44px;
   }
-  .btn-pill {
+  .topbar-actions {
+    gap: 6px;
+  }
+  .btn-pill,
+  .topbar-user-btn {
     padding: 7px 11px;
     font-size: 12px;
     gap: 5px;
+  }
+}
+
+@media (max-width: 1180px) and (min-width: 769px) {
+  .search-box {
+    max-width: 260px;
+  }
+  .btn-spotify-action span,
+  .btn-ytm-action span {
+    display: none;
+  }
+  .btn-spotify-action,
+  .btn-ytm-action {
+    padding: 8px 10px;
   }
 }
 
