@@ -203,6 +203,17 @@ const elements = {
   spBtnText: document.getElementById('sp-btn-text'),
   spSpinner: document.getElementById('sp-spinner'),
 
+  // Discord Rich Presence Elements
+  btnOpenDiscordModal: document.getElementById('btn-open-discord-modal'),
+  discordModal: document.getElementById('discord-modal'),
+  btnCloseDiscordModal: document.getElementById('btn-close-discord-modal'),
+  btnCancelDiscordModal: document.getElementById('btn-cancel-discord-modal'),
+  btnSaveDiscordConfig: document.getElementById('btn-save-discord-config'),
+  discordClientIdInput: document.getElementById('discord-client-id-input'),
+  discordEnableToggle: document.getElementById('discord-enable-toggle'),
+  sidebarDiscordStatus: document.getElementById('sidebar-discord-status'),
+  discordModalStatusPill: document.getElementById('discord-modal-status-pill'),
+
   toast: document.getElementById('toast-notification'),
 
   // Mobile References
@@ -888,6 +899,7 @@ async function playSong(song, playlist = null, index = -1) {
   if (state.library.history.length > 50) state.library.history = state.library.history.slice(0, 50);
 
   updateNativePlaybackState(song, true);
+  syncDiscordPresence();
 
   // Defer non-critical tasks so audio playback and player UI transition with zero frame drop
   setTimeout(() => {
@@ -972,6 +984,7 @@ function updatePlayPauseButton() {
       `;
     }
   }
+  syncDiscordPresence();
 }
 
 // --- ADVANCED SHUFFLE & SMART RECOMMENDATION ENGINE ---
@@ -2409,6 +2422,101 @@ async function loadLibrary() {
   renderSidebarPlaylists();
 }
 
+// --- DISCORD RICH PRESENCE CLIENT ---
+let discordState = {
+  enabled: true,
+  clientId: '',
+  connected: false
+};
+
+async function loadDiscordConfig() {
+  try {
+    const data = await apiFetch('/api/discord/config');
+    if (data) {
+      discordState.enabled = data.enabled !== undefined ? data.enabled : true;
+      discordState.clientId = data.clientId || '';
+      discordState.connected = !!data.connected;
+      updateDiscordUI();
+    }
+  } catch (e) {}
+}
+
+function updateDiscordUI() {
+  if (elements.discordClientIdInput && !elements.discordClientIdInput.value) {
+    elements.discordClientIdInput.value = discordState.clientId;
+  }
+  if (elements.discordEnableToggle) {
+    elements.discordEnableToggle.checked = discordState.enabled;
+  }
+
+  if (elements.sidebarDiscordStatus) {
+    if (discordState.connected) {
+      elements.sidebarDiscordStatus.textContent = '🟢 Aktif';
+      elements.sidebarDiscordStatus.classList.add('active');
+    } else if (discordState.clientId && discordState.enabled) {
+      elements.sidebarDiscordStatus.textContent = '🟡 Bağlanıyor';
+      elements.sidebarDiscordStatus.classList.remove('active');
+    } else {
+      elements.sidebarDiscordStatus.textContent = 'Ayarla';
+      elements.sidebarDiscordStatus.classList.remove('active');
+    }
+  }
+
+  if (elements.discordModalStatusPill) {
+    if (discordState.connected) {
+      elements.discordModalStatusPill.textContent = "🟢 Discord'a Bağlandı";
+      elements.discordModalStatusPill.classList.add('connected');
+    } else if (discordState.clientId && discordState.enabled) {
+      elements.discordModalStatusPill.textContent = '🟡 Bağlantı Bekleniyor...';
+      elements.discordModalStatusPill.classList.remove('connected');
+    } else {
+      elements.discordModalStatusPill.textContent = '⚪ Bağlantı Bekleniyor';
+      elements.discordModalStatusPill.classList.remove('connected');
+    }
+  }
+}
+
+let discordUpdateDebounce = null;
+function syncDiscordPresence() {
+  clearTimeout(discordUpdateDebounce);
+  discordUpdateDebounce = setTimeout(async () => {
+    if (!state.currentSong) {
+      try {
+        await apiFetch('/api/discord/activity', {
+          method: 'POST',
+          body: JSON.stringify({ isPlaying: false })
+        });
+      } catch (e) {}
+      return;
+    }
+
+    let currentTime = 0;
+    let duration = state.currentSong.durationSec || 0;
+
+    if (state.isOfflinePlaying && localAudio) {
+      currentTime = localAudio.currentTime || 0;
+      if (!duration) duration = localAudio.duration || 0;
+    } else if (ytReady && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+      try {
+        currentTime = ytPlayer.getCurrentTime() || 0;
+        if (!duration) duration = ytPlayer.getDuration() || 0;
+      } catch (e) {}
+    }
+
+    try {
+      await apiFetch('/api/discord/activity', {
+        method: 'POST',
+        body: JSON.stringify({
+          song: state.currentSong,
+          isPlaying: state.isPlaying,
+          currentTime,
+          duration
+        })
+      });
+    } catch (e) {}
+  }, 250);
+}
+
 async function toggleFavorite(song) {
   try {
     const res = await fetch('/api/library/toggle-favorite', {
@@ -2912,6 +3020,75 @@ function setupEventListeners() {
   if (elements.btnOpenYtmModal) elements.btnOpenYtmModal.addEventListener('click', openYtmModal);
   if (elements.btnSidebarYtm) elements.btnSidebarYtm.addEventListener('click', openYtmModal);
   if (elements.btnHeroYtm) elements.btnHeroYtm.addEventListener('click', openYtmModal);
+
+  // Discord Rich Presence Modal triggers
+  const openDiscordModal = () => {
+    loadDiscordConfig();
+    if (elements.discordModal) elements.discordModal.style.display = 'flex';
+    if (elements.discordClientIdInput) {
+      elements.discordClientIdInput.value = discordState.clientId;
+      elements.discordClientIdInput.focus();
+    }
+    if (elements.discordEnableToggle) {
+      elements.discordEnableToggle.checked = discordState.enabled;
+    }
+    if (elements.sidebar) elements.sidebar.classList.remove('mobile-open');
+    if (elements.sidebarBackdrop) elements.sidebarBackdrop.classList.remove('active');
+  };
+
+  if (elements.btnOpenDiscordModal) {
+    elements.btnOpenDiscordModal.addEventListener('click', openDiscordModal);
+  }
+
+  if (elements.btnCloseDiscordModal) {
+    elements.btnCloseDiscordModal.addEventListener('click', () => {
+      if (elements.discordModal) elements.discordModal.style.display = 'none';
+    });
+  }
+
+  if (elements.btnCancelDiscordModal) {
+    elements.btnCancelDiscordModal.addEventListener('click', () => {
+      if (elements.discordModal) elements.discordModal.style.display = 'none';
+    });
+  }
+
+  if (elements.discordModal) {
+    elements.discordModal.addEventListener('click', (e) => {
+      if (e.target === elements.discordModal) {
+        elements.discordModal.style.display = 'none';
+      }
+    });
+  }
+
+  if (elements.btnSaveDiscordConfig) {
+    elements.btnSaveDiscordConfig.addEventListener('click', async () => {
+      const clientId = elements.discordClientIdInput ? elements.discordClientIdInput.value.trim() : '';
+      const enabled = elements.discordEnableToggle ? elements.discordEnableToggle.checked : true;
+
+      if (enabled && !clientId) {
+        showToast('Lütfen Discord Application ID girin.');
+        return;
+      }
+
+      try {
+        const res = await apiFetch('/api/discord/config', {
+          method: 'POST',
+          body: JSON.stringify({ clientId, enabled })
+        });
+        if (res) {
+          discordState.clientId = res.clientId || clientId;
+          discordState.enabled = res.enabled !== undefined ? res.enabled : enabled;
+          discordState.connected = !!res.connected;
+          updateDiscordUI();
+          showToast('✅ Discord Rich Presence ayarları kaydedildi!');
+          syncDiscordPresence();
+          setTimeout(loadDiscordConfig, 1200);
+        }
+      } catch (err) {
+        showToast('Ayarlar kaydedilirken hata oluştu.');
+      }
+    });
+  }
 
   // Mobile Full-Screen Player Open / Close
   if (elements.playerTrackInfo) {
@@ -4352,5 +4529,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   await loadDownloads();
   await loadLibrary();
   await fetchExploreGenre('trendler');
+  await loadDiscordConfig();
+  setInterval(() => {
+    if (discordState.enabled && discordState.clientId) {
+      loadDiscordConfig();
+    }
+  }, 15000);
   setTimeout(() => checkForAppUpdates(false), 1500); // Check updates automatically on startup
 });
