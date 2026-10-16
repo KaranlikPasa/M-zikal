@@ -4304,7 +4304,65 @@ html, body {
   transform: translateY(-1px);
 }
 
+/* --- DOWNLOAD ALL SONGS IN LIST BUTTON (PC & MOBILE) --- */
+.btn-download-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 15px;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  border-radius: var(--radius-full);
+  color: #10b981;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.12);
+}
 
+.btn-download-all:hover {
+  background: #10b981;
+  color: #000;
+  border-color: #10b981;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
 
+.btn-download-all.downloading {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+  cursor: wait;
+  animation: pulseDownloadAll 1.4s infinite ease-in-out;
+}
 
+.btn-download-all.completed {
+  background: rgba(30, 215, 96, 0.2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
+@keyframes pulseDownloadAll {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+@media (max-width: 768px) {
+  .section-actions {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 4px;
+  }
+
+  .btn-playlist-action,
+  .btn-download-all {
+    padding: 8px 12px;
+    font-size: 12px;
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
