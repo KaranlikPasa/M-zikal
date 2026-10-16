@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const dns = require('dns');
 const { spawn } = require('child_process');
+const discordRpc = require('./discord-rpc');
 
 // Force IPv4 first to avoid connection timeouts on Windows
 dns.setDefaultResultOrder('ipv4first');
@@ -1405,6 +1406,40 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 3.2 Discord Rich Presence (RPC) Endpoints
+    if (pathname === '/api/discord/config' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(discordRpc.getStatus()));
+      return;
+    }
+
+    if (pathname === '/api/discord/config' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const updated = discordRpc.updateConfig(body || {});
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, ...updated }));
+      return;
+    }
+
+    if (pathname === '/api/discord/activity' && req.method === 'POST') {
+      const body = await parseBody(req);
+      if (body && body.song) {
+        discordRpc.setActivity({
+          title: body.song.title,
+          artist: body.song.artist || body.song.channel || 'Müzikal',
+          thumbnail: body.song.thumbnail,
+          duration: body.duration || body.song.durationSec || 0,
+          currentTime: body.currentTime || 0,
+          isPlaying: !!body.isPlaying
+        });
+      } else {
+        discordRpc.clearActivity();
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+
     // 4. Toggle Favorite
     if (pathname === '/api/library/toggle-favorite' && req.method === 'POST') {
       const { song } = await parseBody(req);
@@ -1899,4 +1934,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`   - Bu Bilgisayar: http://localhost:${PORT}`);
   console.log(`   - Ağdaki Diğer PC ve Telefonlar: http://${ip}:${PORT}`);
   console.log(`   - Mobil APK İndirme: http://${ip}:${PORT}/Muzikal.apk`);
+  if (discordRpc.enabled && discordRpc.clientId) {
+    discordRpc.connect();
+  }
 });
