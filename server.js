@@ -1065,20 +1065,25 @@ const server = http.createServer(async (req, res) => {
 
       // 1. Clean up title
       let cleanTitle = rawTitle
-        .replace(/\s*[\[\(](official|video|klip|audio|lyric|remix|feat|ft\.|prod|hd|4k|hq|remastered|video klip|canlı|live|akustik)[^\)\]]*[\)\]]/gi, '')
-        .replace(/[-–—]\s*(official|video|klip|audio|lyric|canlı|live).*/gi, '')
+        .replace(/\s*[\[\(](official|resmi|video|klip|audio|lyric|lyrics|sözleri|şarkı sözleri|remix|feat|ft\.|prod|hd|4k|hq|remastered|video klip|canlı|live|akustik|visualizer|performance)[^\)\]]*[\)\]]/gi, '')
+        .replace(/[-–—|]\s*(official|resmi|video|klip|audio|lyric|lyrics|sözleri|canlı|live|visualizer).*/gi, '')
+        .replace(/\b(official\s+music\s+video|official\s+video|official\s+audio|video\s+klip|resmi\s+video|lyric\s+video)\b/gi, '')
         .trim();
 
       // Extract primary artist and title if title contains separator
-      let primaryArtist = rawArtist;
+      let primaryArtist = rawArtist.replace(/\s*-\s*topic$/i, '').replace(/vevo$/i, '').trim();
       let trackName = cleanTitle;
+      let reversedArtist = '';
+      let reversedTrack = '';
 
       if (cleanTitle.includes(' - ')) {
-        const parts = cleanTitle.split(' - ');
-        if (!primaryArtist || primaryArtist === 'Bilinmeyen Sanatçı' || primaryArtist.toLowerCase().includes('topic')) {
-          primaryArtist = parts[0].trim();
+        const parts = cleanTitle.split(' - ').map(p => p.trim()).filter(Boolean);
+        if (parts.length >= 2) {
+          primaryArtist = parts[0];
+          trackName = parts.slice(1).join(' - ');
+          reversedArtist = parts[parts.length - 1];
+          reversedTrack = parts.slice(0, -1).join(' - ');
         }
-        trackName = parts.slice(1).join(' - ').trim();
       }
 
       // Clean artist: remove collaboration suffixes like 'x poizi', 'ft. ...', '& ...'
@@ -1090,6 +1095,7 @@ const server = http.createServer(async (req, res) => {
       // Clean trackName further
       const finalTrackName = trackName
         .replace(/\s*[\[\(][^\)\]]*[\)\]]/g, '')
+        .replace(/\s*(?:feat\.?|ft\.?|prod\.?\s*by)\s+.*$/i, '')
         .replace(/["'"]/g, '')
         .trim();
 
@@ -1100,6 +1106,9 @@ const server = http.createServer(async (req, res) => {
       }
       if (primaryArtist && trackName && primaryArtist !== cleanArtist) {
         queriesToTry.push(`${primaryArtist} ${trackName}`);
+      }
+      if (reversedArtist && reversedTrack) {
+        queriesToTry.push(`${reversedArtist} ${reversedTrack}`);
       }
       if (finalTrackName) {
         queriesToTry.push(finalTrackName);
@@ -1376,6 +1385,23 @@ const server = http.createServer(async (req, res) => {
       const downloaded = getDownloadedTrackIds();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ...library, downloadedIds: downloaded }));
+      return;
+    }
+
+    // 3.1 Save / Sync Full Library to Local Disk
+    if (pathname === '/api/library/save' && req.method === 'POST') {
+      const body = await parseBody(req);
+      if (body && (Array.isArray(body.favorites) || Array.isArray(body.playlists))) {
+        const current = readLibrary();
+        const updated = {
+          favorites: Array.isArray(body.favorites) ? body.favorites : (current.favorites || []),
+          playlists: Array.isArray(body.playlists) ? body.playlists : (current.playlists || []),
+          history: Array.isArray(body.history) ? body.history : (current.history || [])
+        };
+        writeLibrary(updated);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
       return;
     }
 
