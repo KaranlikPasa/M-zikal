@@ -11,8 +11,8 @@ const discordRpc = require('./discord-rpc');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.4.1';
-const APP_VERSION_CODE = 23;
+const APP_VERSION = '1.4.2';
+const APP_VERSION_CODE = 24;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -1717,45 +1717,84 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      let targetSong = song;
+      if (!song.spotifyResolved && song.spotifySearchQuery) {
+        try {
+          const sr = await searchYouTube(song.spotifySearchQuery);
+          if (sr && sr.length > 0) {
+            targetSong = {
+              ...song,
+              id: sr[0].id,
+              duration: sr[0].duration || song.duration,
+              thumbnail: song.thumbnail || sr[0].thumbnail,
+              spotifyResolved: true
+            };
+          }
+        } catch (e) {}
+      }
+
       // Check if already downloaded
-      const isDownloaded = fs.existsSync(path.join(DOWNLOADS_DIR, `${song.id}.m4a`)) ||
-                           fs.existsSync(path.join(DOWNLOADS_DIR, `${song.id}.mp3`));
+      const isDownloaded = fs.existsSync(path.join(DOWNLOADS_DIR, `${targetSong.id}.m4a`)) ||
+                           fs.existsSync(path.join(DOWNLOADS_DIR, `${targetSong.id}.mp3`));
       if (isDownloaded) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, alreadyDownloaded: true }));
+        res.end(JSON.stringify({ success: true, alreadyDownloaded: true, resolvedId: targetSong.id }));
         return;
       }
 
       // Trigger download in background
-      startTrackDownload(song).catch(err => console.error('Download error:', err));
+      startTrackDownload(targetSong).catch(err => console.error('Download error:', err));
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, status: 'downloading' }));
+      res.end(JSON.stringify({ success: true, status: 'downloading', resolvedId: targetSong.id }));
       return;
     }
 
-    // 13. Download Entire Playlist
+    // 13. Download Entire Playlist or Song List
     if (pathname === '/api/download/playlist' && req.method === 'POST') {
-      const { playlistId } = await parseBody(req);
-      const library = readLibrary();
-      const playlist = library.playlists.find(p => p.id === playlistId);
+      const body = await parseBody(req);
+      const playlistId = body && body.playlistId;
+      const passedSongs = body && Array.isArray(body.songs) ? body.songs : null;
 
-      if (!playlist) {
+      const library = readLibrary();
+      const playlist = playlistId ? (library.playlists || []).find(p => p.id === playlistId) : null;
+      const targetSongs = (passedSongs && passedSongs.length > 0)
+        ? passedSongs
+        : (playlist && Array.isArray(playlist.songs) ? playlist.songs : []);
+
+      if (!targetSongs || targetSongs.length === 0) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Playlist not found' }));
+        res.end(JSON.stringify({ error: 'İndirilecek şarkı bulunamadı' }));
         return;
       }
 
-      // Queue all songs sequentially
+      // Queue all songs sequentially in background
       (async () => {
-        for (const song of playlist.songs) {
+        let libraryChanged = false;
+        for (let i = 0; i < targetSongs.length; i++) {
+          const song = targetSongs[i];
+          if (!song) continue;
           try {
             let targetSong = song;
-            // If unresolved spotify song, resolve first
-            if (!song.spotifyResolved && song.spotifySearchQuery) {
-              const res = await searchYouTube(song.spotifySearchQuery);
-              if (res && res.length > 0) {
-                targetSong = { ...song, id: res[0].id };
+            // If unresolved spotify song, resolve first and persist ID
+            if ((!song.spotifyResolved && song.spotifySearchQuery) || (song.id && String(song.id).startsWith('sp_'))) {
+              const q = song.spotifySearchQuery || `${song.title || ''} ${song.channel || ''}`.trim();
+              const sr = await searchYouTube(q);
+              if (sr && sr.length > 0) {
+                targetSong = {
+                  ...song,
+                  id: sr[0].id,
+                  duration: sr[0].duration || song.duration,
+                  thumbnail: song.thumbnail || sr[0].thumbnail,
+                  spotifyResolved: true
+                };
+                if (playlist && Array.isArray(playlist.songs)) {
+                  const plIdx = playlist.songs.findIndex(s => s.id === song.id || s.title === song.title);
+                  if (plIdx >= 0) {
+                    playlist.songs[plIdx] = targetSong;
+                    libraryChanged = true;
+                  }
+                }
               }
             }
             await startTrackDownload(targetSong);
@@ -1763,10 +1802,13 @@ const server = http.createServer(async (req, res) => {
             console.error('Playlist download item error:', e);
           }
         }
+        if (libraryChanged) {
+          writeLibrary(library);
+        }
       })();
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, count: playlist.songs.length }));
+      res.end(JSON.stringify({ success: true, count: targetSongs.length }));
       return;
     }
 
