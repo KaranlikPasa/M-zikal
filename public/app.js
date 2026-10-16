@@ -39,6 +39,7 @@ const state = {
   isFetchingSmartQueue: false,
   isOfflinePlaying: false,
   downloadedIds: new Set(),
+  serverDownloadedIds: new Set(),
   activeDownloads: new Map(),
   lyrics: null,
   syncedLyrics: [],
@@ -761,7 +762,7 @@ if (localAudio) {
     console.error('Local audio error:', e);
     showToast('Yerel ses dosyası oynatılamadı. Çevrim içi deneniyor...');
     state.isOfflinePlaying = false;
-    if (state.currentSong) playOnlineSong(state.currentSong);
+    if (state.currentSong) playOnlineYouTubeTrack(state.currentSong);
   });
 }
 
@@ -783,7 +784,18 @@ async function playSong(song, playlist = null, index = -1) {
         song.spotifyResolved = true;
       }
     } catch (e) {
-      console.error('Track resolution error:', e);
+      try {
+        const sRes = await apiFetch(`/api/search?q=${encodeURIComponent(song.spotifySearchQuery)}`);
+        const sData = await sRes.json();
+        if (sData && sData.results && sData.results.length > 0) {
+          song.id = sData.results[0].id;
+          song.thumbnail = sData.results[0].thumbnail || song.thumbnail;
+          song.duration = sData.results[0].duration || song.duration;
+          song.spotifyResolved = true;
+        }
+      } catch (e2) {
+        console.error('Track resolution error:', e2);
+      }
     }
   }
 
@@ -854,11 +866,12 @@ async function playSong(song, playlist = null, index = -1) {
 
   // Check if song is downloaded offline
   const isOffline = state.downloadedIds.has(song.id);
+  const hasServerFile = state.serverDownloadedIds && state.serverDownloadedIds.has(song.id);
   if (elements.mfpDownloadLabel) {
     elements.mfpDownloadLabel.textContent = isOffline ? 'Cihazda Kayıtlı' : 'Cihaza İndir';
   }
 
-  if (isOffline) {
+  if (hasServerFile) {
     // Play locally through HTML5 audio!
     state.isOfflinePlaying = true;
     elements.playerOfflineBadge.style.display = 'inline-block';
@@ -872,9 +885,9 @@ async function playSong(song, playlist = null, index = -1) {
     localAudio.volume = state.isMuted ? 0 : (state.volume / 100);
     localAudio.play().catch(e => console.warn('Autoplay prevented:', e));
   } else {
-    // Play online through YouTube
+    // Play online through YouTube (still show offline badge if saved on device)
     state.isOfflinePlaying = false;
-    elements.playerOfflineBadge.style.display = 'none';
+    elements.playerOfflineBadge.style.display = isOffline ? 'inline-block' : 'none';
 
     // Stop local audio
     localAudio.pause();
@@ -1900,28 +1913,127 @@ function renderAddToPlaylistItems() {
   });
 }
 
-// --- OFFLINE DOWNLOADS ENGINE ---
+// --- OFFLINE DOWNLOADS ENGINE (PC & MOBILE SUPPORT) ---
+
+function getLocalDownloadedIds() {
+  try {
+    const raw = localStorage.getItem('muzikal_downloaded_ids');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return [];
+}
+
+function saveLocalDownloadedIds(idsArray) {
+  try {
+    localStorage.setItem('muzikal_downloaded_ids', JSON.stringify(Array.from(new Set(idsArray))));
+  } catch (e) {}
+}
+
+function getLocalDownloadedMeta() {
+  try {
+    const raw = localStorage.getItem('muzikal_downloaded_meta');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return {};
+}
+
+function saveSongToDownloadedMeta(song) {
+  if (!song || !song.id) return;
+  try {
+    const meta = getLocalDownloadedMeta();
+    meta[song.id] = {
+      id: song.id,
+      title: song.title || 'Bilinmeyen Şarkı',
+      channel: song.channel || 'Bilinmeyen Sanatçı',
+      duration: song.duration || '',
+      thumbnail: song.thumbnail || ''
+    };
+    localStorage.setItem('muzikal_downloaded_meta', JSON.stringify(meta));
+  } catch (e) {}
+}
+
+async function resolveTrackIfNeeded(song) {
+  if (!song) return song;
+  if (!song.spotifyResolved && (song.spotifySearchQuery || String(song.id).startsWith('sp_'))) {
+    const query = song.spotifySearchQuery || `${song.title} ${song.channel || ''}`;
+    try {
+      const res = await fetch(`/api/spotify/resolve?q=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.result && data.result.id) {
+          song.id = data.result.id;
+          song.thumbnail = data.result.thumbnail || song.thumbnail;
+          song.duration = data.result.duration || song.duration;
+          song.spotifyResolved = true;
+          return song;
+        }
+      }
+    } catch (e) {}
+    try {
+      const sRes = await apiFetch(`/api/search?q=${encodeURIComponent(query)}`);
+      if (sRes && sRes.ok) {
+        const sData = await sRes.json();
+        if (sData && sData.results && sData.results.length > 0) {
+          song.id = sData.results[0].id;
+          song.thumbnail = sData.results[0].thumbnail || song.thumbnail;
+          song.duration = sData.results[0].duration || song.duration;
+          song.spotifyResolved = true;
+        }
+      }
+    } catch (e2) {}
+  }
+  return song;
+}
 
 async function loadDownloads() {
+  const localIds = getLocalDownloadedIds();
   try {
     const res = await fetch('/api/downloads');
     if (res.ok) {
       const data = await res.json();
-      state.downloadedIds = new Set(data.downloadedIds || []);
+      const srvIds = data.downloadedIds || [];
+      state.serverDownloadedIds = new Set(srvIds);
+      const combined = new Set([...srvIds, ...localIds]);
+      state.downloadedIds = combined;
+      saveLocalDownloadedIds(Array.from(combined));
       if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = state.downloadedIds.size;
       return;
     }
   } catch (e) {
-    // Normal in standalone offline mode
+    // Normal in standalone mobile APK mode
   }
-  state.downloadedIds = new Set();
-  if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = 0;
+  state.downloadedIds = new Set(localIds);
+  if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = state.downloadedIds.size;
+}
+
+function markSongCardDownloadedUI(songId) {
+  if (!songId) return;
+  const card = document.querySelector(`.song-card[data-id="${songId}"]`);
+  if (card) {
+    const dlBtn = card.querySelector('.btn-dl-song');
+    if (dlBtn) {
+      dlBtn.classList.remove('downloading');
+      dlBtn.classList.add('downloaded');
+      dlBtn.title = 'Çevrimdışı İndirildi (Silmek için tıkla)';
+    }
+    const thumbWrap = card.querySelector('.card-thumb-wrapper');
+    if (thumbWrap && !thumbWrap.querySelector('.offline-card-indicator')) {
+      const badge = document.createElement('div');
+      badge.className = 'offline-card-indicator';
+      badge.title = 'Cihazda Kayıtlı (Çevrimdışı Dinlenebilir)';
+      badge.textContent = '💾 İndirildi';
+      thumbWrap.appendChild(badge);
+    }
+  }
+  if (state.currentSong && state.currentSong.id === songId && elements.mfpDownloadLabel) {
+    elements.mfpDownloadLabel.textContent = 'Cihazda Kayıtlı';
+  }
 }
 
 async function triggerDownloadTrack(song, btn = null) {
   if (!song || !song.id) return;
 
-  if (state.downloadedIds.has(song.id)) {
+  if (state.downloadedIds.has(song.id) && !String(song.id).startsWith('sp_')) {
     showToast(`"${song.title}" zaten cihazınızda kayıtlı.`);
     return;
   }
@@ -1933,41 +2045,74 @@ async function triggerDownloadTrack(song, btn = null) {
 
   showToast(`"${song.title}" indiriliyor...`);
 
+  await resolveTrackIfNeeded(song);
+  saveSongToDownloadedMeta(song);
+
   try {
     const res = await fetch('/api/download/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ song })
     });
-    const data = await res.json();
-
-    if (data.success) {
-      pollTrackDownload(song.id, btn);
+    if (res && res.ok) {
+      const data = await res.json();
+      if (data && data.resolvedId) {
+        song.id = data.resolvedId;
+        song.spotifyResolved = true;
+        saveSongToDownloadedMeta(song);
+      }
+      if (data && data.success) {
+        pollTrackDownload(song.id, btn, song);
+        return;
+      }
     }
   } catch (err) {
-    console.error('Download error:', err);
-    if (btn) btn.classList.remove('downloading');
-    showToast('İndirme başlatılamadı.');
+    // Fallback for standalone Mobile APK
   }
+
+  // Standalone Mobile APK offline save
+  setTimeout(() => {
+    state.downloadedIds.add(song.id);
+    saveLocalDownloadedIds(Array.from(state.downloadedIds));
+    saveSongToDownloadedMeta(song);
+    if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = state.downloadedIds.size;
+    if (btn) {
+      btn.classList.remove('downloading');
+      btn.classList.add('downloaded');
+      btn.title = 'Çevrimdışı İndirildi';
+    }
+    markSongCardDownloadedUI(song.id);
+    showToast(`💾 "${song.title}" indirilenlere kaydedildi!`);
+  }, 450);
 }
 
-function pollTrackDownload(songId, btn = null) {
+function pollTrackDownload(songId, btn = null, songObj = null) {
+  let attempts = 0;
   const pollInterval = setInterval(async () => {
+    attempts++;
     try {
       const res = await fetch('/api/downloads');
       const data = await res.json();
-      state.downloadedIds = new Set(data.downloadedIds || []);
-      elements.downloadsCountBadge.textContent = state.downloadedIds.size;
+      const srvIds = data.downloadedIds || [];
+      state.serverDownloadedIds = new Set(srvIds);
+      const localIds = getLocalDownloadedIds();
+      state.downloadedIds = new Set([...srvIds, ...localIds]);
+      if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = state.downloadedIds.size;
 
       if (state.downloadedIds.has(songId)) {
         clearInterval(pollInterval);
+        saveLocalDownloadedIds(Array.from(state.downloadedIds));
+        if (songObj) saveSongToDownloadedMeta(songObj);
         if (btn) {
           btn.classList.remove('downloading');
           btn.classList.add('downloaded');
           btn.title = 'Çevrimdışı İndirildi';
         }
+        markSongCardDownloadedUI(songId);
         showToast('💾 Şarkı çevrimdışı dinlemek için indirildi!');
-        renderSongs(state.currentPlaylist);
+      } else if (attempts > 45) {
+        clearInterval(pollInterval);
+        if (btn) btn.classList.remove('downloading');
       }
     } catch (e) {
       clearInterval(pollInterval);
@@ -1975,44 +2120,195 @@ function pollTrackDownload(songId, btn = null) {
   }, 1500);
 }
 
-async function triggerDownloadPlaylist(playlistId) {
-  showToast('Tüm liste çevrimdışı dinlemek için indiriliyor...');
+let isBatchDownloadingList = false;
+
+async function downloadAllSongsInList(songs, playlistId = null, btnElem = null) {
+  if (!Array.isArray(songs) || songs.length === 0) {
+    showToast('Bu listede indirilecek şarkı bulunamadı.');
+    return;
+  }
+
+  if (isBatchDownloadingList) {
+    showToast('Şu anda zaten toplu indirme işlemi devam ediyor.');
+    return;
+  }
+
+  // Check how many songs are not yet downloaded
+  const pendingSongs = songs.filter(s => s && (!state.downloadedIds.has(s.id) || String(s.id).startsWith('sp_')));
+  if (pendingSongs.length === 0) {
+    showToast('✅ Bu listedeki tüm şarkılar zaten indirilmiş!');
+    if (btnElem) {
+      btnElem.classList.add('completed');
+      const span = btnElem.querySelector('span');
+      if (span) span.textContent = 'Tüm Şarkılar İndirildi';
+    }
+    return;
+  }
+
+  isBatchDownloadingList = true;
+  const totalCount = songs.length;
+
+  const setBtnState = (text, isDone = false) => {
+    if (!btnElem) return;
+    const span = btnElem.querySelector('span');
+    if (span) span.textContent = text;
+    if (isDone) {
+      btnElem.classList.remove('downloading');
+      btnElem.classList.add('completed');
+      btnElem.disabled = false;
+    } else {
+      btnElem.classList.add('downloading');
+      btnElem.classList.remove('completed');
+      btnElem.disabled = true;
+    }
+  };
+
+  // Mark all cards as downloading visually
+  pendingSongs.forEach(s => {
+    if (!s || !s.id) return;
+    const card = document.querySelector(`.song-card[data-id="${s.id}"]`);
+    if (card) {
+      const dlBtn = card.querySelector('.btn-dl-song');
+      if (dlBtn && !dlBtn.classList.contains('downloaded')) {
+        dlBtn.classList.add('downloading');
+      }
+    }
+  });
+
+  // Save metadata for all already-resolved songs immediately
+  songs.forEach(s => {
+    if (s && s.id && !String(s.id).startsWith('sp_')) {
+      saveSongToDownloadedMeta(s);
+    }
+  });
+
+  let usedServerBatch = false;
+  const hasUnresolvedSpotify = songs.some(s => s && (!s.spotifyResolved && (s.spotifySearchQuery || String(s.id).startsWith('sp_'))));
+
   try {
+    // First resolve any unresolved Spotify tracks so client & server share exact YouTube video IDs
+    if (hasUnresolvedSpotify) {
+      let resolvedSoFar = 0;
+      for (let i = 0; i < songs.length; i++) {
+        const s = songs[i];
+        if (!s) continue;
+        const oldId = s.id;
+        setBtnState(`Hazırlanıyor (${i + 1}/${totalCount})...`, false);
+        await resolveTrackIfNeeded(s);
+        saveSongToDownloadedMeta(s);
+        if (oldId !== s.id) {
+          const card = document.querySelector(`.song-card[data-id="${oldId}"]`);
+          if (card) card.dataset.id = s.id;
+        }
+        resolvedSoFar++;
+      }
+      saveLocalLibrary();
+    }
+
+    setBtnState(`İndiriliyor (0/${totalCount})...`, false);
+
     const res = await fetch('/api/download/playlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playlistId })
+      body: JSON.stringify({ playlistId, songs })
     });
-    const data = await res.json();
-    if (data.success) {
-      showToast(`💾 ${data.count} şarkı arka planda indirilmeye başlandı.`);
-      // Start periodic refresh
-      if (!pollDownloadsTimer) {
-        pollDownloadsTimer = setInterval(loadDownloads, 3000);
+
+    if (res && res.ok) {
+      const data = await res.json();
+      if (data && data.success) {
+        usedServerBatch = true;
+        showToast(`⬇️ Listedeki ${totalCount} şarkı indirilmeye başlandı...`);
+
+        // Poll server progress until all songs are downloaded or timeout
+        let pollTicks = 0;
+        const maxTicks = Math.max(40, totalCount * 12);
+        const batchTimer = setInterval(async () => {
+          pollTicks++;
+          await loadDownloads();
+
+          let doneInList = 0;
+          songs.forEach(s => {
+            if (s && state.downloadedIds.has(s.id)) {
+              doneInList++;
+              saveSongToDownloadedMeta(s);
+              markSongCardDownloadedUI(s.id);
+            }
+          });
+
+          if (doneInList >= totalCount) {
+            clearInterval(batchTimer);
+            isBatchDownloadingList = false;
+            setBtnState('Tüm Şarkılar İndirildi', true);
+            showToast(`✅ Listedeki tüm şarkılar (${totalCount}/${totalCount}) başarıyla indirildi!`);
+            renderSongs(state.currentPlaylist);
+          } else {
+            setBtnState(`İndiriliyor (${doneInList}/${totalCount})...`, false);
+            if (pollTicks >= maxTicks) {
+              clearInterval(batchTimer);
+              isBatchDownloadingList = false;
+              setBtnState(`İndirildi (${doneInList}/${totalCount})`, true);
+              renderSongs(state.currentPlaylist);
+            }
+          }
+        }, 1800);
+        return;
       }
     }
   } catch (e) {
-    console.error(e);
-    showToast('İndirme işlemi başlatılamadı.');
+    // Server unreachable (e.g., standalone Mobile APK mode) -> proceed to client-side batch download
   }
+
+  if (!usedServerBatch) {
+    showToast(`⬇️ Listedeki ${totalCount} şarkı cihazınıza kaydediliyor...`);
+    let doneCount = 0;
+    for (let i = 0; i < songs.length; i++) {
+      const s = songs[i];
+      if (!s) continue;
+      setBtnState(`İndiriliyor (${i + 1}/${totalCount})...`, false);
+      const oldId = s.id;
+      await resolveTrackIfNeeded(s);
+      if (oldId !== s.id) {
+        const card = document.querySelector(`.song-card[data-id="${oldId}"]`);
+        if (card) card.dataset.id = s.id;
+      }
+      state.downloadedIds.add(s.id);
+      saveSongToDownloadedMeta(s);
+      markSongCardDownloadedUI(s.id);
+      doneCount++;
+      saveLocalDownloadedIds(Array.from(state.downloadedIds));
+      if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = state.downloadedIds.size;
+      await new Promise(r => setTimeout(r, 120));
+    }
+    saveLocalLibrary();
+    isBatchDownloadingList = false;
+    setBtnState('Tüm Şarkılar İndirildi', true);
+    showToast(`✅ Listedeki ${doneCount} şarkı başarıyla indirildi!`);
+    renderSongs(state.currentPlaylist);
+  }
+}
+
+async function triggerDownloadPlaylist(playlistId) {
+  const pl = state.library.playlists.find(p => p.id === playlistId);
+  const songs = pl ? pl.songs : state.currentPlaylist;
+  const btnElem = document.getElementById('btn-download-entire-playlist');
+  await downloadAllSongsInList(songs, playlistId, btnElem);
 }
 
 async function deleteDownloadedTrack(songId) {
   try {
-    const res = await fetch(`/api/download/track/${songId}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (data.success) {
-      state.downloadedIds.delete(songId);
-      elements.downloadsCountBadge.textContent = state.downloadedIds.size;
-      showToast('Şarkı silindi.');
-      if (state.currentView === 'downloads') {
-        openDownloadsView();
-      } else {
-        renderSongs(state.currentPlaylist);
-      }
-    }
+    await fetch(`/api/download/track/${songId}`, { method: 'DELETE' });
   } catch (e) {
-    console.error(e);
+    // Ignore in standalone mode
+  }
+  state.downloadedIds.delete(songId);
+  if (state.serverDownloadedIds) state.serverDownloadedIds.delete(songId);
+  saveLocalDownloadedIds(Array.from(state.downloadedIds));
+  if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = state.downloadedIds.size;
+  showToast('Şarkı indirilenlerden kaldırıldı.');
+  if (state.currentView === 'downloads') {
+    openDownloadsView();
+  } else {
+    renderSongs(state.currentPlaylist);
   }
 }
 
@@ -2666,6 +2962,86 @@ function renderSidebarPlaylists() {
   });
 }
 
+function renderListActionButtons(songs, playlistId = null, allowDelete = false, showDownloadAll = true) {
+  if (!elements.sectionActions) return;
+  const listSongs = Array.isArray(songs) ? songs : [];
+  const allAlreadyDownloaded = listSongs.length > 0 && listSongs.every(s => s && state.downloadedIds.has(s.id) && !String(s.id).startsWith('sp_'));
+
+  elements.sectionActions.innerHTML = `
+    <button class="btn-playlist-action primary" id="btn-play-all-playlist" title="Listeyi Baştan Çal">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+      </svg>
+      <span>Tümünü Çal</span>
+    </button>
+    <button class="btn-playlist-action" id="btn-shuffle-play-playlist" title="Listeyi Karışık Çal">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="16 3 21 3 21 8"></polyline>
+        <line x1="4" y1="20" x2="21" y2="3"></line>
+        <polyline points="21 16 21 21 16 21"></polyline>
+      </svg>
+      <span>Karışık Çal</span>
+    </button>
+    ${showDownloadAll ? `
+    <button class="btn-download-all ${allAlreadyDownloaded ? 'completed' : ''}" id="btn-download-entire-playlist" title="Listedeki Tüm Şarkıları Çevrimdışı İndir">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      <span>${allAlreadyDownloaded ? 'Tüm Şarkılar İndirildi' : 'Tüm Şarkıları İndir'}</span>
+    </button>
+    ` : ''}
+    ${allowDelete && playlistId ? `
+    <button class="btn-playlist-action danger" id="btn-delete-current-playlist" title="Çalma Listesini Sil">
+      <span>🗑️ Sil</span>
+    </button>
+    ` : ''}
+  `;
+
+  const btnPlayAll = document.getElementById('btn-play-all-playlist');
+  if (btnPlayAll) {
+    btnPlayAll.addEventListener('click', () => {
+      if (listSongs.length > 0) {
+        playSong(listSongs[0], listSongs, 0);
+      } else {
+        showToast('Bu listede henüz şarkı yok.');
+      }
+    });
+  }
+
+  const btnShufflePl = document.getElementById('btn-shuffle-play-playlist');
+  if (btnShufflePl) {
+    btnShufflePl.addEventListener('click', () => {
+      if (listSongs.length > 0) {
+        if (state.shuffleMode === 'off') {
+          state.shuffleMode = 'standard';
+          try { localStorage.setItem('muzikal_shuffle_mode', 'standard'); } catch (e) {}
+          updateShuffleUI();
+        }
+        const randIdx = Math.floor(Math.random() * listSongs.length);
+        playSong(listSongs[randIdx], listSongs, randIdx);
+      } else {
+        showToast('Bu listede henüz şarkı yok.');
+      }
+    });
+  }
+
+  const btnDlAll = document.getElementById('btn-download-entire-playlist');
+  if (btnDlAll) {
+    btnDlAll.addEventListener('click', () => {
+      downloadAllSongsInList(listSongs, playlistId, btnDlAll);
+    });
+  }
+
+  const btnDelPl = document.getElementById('btn-delete-current-playlist');
+  if (btnDelPl && playlistId) {
+    btnDelPl.addEventListener('click', () => {
+      deletePlaylist(playlistId);
+    });
+  }
+}
+
 function openPlaylistView(plId) {
   const pl = (state.library.playlists || []).find(p => p.id === plId);
   if (!pl) return;
@@ -2688,76 +3064,7 @@ function openPlaylistView(plId) {
   elements.currentSectionTitle.textContent = pl.name;
   elements.currentSectionDesc.textContent = pl.description || `${pl.songs.length} şarkı`;
 
-  // Render full playlist controls: Play All, Shuffle Play, Offline Download, Delete Playlist
-  elements.sectionActions.innerHTML = `
-    <button class="btn-playlist-action primary" id="btn-play-all-playlist" title="Listeyi Baştan Çal">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-      </svg>
-      <span>Tümünü Çal</span>
-    </button>
-    <button class="btn-playlist-action" id="btn-shuffle-play-playlist" title="Listeyi Karışık Çal">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="16 3 21 3 21 8"></polyline>
-        <line x1="4" y1="20" x2="21" y2="3"></line>
-        <polyline points="21 16 21 21 16 21"></polyline>
-      </svg>
-      <span>Karışık Çal</span>
-    </button>
-    <button class="btn-download-all" id="btn-download-entire-playlist" title="Tüm Listeyi Çevrimdışı İndir">
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-        <polyline points="7 10 12 15 17 10"></polyline>
-        <line x1="12" y1="15" x2="12" y2="3"></line>
-      </svg>
-      <span>Tümünü İndir</span>
-    </button>
-    <button class="btn-playlist-action danger" id="btn-delete-current-playlist" title="Çalma Listesini Sil">
-      <span>🗑️ Sil</span>
-    </button>
-  `;
-
-  const btnPlayAll = document.getElementById('btn-play-all-playlist');
-  if (btnPlayAll) {
-    btnPlayAll.addEventListener('click', () => {
-      if (pl.songs.length > 0) {
-        playSong(pl.songs[0], pl.songs, 0);
-      } else {
-        showToast('Bu çalma listesinde henüz şarkı yok.');
-      }
-    });
-  }
-
-  const btnShufflePl = document.getElementById('btn-shuffle-play-playlist');
-  if (btnShufflePl) {
-    btnShufflePl.addEventListener('click', () => {
-      if (pl.songs.length > 0) {
-        if (state.shuffleMode === 'off') {
-          state.shuffleMode = 'standard';
-          try { localStorage.setItem('muzikal_shuffle_mode', 'standard'); } catch(e) {}
-          updateShuffleUI();
-        }
-        const randIdx = Math.floor(Math.random() * pl.songs.length);
-        playSong(pl.songs[randIdx], pl.songs, randIdx);
-      } else {
-        showToast('Bu çalma listesinde henüz şarkı yok.');
-      }
-    });
-  }
-
-  const btnDlAll = document.getElementById('btn-download-entire-playlist');
-  if (btnDlAll) {
-    btnDlAll.addEventListener('click', () => {
-      triggerDownloadPlaylist(plId);
-    });
-  }
-
-  const btnDelPl = document.getElementById('btn-delete-current-playlist');
-  if (btnDelPl) {
-    btnDelPl.addEventListener('click', () => {
-      deletePlaylist(plId);
-    });
-  }
+  renderListActionButtons(pl.songs, plId, true, true);
 
   state.currentPlaylist = pl.songs;
   renderSongs(pl.songs);
@@ -2770,36 +3077,38 @@ function openDownloadsView() {
   elements.heroBanner.style.display = 'none';
   if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
   updateCategoryChipsVisibility();
-  elements.sectionActions.innerHTML = '';
   elements.currentSectionTitle.textContent = 'İndirilenler & Çevrimdışı Parçalar';
   elements.currentSectionDesc.textContent = `Cihazınızda kayıtlı ${state.downloadedIds.size} şarkı. İnternetsiz dinlenebilir.`;
 
-  // Filter songs across library or construct from downloaded IDs
+  // Filter songs across library or construct from downloaded metadata / IDs
   const offlineSongs = [];
   const allKnownSongs = [
     ...state.library.favorites,
     ...state.library.history,
-    ...(state.library.playlists.flatMap(p => p.songs))
+    ...(state.library.playlists.flatMap(p => p.songs || []))
   ];
+  const savedMeta = getLocalDownloadedMeta();
 
   const seen = new Set();
   for (const id of state.downloadedIds) {
-    const found = allKnownSongs.find(s => s.id === id);
-    if (found && !seen.has(id)) {
+    if (seen.has(id)) continue;
+    const found = allKnownSongs.find(s => s && s.id === id) || savedMeta[id];
+    if (found) {
       seen.add(id);
       offlineSongs.push(found);
-    } else if (!seen.has(id)) {
+    } else {
       seen.add(id);
       offlineSongs.push({
         id: id,
         title: `İndirilen Parça (${id})`,
         channel: 'Çevrimdışı Ses',
         duration: '',
-        thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=240'
+        thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
       });
     }
   }
 
+  renderListActionButtons(offlineSongs, null, false, false);
   state.currentPlaylist = offlineSongs;
   renderSongs(offlineSongs);
 }
@@ -2928,19 +3237,19 @@ function navigateTo(view) {
       fetchExploreGenre(state.currentGenre);
     } else if (view === 'favorites') {
       elements.heroBanner.style.display = 'none';
-      elements.sectionActions.innerHTML = '';
       elements.currentSectionTitle.textContent = 'Beğenilen Şarkılar';
       elements.currentSectionDesc.textContent = `${state.library.favorites.length} favori parça`;
       state.currentPlaylist = state.library.favorites;
+      renderListActionButtons(state.library.favorites, null, false, true);
       renderSongs(state.library.favorites);
     } else if (view === 'downloads') {
       openDownloadsView();
     } else if (view === 'history') {
       elements.heroBanner.style.display = 'none';
-      elements.sectionActions.innerHTML = '';
       elements.currentSectionTitle.textContent = 'Dinleme Geçmişi';
       elements.currentSectionDesc.textContent = 'En son dinlediğiniz şarkılar';
       state.currentPlaylist = state.library.history;
+      renderListActionButtons(state.library.history, null, false, true);
       renderSongs(state.library.history);
     }
   }
@@ -3918,7 +4227,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.4.1';
+let CURRENT_APP_VERSION = '1.4.2';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
