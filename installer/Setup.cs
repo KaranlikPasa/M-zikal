@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -264,7 +264,8 @@ namespace MuzikalInstaller
                 if (shellType == null) return;
                 dynamic shell = Activator.CreateInstance(shellType);
 
-                string vbsPath = Path.Combine(targetDir, "Muzikal.vbs");
+                string exePath = Path.Combine(targetDir, "Muzikal.exe");
+                string targetFile = File.Exists(exePath) ? exePath : Path.Combine(targetDir, "Muzikal.vbs");
                 string icoPath = Path.Combine(targetDir, "Muzikal.ico");
 
                 if (desktop)
@@ -272,7 +273,7 @@ namespace MuzikalInstaller
                     string desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
                     string lnkPath = Path.Combine(desktopDir, "Müzikal.lnk");
                     dynamic shortcut = shell.CreateShortcut(lnkPath);
-                    shortcut.TargetPath = vbsPath;
+                    shortcut.TargetPath = targetFile;
                     shortcut.WorkingDirectory = targetDir;
                     shortcut.Description = "Müzikal - Masaüstü ve Mobil Müzik Çalar";
                     if (File.Exists(icoPath)) shortcut.IconLocation = icoPath + ",0";
@@ -286,7 +287,7 @@ namespace MuzikalInstaller
 
                     string lnkPath = Path.Combine(programsDir, "Müzikal.lnk");
                     dynamic shortcut = shell.CreateShortcut(lnkPath);
-                    shortcut.TargetPath = vbsPath;
+                    shortcut.TargetPath = targetFile;
                     shortcut.WorkingDirectory = targetDir;
                     shortcut.Description = "Müzikal - Masaüstü ve Mobil Müzik Çalar";
                     if (File.Exists(icoPath)) shortcut.IconLocation = icoPath + ",0";
@@ -336,6 +337,17 @@ namespace MuzikalInstaller
         {
             try
             {
+                string exe = Path.Combine(targetDir, "Muzikal.exe");
+                if (File.Exists(exe))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = exe,
+                        WorkingDirectory = targetDir
+                    });
+                    return;
+                }
+
                 string vbs = Path.Combine(targetDir, "Muzikal.vbs");
                 if (File.Exists(vbs))
                 {
