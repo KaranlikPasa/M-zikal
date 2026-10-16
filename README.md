@@ -7,13 +7,14 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1ed760?style=for-the-badge&logo=android)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.4.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.4.1-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
+- 🛠️ **Tam Kapsamlı Mobil & PC İyileştirme Paketi (v1.4.1):** Çalma listesi değişikliklerinin anında diske (`data/library.json`) ve çevrimdışı belleğe çift yönlü kaydı, çalma listesi silme ve karışık çalma kontrolleri, mobil alt dolaşım çubuğu (`mobile-bottom-nav`), tam ekran mobil çalarda parmakla ilerleme çubuğu sürükleme + aşağı kaydırarak kapatma + listeye ekleme butonu, sıradakiler hızlı arama görsel düzeltmesi ve gelişmiş şarkı sözü eşleştirme motoru.
 - 🎶 **Gelişmiş Sıradakiler Çekmecesi & Sürpriz Modu (v1.4.0):** Sıradakiler çekmecesi üzerinden anında şarkı arayıp sıraya ekleme; akıllı miks ve çalma listelerindeki sıradaki tüm parçaları önceden görebilme veya dileyenler için sıradaki parçaları maskeleyen tek tıkla "Sıradakileri Gizle (Sürpriz Modu 🙈)"!
 - ➕ **Yan Panel Çalma Listesi Oluşturma & Şarkı Ekleme (v1.4.0):** Yan panelden tek tıkla "+ Yeni Çalma Listesi" oluşturma; şarkı kartlarından, oynatıcı çubuğundan veya sıradakilerden şarkıları tek tıkla mevcut listelere ekleme ya da anında yeni liste oluşturup içine atma.
 - 🎤 **Gelişmiş Çok Aşamalı Şarkı Sözü Motoru (v1.4.0):** Düetler, işbirlikleri (`x`, `feat.`), klip ve video başlık temizliğiyle `BLOK3 x POİZİ - ÇOK GÜZEL GÜLÜYORSUN` gibi şarkılarda bile anında eksiksiz senkronize söz bulma.
