@@ -37,6 +37,9 @@ const state = {
   smartQueue: [],
   unplayedShuffleIndices: [],
   isFetchingSmartQueue: false,
+  navHistory: [],
+  navHistoryPos: -1,
+  isNavigatingHistory: false,
   isOfflinePlaying: false,
   downloadedIds: new Set(),
   serverDownloadedIds: new Set(),
@@ -579,24 +582,114 @@ function updateNativePlaybackState(song, isPlaying) {
   }
 }
 
+let resumeDebounceTimer = null;
+let autoResumeAttempts = 0;
+let lastAutoResumeTime = 0;
+let lastExternalPauseTime = 0;
+
+window.pauseOnly = function(reason = 'external') {
+  userRequestedPause = true;
+  lastExternalPauseTime = Date.now();
+  if (resumeDebounceTimer) {
+    clearTimeout(resumeDebounceTimer);
+    resumeDebounceTimer = null;
+  }
+  if (state.isOfflinePlaying && localAudio && !localAudio.paused) {
+    try { localAudio.pause(); } catch (e) {}
+  }
+  if (ytReady && ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+    try { ytPlayer.pauseVideo(); } catch (e) {}
+  }
+  state.isPlaying = false;
+  updatePlayPauseButton();
+  if (elements.heroVinyl) elements.heroVinyl.classList.add('paused');
+  if (elements.playingIndicator) elements.playingIndicator.classList.remove('active');
+  if (state.currentSong) {
+    updateNativePlaybackState(state.currentSong, false);
+  }
+};
+
+window.resumeOnly = function() {
+  if (!state.currentSong) return;
+  userRequestedPause = false;
+  if (state.isOfflinePlaying && localAudio) {
+    if (localAudio.paused) {
+      try { localAudio.play(); } catch (e) {}
+    }
+  } else if (ytReady && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+    try { ytPlayer.playVideo(); } catch (e) {}
+  }
+};
+
+window.pauseFromNativeInterrupt = window.pauseOnly;
+
+try {
+  Object.defineProperty(window, 'onPause', {
+    get: function() {
+      window.pauseOnly('native_onPause');
+      return true;
+    },
+    configurable: true
+  });
+  Object.defineProperty(window, 'onPlay', {
+    get: function() {
+      window.resumeOnly();
+      return true;
+    },
+    configurable: true
+  });
+} catch (e) {}
+
 if ('mediaSession' in navigator) {
   try {
-    navigator.mediaSession.setActionHandler('play', () => togglePlayPause());
-    navigator.mediaSession.setActionHandler('pause', () => togglePlayPause());
+    navigator.mediaSession.setActionHandler('play', () => window.resumeOnly());
+    navigator.mediaSession.setActionHandler('pause', () => window.pauseOnly('mediaSession_pause'));
+    navigator.mediaSession.setActionHandler('stop', () => window.pauseOnly('mediaSession_stop'));
     navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
     navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
   } catch (e) {}
 }
 
-let resumeDebounceTimer = null;
-let autoResumeAttempts = 0;
-let lastAutoResumeTime = 0;
+// Listen for headphone / audio output device disconnections in WebView & desktop browsers
+if (navigator.mediaDevices && typeof navigator.mediaDevices.addEventListener === 'function') {
+  let knownOutputCount = -1;
+  const updateOutputDeviceCount = async () => {
+    try {
+      if (typeof navigator.mediaDevices.enumerateDevices !== 'function') return;
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      const outputs = devs.filter(d => d.kind === 'audiooutput' || d.kind === 'audioinput');
+      if (knownOutputCount > 0 && outputs.length < knownOutputCount && state.isPlaying) {
+        window.pauseOnly('headphone_disconnected');
+      }
+      knownOutputCount = outputs.length;
+    } catch (e) {}
+  };
+  updateOutputDeviceCount();
+  navigator.mediaDevices.addEventListener('devicechange', () => {
+    if (state.isPlaying) {
+      window.pauseOnly('devicechange');
+    }
+    updateOutputDeviceCount();
+  });
+}
+
+// Poll Android Native Audio Interrupt Detector (Phone Calls, Headphone Unplug, Instagram/TikTok/X Audio)
+setInterval(() => {
+  if (!state.isPlaying) return;
+  if (window.MuzikalNative && typeof window.MuzikalNative.checkAudioInterrupt === 'function') {
+    try {
+      const interruptReason = window.MuzikalNative.checkAudioInterrupt();
+      if (interruptReason && interruptReason.length > 0) {
+        window.pauseOnly(interruptReason);
+      }
+    } catch (e) {}
+  }
+}, 300);
 
 function onPlayerStateChange(event) {
   if (state.isOfflinePlaying) return; // Managed by localAudio
 
   if (event.data === YT.PlayerState.BUFFERING) {
-    // Smooth buffering: don't interrupt YouTube while it buffers audio chunks
     if (resumeDebounceTimer) {
       clearTimeout(resumeDebounceTimer);
       resumeDebounceTimer = null;
@@ -618,34 +711,14 @@ function onPlayerStateChange(event) {
     elements.playingIndicator.classList.add('active');
     updateNativePlaybackState(state.currentSong, true);
   } else if (event.data === YT.PlayerState.PAUSED) {
-    // If YouTube paused itself due to backgrounding/screen lock, keep playing safely without chopping
-    if (!userRequestedPause && state.currentSong && state.isPlaying) {
-      const now = Date.now();
-      if (now - lastAutoResumeTime > 4000) {
-        autoResumeAttempts = 0;
-      }
-      lastAutoResumeTime = now;
-      autoResumeAttempts++;
-
-      if (autoResumeAttempts <= 3) {
-        if (resumeDebounceTimer) clearTimeout(resumeDebounceTimer);
-        resumeDebounceTimer = setTimeout(() => {
-          if (!userRequestedPause && ytReady && ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
-            const currentState = ytPlayer.getPlayerState();
-            if (currentState === YT.PlayerState.PAUSED) {
-              console.log('Safe background auto-pause resume attempt:', autoResumeAttempts);
-              ytPlayer.playVideo();
-            }
-          }
-        }, 300);
-        return;
-      }
-    }
-
+    // Honor pause immediately! When Android AudioFocus (Incoming/Outgoing Call, Instagram, TikTok, X)
+    // or Headphone Unplug (ACTION_AUDIO_BECOMING_NOISY) pauses the player, never force-resume it.
     if (resumeDebounceTimer) {
       clearTimeout(resumeDebounceTimer);
       resumeDebounceTimer = null;
     }
+    userRequestedPause = true;
+    lastExternalPauseTime = Date.now();
     state.isPlaying = false;
     updatePlayPauseButton();
     elements.heroVinyl.classList.add('paused');
@@ -799,19 +872,41 @@ async function playSong(song, playlist = null, index = -1) {
     }
   }
 
+  const isDifferentSong = !state.currentSong || state.currentSong.id !== song.id;
   state.currentSong = song;
   if (playlist) {
     const isNewPlaylist = state.currentPlaylist !== playlist;
     state.currentPlaylist = playlist;
     state.currentIndex = index >= 0 ? index : playlist.findIndex(s => s.id === song.id);
+    if (isNewPlaylist || (isDifferentSong && !song.isSmartRecommendation && !state.isNavigatingHistory)) {
+      state.smartQueue = [];
+    }
     if (isNewPlaylist) {
       initShufflePool(true);
-      state.smartQueue = [];
     }
   }
 
-  // Record playback history for anti-repetition & artist diversity
+  // Record ordered session navigation history (fixes Geri Gel / Previous button in Shuffle & Smart Shuffle!)
   if (song && song.id) {
+    if (state.isNavigatingHistory) {
+      state.isNavigatingHistory = false;
+    } else {
+      if (state.navHistoryPos < state.navHistory.length - 1) {
+        state.navHistory = state.navHistory.slice(0, state.navHistoryPos + 1);
+      }
+      const lastEntry = state.navHistory[state.navHistory.length - 1];
+      if (!lastEntry || lastEntry.song.id !== song.id) {
+        state.navHistory.push({
+          song: { ...song },
+          index: state.currentIndex
+        });
+        if (state.navHistory.length > 100) {
+          state.navHistory.shift();
+        }
+        state.navHistoryPos = state.navHistory.length - 1;
+      }
+    }
+
     state.playedTrackIds.add(song.id);
     if (state.playedTrackIds.size > 60) {
       const firstVal = state.playedTrackIds.values().next().value;
@@ -947,7 +1042,13 @@ async function playSong(song, playlist = null, index = -1) {
   }, 60);
 }
 
-function togglePlayPause() {
+function togglePlayPause(e) {
+  // If called without an event right after an external OS/WebView pause (e.g. phone call / headphone unplug),
+  // prevent MusicPlaybackService's legacy MediaSession.onPause("playPause") from toggling music back ON!
+  if (!e && !state.isPlaying && (Date.now() - lastExternalPauseTime < 1500)) {
+    return;
+  }
+
   if (!state.currentSong) {
     if (state.currentPlaylist.length > 0) {
       playSong(state.currentPlaylist[0], state.currentPlaylist, 0);
@@ -1000,40 +1101,101 @@ function updatePlayPauseButton() {
   syncDiscordPresence();
 }
 
-// --- ADVANCED SHUFFLE & SMART RECOMMENDATION ENGINE ---
+// --- ADVANCED SHUFFLE & SMART RECOMMENDATION ENGINE (v1.4.3 AI + SIMILARITY GRAPH) ---
 
 const SMART_GENRE_AFFINITIES = [
   {
-    genre: 'rap',
-    keywords: ['rap', 'trap', 'drill', 'hiphop', 'flow', 'diss', 'freestyle', 'lvbel', 'level', 'c5', 'uzi', 'cakal', 'çakal', 'reckol', 'motive', 'batuflex', 'blok3', 'ati242', 'heijan', 'mavi', 'organize', 'şehinşah', 'hidra', 'ceza', 'sagopa', 'ezhel', 'murda', 'sefo', 'era7capone', 'poizi', 'deha', 'defkhan', 'sansar', 'aspova', 'khontkar', 'batu', 'anıl piyancı'],
-    peers: ['Uzi', 'Cakal', 'Blok3', 'Motive', 'Batuflex', 'Reckol', 'Organize', 'Ati242', 'Heijan', 'Mavi', 'Sefo', 'Murda', 'Era7capone', 'Poizi', 'Şehinşah', 'Ezhel'],
+    genre: 'tr_rap_new',
+    keywords: ['lvbel', 'level', 'c5', 'uzi', 'cakal', 'reckol', 'motive', 'batuflex', 'blok3', 'ati242', 'heijan', 'mavi', 'organize', 'sefo', 'murda', 'era7capone', 'poizi', 'deha', 'wegh', 'keskin', 'jeff redd', 'misa', 'akdo', 'drill', 'trap'],
+    peers: ['Uzi', 'Cakal', 'Blok3', 'Motive', 'Batuflex', 'Reckol', 'Organize', 'Ati242', 'Heijan', 'Sefo', 'Murda', 'Era7capone', 'Poizi', 'Wegh', 'Jeff Redd', 'Keskin'],
     fallbackQueries: ['türkçe rap hit şarkılar', 'türkçe trap drill popüler']
   },
   {
-    genre: 'pop',
-    keywords: ['pop', 'hit', 'semicenk', 'tuğba yurt', 'tugba yurt', 'ikilem', 'reynmen', 'burak bulut', 'kurtuluş kuş', 'doğu swag', 'simge', 'zeynep bastık', 'edis', 'merve özbey', 'irem derici', 'derya uluğ', 'mustafa sandal', 'tarkan', 'hadise', 'gülşen', 'aleyna tilki', 'buray', 'oğuzhan koç', 'yalın', 'kenan doğulu', 'hande yener', 'demet akalın', 'murat boz', 'ziynet sali'],
-    peers: ['Semicenk', 'Tuğba Yurt', 'İkilem', 'Doğu Swag', 'Reynmen', 'Burak Bulut', 'Kurtuluş Kuş', 'Simge', 'Zeynep Bastık', 'Edis', 'Merve Özbey', 'İrem Derici', 'Derya Uluğ', 'Buray'],
+    genre: 'tr_rap_classic',
+    keywords: ['ceza', 'sagopa', 'ezhel', 'sehinşah', 'sehinsah', 'hidra', 'allame', 'rota', 'norm ender', 'patron', 'gazapizm', 'sansar salvo', 'no.1', 'no 1', 'şanışer', 'saniser', 'contra', 'anıl piyancı', 'anil piyanci', 'aspova', 'stabil', 'defkhan'],
+    peers: ['Ezhel', 'Ceza', 'Sagopa Kajmer', 'Şehinşah', 'Hidra', 'Gazapizm', 'No.1', 'Allame', 'Şanışer', 'Norm Ender', 'Anıl Piyancı', 'Aspova', 'Patron', 'Stabil'],
+    fallbackQueries: ['türkçe rap efsaneleri hit', 'en iyi türkçe rap şarkılar']
+  },
+  {
+    genre: 'tr_pop_modern',
+    keywords: ['semicenk', 'reynmen', 'burak bulut', 'kurtulus kus', 'dogu swag', 'ikilem', 'mela bedel', 'mert demir', 'kofn', 'köfn', 'dedubluman', 'dedüblüman', 'simge', 'zeynep bastik', 'edis', 'merve ozbey', 'irem derici', 'derya ulug', 'aleyna tilki', 'buray', 'oguzhan koc', 'mabel matiz', 'tugba yurt', 'bilal sonses', 'ziynet sali', 'melike sahin'],
+    peers: ['Semicenk', 'Mert Demir', 'Simge', 'Zeynep Bastık', 'Edis', 'Merve Özbey', 'İrem Derici', 'Derya Uluğ', 'Buray', 'Mabel Matiz', 'Tuğba Yurt', 'Reynmen', 'Melike Şahin', 'Oğuzhan Koç', 'İkilem', 'Bilal Sonses'],
     fallbackQueries: ['türkçe pop hit 2025 2026', 'en çok dinlenen türkçe pop']
   },
   {
-    genre: 'rock',
-    keywords: ['rock', 'metal', 'anadolu rock', 'duman', 'mor ve ötesi', 'manga', 'teoman', 'şebnem ferah', 'sebnem ferah', 'dolu kadehi ters tut', 'yüzyüzeyken konuşuruz', 'madrigal', 'adamlar', 'kaan boşnak', 'hayko cepkin', 'gripin', 'yüksek sadakat', 'haluk levent', 'barış manço', 'cem karaca', 'erkin koray'],
-    peers: ['Duman', 'Mor ve Ötesi', 'maNga', 'Teoman', 'Şebnem Ferah', 'Dolu Kadehi Ters Tut', 'Yüzyüzeyken Konuşuruz', 'Madrigal', 'Adamlar', 'Gripin', 'Yüksek Sadakat', 'Haluk Levent'],
-    fallbackQueries: ['türkçe rock hit şarkılar', 'anadolu rock efsaneleri']
+    genre: 'tr_pop_2000s',
+    keywords: ['gülşen', 'gulsen', 'tarkan', 'hadise', 'hande yener', 'demet akalin', 'mustafa sandal', 'serdar ortac', 'kenan dogulu', 'bengu', 'murat boz', 'yalin', 'gokhan ozen', 'petek dincoz', 'ajda pekkan', 'sertab erener', 'sezen aksu', 'nilufer', 'sila', 'gokhan tepe', 'emre altug', 'burcu gunes', 'isın karaca'],
+    peers: ['Tarkan', 'Hande Yener', 'Hadise', 'Mustafa Sandal', 'Serdar Ortaç', 'Kenan Doğulu', 'Demet Akalın', 'Sertab Erener', 'Murat Boz', 'Bengü', 'Yalın', 'Gökhan Özen', 'Sıla', 'Ajda Pekkan', 'Sezen Aksu', 'Gülşen'],
+    fallbackQueries: ['2000ler türkçe pop hit şarkılar', 'türkçe pop efsaneleri']
   },
   {
-    genre: 'slow',
-    keywords: ['akustik', 'slow', 'hüzün', 'sezen aksu', 'nilüfer', 'sertab erener', 'sıla', 'sila', 'yıldız tilbe', 'ebru gündeş', 'funda arar', 'tan taşçı', 'emir can iğrek', 'kalben', 'mabel matiz', 'ahmet kaya', 'müslüm gürses', 'ferdi tayfur', 'cengiz kurtoğlu', 'hakan altun', 'ibrahim tatlıses'],
-    peers: ['Sezen Aksu', 'Sertab Erener', 'Sıla', 'Yıldız Tilbe', 'Tan Taşçı', 'Emir Can İğrek', 'Mabel Matiz', 'Nilüfer', 'Funda Arar', 'Kalben', 'Ahmet Kaya'],
-    fallbackQueries: ['türkçe akustik slow popüler', 'duygusal türkçe şarkılar']
+    genre: 'tr_rock_alt',
+    keywords: ['duman', 'mor ve otesi', 'manga', 'teoman', 'sebnem ferah', 'dolu kadehi ters tut', 'yuzyuzeyken konusuruz', 'madrigal', 'adamlar', 'kaan bosnak', 'hayko cepkin', 'gripin', 'yuksek sadakat', 'haluk levent', 'baris manco', 'cem karaca', 'erkin koray', 'athena', 'emre aydin', 'model', 'fatma turgut', 'sekendiz', 'canozan', 'perdenin ardindakiler'],
+    peers: ['Duman', 'Mor ve Ötesi', 'maNga', 'Teoman', 'Şebnem Ferah', 'Dolu Kadehi Ters Tut', 'Yüzyüzeyken Konuşuruz', 'Madrigal', 'Adamlar', 'Gripin', 'Emre Aydın', 'Model', 'Athena', 'Fatma Turgut', 'Perdenin Ardındakiler'],
+    fallbackQueries: ['türkçe rock alternatif hit şarkılar', 'türkçe rock en çok dinlenenler']
+  },
+  {
+    genre: 'tr_arabesk_slow',
+    keywords: ['muslum gurses', 'ahmet kaya', 'ibrahim tatlises', 'ferdi tayfur', 'orhan gencebay', 'ebru gundes', 'yildiz tilbe', 'hakan altun', 'cengiz kurtoglu', 'kibariye', 'azer bulbul', 'bergen', 'gullu', 'funda arar', 'tan tasci', 'emir can igrek', 'koray avci'],
+    peers: ['Müslüm Gürses', 'Ahmet Kaya', 'Ebru Gündeş', 'Yıldız Tilbe', 'Hakan Altun', 'Ferdi Tayfur', 'İbrahim Tatlıses', 'Funda Arar', 'Tan Taşçı', 'Bergen', 'Cengiz Kurtoğlu', 'Koray Avcı'],
+    fallbackQueries: ['türkçe damar arabesk slow hit', 'duygusal türkçe şarkılar']
+  },
+  {
+    genre: 'en_pop_rnb',
+    keywords: ['the weeknd', 'dua lipa', 'taylor swift', 'billie eilish', 'ariana grande', 'bruno mars', 'ed sheeran', 'justin bieber', 'rihanna', 'lady gaga', 'lana del rey', 'harry styles', 'shawn mendes', 'charlie puth', 'camila cabello', 'selena gomez', 'katy perry', 'adele', 'sia', 'sam smith', 'olivia rodrigo', 'sabrina carpenter', 'post malone'],
+    peers: ['The Weeknd', 'Dua Lipa', 'Billie Eilish', 'Bruno Mars', 'Rihanna', 'Ariana Grande', 'Lady Gaga', 'Lana Del Rey', 'Ed Sheeran', 'Post Malone', 'Sabrina Carpenter', 'Taylor Swift', 'Sia', 'Adele'],
+    fallbackQueries: ['global pop hits official audio', 'top english pop songs']
+  },
+  {
+    genre: 'en_hiphop_rap',
+    keywords: ['travis scott', 'drake', 'eminem', 'kendrick lamar', 'kanye west', 'future', 'metro boomin', '21 savage', 'playboi carti', 'central cee', 'pop smoke', '50 cent', 'snoop dogg', 'tupac', '2pac', 'jay-z', 'asap rocky', 'nicki minaj', 'cardi b', 'jack harlow', 'don toliver', 'lil baby', 'gunna'],
+    peers: ['Travis Scott', 'Drake', 'Kendrick Lamar', 'Metro Boomin', '21 Savage', 'Future', 'Eminem', 'Central Cee', 'Don Toliver', 'Playboi Carti', 'Pop Smoke', 'Kanye West', 'A$AP Rocky'],
+    fallbackQueries: ['hip hop rap hits official audio', 'best trap rap songs']
+  },
+  {
+    genre: 'en_electronic_phonk',
+    keywords: ['phonk', 'kordhell', 'interworld', 'hensconn', 'dvrst', 'playaphonk', 'alan walker', 'marshmello', 'david guetta', 'calvin harris', 'tiesto', 'avicii', 'martin garrix', 'skrillex', 'daft punk', 'kygo', 'alok', 'imany', 'iniko'],
+    peers: ['Calvin Harris', 'David Guetta', 'Avicii', 'Tiësto', 'Alan Walker', 'Martin Garrix', 'Kygo', 'Daft Punk', 'Kordhell', 'Interworld', 'DVRST'],
+    fallbackQueries: ['electronic dance hits official audio', 'best edm phonk hits']
+  },
+  {
+    genre: 'en_rock_metal',
+    keywords: ['linkin park', 'metallica', 'nirvana', 'arctic monkeys', 'imagine dragons', 'coldplay', 'queen', 'ac/dc', 'guns n roses', 'red hot chili peppers', 'green day', 'evanescence', 'system of a down', 'slipknot', 'rammstein', 'radiohead', 'the neighbourhood', 'twenty one pilots', 'maneskin'],
+    peers: ['Linkin Park', 'Arctic Monkeys', 'Imagine Dragons', 'Coldplay', 'Nirvana', 'Metallica', 'The Neighbourhood', 'Twenty One Pilots', 'Evanescence', 'Red Hot Chili Peppers', 'Queen', 'Måneskin'],
+    fallbackQueries: ['rock alternative hits official audio', 'best rock songs']
   }
 ];
 
+function stripChannelLabels(str) {
+  if (!str) return '';
+  let s = str
+    .replace(/\b(?:netd\s*müzik|netd\s*muzik|netd|poll\s*production|dmc|doğan\s*music\s*company|dogan\s*music|sony\s*music|universal\s*music|warner\s*music|avrupa\s*müzik|avrupa\s*muzik|dokuz\s*sekiz\s*müzik|pasaj\s*müzik|kalan\s*müzik|bmg|emre\s*plak|özdemir\s*plak|ozdemir\s*plak|vevo)\b\s*(?:ve|&|,|-|\/|\+)?\s*/gi, '')
+    .replace(/\s*(?:ve|&|,|-|\/|\+)\s*\b(?:netd\s*müzik|netd\s*muzik|netd|poll\s*production|dmc|sony\s*music|universal\s*music|avrupa\s*müzik|vevo)\b/gi, '')
+    .replace(/\s*-\s*Topic$/i, '')
+    .replace(/\b(?:Official\s*Artist\s*Channel|Official\s*Channel|Official|Resmi\s*Kanalı?)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return s;
+}
+
 function normalizeArtistQuery(str) {
   if (!str) return '';
-  return str.toLowerCase()
+  return str
+    .replace(/İ/g, 'i')
+    .replace(/I/g, 'i')
+    .replace(/ı/g, 'i')
+    .replace(/Ğ/g, 'g')
+    .replace(/ğ/g, 'g')
+    .replace(/Ü/g, 'u')
+    .replace(/ü/g, 'u')
+    .replace(/Ş/g, 's')
+    .replace(/ş/g, 's')
+    .replace(/Ö/g, 'o')
+    .replace(/ö/g, 'o')
+    .replace(/Ç/g, 'c')
+    .replace(/ç/g, 'c')
+    .toLowerCase()
     .replace(/\blevel\b/g, 'lvbel')
-    .replace(/\bçakal\b/g, 'cakal')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -1041,20 +1203,28 @@ function normalizeArtistQuery(str) {
 function extractClientArtists(song) {
   const artists = new Set();
   if (!song) return [];
-  const c = (song.channel || '').toLowerCase().trim();
-  if (c && !/(records|müzik|muzik|music|vevo|entertainment|official|audio|yapım|yapim|netd|video|tv)/i.test(c)) {
-    artists.add(c);
-    artists.add(normalizeArtistQuery(c));
+
+  const cleanedChannel = stripChannelLabels(song.channel || '');
+  if (cleanedChannel) {
+    const channelParts = cleanedChannel.split(/\s*(?:&|feat\.?|ft\.?|\bx\b|\bve\b|,|\/|\+)\s*/i);
+    for (const part of channelParts) {
+      const p = part.trim();
+      if (p.length >= 2 && !/^(records|muzik|müzik|music|vevo|entertainment|official|audio|yapim|yapım|netd|video|tv|plak|produksiyon|prodüksiyon|digital|media|topic)$/i.test(p)) {
+        artists.add(p.toLowerCase());
+        artists.add(normalizeArtistQuery(p));
+      }
+    }
   }
+
   if (song.title) {
     const parts = song.title.split(/\s*[-–—:]\s*/);
     if (parts.length > 1) {
-      const lead = parts[0].replace(/[\(\[].*?[\)\]]/g, '').trim().toLowerCase();
-      const subs = lead.split(/\s*(?:&|feat\.?|ft\.?|\bx\b|,|\/)\s*/i);
+      const lead = stripChannelLabels(parts[0].replace(/[\(\[].*?[\)\]]/g, '').trim());
+      const subs = lead.split(/\s*(?:&|feat\.?|ft\.?|\bx\b|\bve\b|,|\/|\+)\s*/i);
       subs.forEach(s => {
         const clean = s.trim();
-        if (clean.length > 1 && !/(official|video|klip|audio|hd|4k)/i.test(clean)) {
-          artists.add(clean);
+        if (clean.length >= 2 && !/(official|video|klip|audio|hd|4k|lyrics|sarkisi|şarkısı)/i.test(clean)) {
+          artists.add(clean.toLowerCase());
           artists.add(normalizeArtistQuery(clean));
         }
       });
@@ -1065,11 +1235,16 @@ function extractClientArtists(song) {
 
 function matchesAnyArtist(candidateTitle, candidateChannel, targetArtists) {
   if (!targetArtists || targetArtists.length === 0) return false;
-  const candStr = normalizeArtistQuery(`${candidateTitle || ''} ${candidateChannel || ''}`);
+  const candStr = normalizeArtistQuery(`${candidateTitle || ''} ${stripChannelLabels(candidateChannel || '')}`);
+  const candWords = candStr.split(/[^a-z0-9]+/).filter(Boolean);
   for (const target of targetArtists) {
-    const t = normalizeArtistQuery(target);
+    const t = normalizeArtistQuery(stripChannelLabels(target));
     if (!t || t.length < 2) continue;
-    if (candStr.includes(t)) return true;
+    if (t.length <= 3) {
+      if (candWords.includes(t)) return true;
+    } else if (candStr.includes(t)) {
+      return true;
+    }
   }
   return false;
 }
@@ -1077,18 +1252,13 @@ function matchesAnyArtist(candidateTitle, candidateChannel, targetArtists) {
 function isSameArtistAsRecent(song) {
   if (!song) return false;
   const songArtists = extractClientArtists(song);
-  const songStr = normalizeArtistQuery(`${song.title || ''} ${song.channel || ''}`);
-  
-  // Check against last 8 played artists
-  const recent = (state.playedArtists || []).slice(-8);
-  for (const prev of recent) {
-    const p = normalizeArtistQuery(prev);
-    if (!p || p.length < 2) continue;
-    if (songStr.includes(p)) return true;
-    for (const a of songArtists) {
-      const normA = normalizeArtistQuery(a);
-      if (normA === p || normA.includes(p) || p.includes(normA)) return true;
-    }
+  const recent = [
+    ...(state.playedArtists || []).slice(-8),
+    ...(state.currentSong ? extractClientArtists(state.currentSong) : [])
+  ];
+  if (matchesAnyArtist(song.title, song.channel, recent)) return true;
+  for (const a of songArtists) {
+    if (matchesAnyArtist(a, a, recent)) return true;
   }
   return false;
 }
@@ -1117,8 +1287,8 @@ async function fetchMobileNativeSmartMix(currentSong, excludeArtists = [], exclu
 
   const rawArtists = extractClientArtists(currentSong);
   const normArtists = rawArtists.map(a => normalizeArtistQuery(a)).filter(Boolean);
-  
-  // Expand alias exclusions (e.g. Lvbel C5 <-> Level C5)
+
+  // Expand alias exclusions (e.g. Lvbel C5 <-> Level C5, Gülşen <-> Gulsen)
   const allExcluded = new Set([...excludeArtists.map(a => normalizeArtistQuery(a)).filter(Boolean), ...normArtists]);
   for (const a of normArtists) {
     if (a.includes('lvbel') || a.includes('c5')) {
@@ -1128,35 +1298,59 @@ async function fetchMobileNativeSmartMix(currentSong, excludeArtists = [], exclu
       allExcluded.add('level');
       allExcluded.add('c5');
     }
-    if (a.includes('cakal') || a.includes('çakal')) {
+    if (a.includes('cakal')) {
       allExcluded.add('cakal');
-      allExcluded.add('çakal');
     }
   }
   const excludeList = Array.from(allExcluded);
   const seenIds = new Set([...(excludeIds || []), currentSong.id]);
+  const batchChosenArtists = [];
 
-  // Detect Genre/Vibe
-  const combined = normalizeArtistQuery(`${currentSong.title || ''} ${currentSong.channel || ''}`);
-  let matchedGroup = SMART_GENRE_AFFINITIES.find(g => g.keywords.some(k => combined.includes(k)));
-  if (!matchedGroup) {
-    matchedGroup = SMART_GENRE_AFFINITIES[0]; // Default to top rap/pop
+  // Score all genre clusters to pick the best vibe match
+  const combined = normalizeArtistQuery(`${currentSong.title || ''} ${stripChannelLabels(currentSong.channel || '')}`);
+  let matchedGroup = null;
+  let bestScore = 0;
+  for (const g of SMART_GENRE_AFFINITIES) {
+    let score = 0;
+    for (const kw of g.keywords) {
+      const nkw = normalizeArtistQuery(kw);
+      if (combined.includes(nkw)) {
+        score += (nkw.length > 4 ? 3 : 2);
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      matchedGroup = g;
+    }
   }
 
-  // Pick 2-3 distinct peer artists that are NOT excluded
-  const candidatePeers = matchedGroup.peers.filter(p => !matchesAnyArtist(p, p, excludeList));
-  for (let i = candidatePeers.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [candidatePeers[i], candidatePeers[j]] = [candidatePeers[j], candidatePeers[i]];
+  // Pick 3 distinct peer artists that are NOT excluded
+  let selectedPeers = [];
+  if (matchedGroup) {
+    const candidatePeers = matchedGroup.peers.filter(p => !matchesAnyArtist(p, p, excludeList));
+    for (let i = candidatePeers.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidatePeers[i], candidatePeers[j]] = [candidatePeers[j], candidatePeers[i]];
+    }
+    selectedPeers = candidatePeers.slice(0, 3);
   }
 
-  const selectedPeers = candidatePeers.slice(0, 3);
   const searchQueries = [];
   selectedPeers.forEach(peer => {
-    searchQueries.push(`${peer} en çok dinlenen hit şarkılar official audio`);
+    searchQueries.push(`${peer} en çok dinlenen şarkısı official audio`);
   });
-  if (searchQueries.length < 2) {
-    searchQueries.push(matchedGroup.fallbackQueries[0]);
+
+  if (searchQueries.length === 0) {
+    const cleanMainArtist = stripChannelLabels(currentSong.channel || '');
+    const isTurkish = /[ğüşiöçĞÜŞİÖÇ]/.test(`${currentSong.title || ''} ${currentSong.channel || ''}`);
+    if (isTurkish) {
+      searchQueries.push('türkçe pop hit şarkılar 2025');
+      searchQueries.push('2000ler türkçe pop en çok dinlenenler');
+    } else if (cleanMainArtist) {
+      searchQueries.push(`songs similar to ${cleanMainArtist} official audio`);
+    } else {
+      searchQueries.push('global hit songs official audio');
+    }
   }
 
   const collectedTracks = [];
@@ -1167,19 +1361,26 @@ async function fetchMobileNativeSmartMix(currentSong, excludeArtists = [], exclu
       const results = (data && data.results) ? data.results : (Array.isArray(data) ? data : []);
       for (const t of results) {
         if (!t || !t.id || seenIds.has(t.id)) continue;
-        // Strictly filter out the current artist and all excluded artists
-        if (matchesAnyArtist(t.title, t.channel, excludeList)) continue;
+        // Filter out compilations / 1 hour mixes / karaoke / shorts
+        if (/\b(full\s*album|1\s*saat|1\s*hour|karaoke|instrumental|shorts|podcast|canlı\s*yayın|reaksiyon)\b/i.test(t.title || '')) continue;
+        // Strictly filter out the current artist, all recently played artists, and artists already in this batch
+        if (matchesAnyArtist(t.title, t.channel, [...excludeList, ...batchChosenArtists])) continue;
         if (state.playedTrackIds && state.playedTrackIds.has(t.id)) continue;
+
         seenIds.add(t.id);
+        const candArtists = extractClientArtists(t);
+        batchChosenArtists.push(...candArtists);
+
         collectedTracks.push({
           id: t.id,
           title: t.title || '',
-          channel: t.channel || '',
+          channel: stripChannelLabels(t.channel || '') || t.channel || '',
           duration: t.duration || '3:30',
           thumbnail: t.thumbnail || `https://i.ytimg.com/vi/${t.id}/mqdefault.jpg`,
           isSmartRecommendation: true
         });
-        if (collectedTracks.length >= 8) break;
+        // Max 1 track per peer search query so every recommended track is by a different artist!
+        break;
       }
     } catch (e) {
       console.warn('Native smart mix search error:', e);
@@ -1204,12 +1405,15 @@ async function fetchSmartDiverseRecommendations(currentSong) {
     ...extractClientArtists(currentSong)
   ])).filter(Boolean);
 
-  // 1. Try server endpoint first (works on desktop / node server)
+  // 1. Try server endpoint first (uses Ollama AI llama3.1:8b + YouTube Radio Mix + 12-Genre Graph)
   try {
     const url = `/api/recommendations?videoId=${encodeURIComponent(currentSong.id || '')}&artist=${encodeURIComponent(currentSong.channel || '')}&title=${encodeURIComponent(currentSong.title || '')}&excludeArtists=${encodeURIComponent(JSON.stringify(excludeArtists))}&excludeIds=${encodeURIComponent(JSON.stringify(excludeIds))}`;
     const res = await apiFetch(url);
     if (res && res.recommendations && res.recommendations.length > 0) {
-      const valid = res.recommendations.filter(r => !state.playedTrackIds.has(r.id));
+      const valid = res.recommendations.filter(r =>
+        !state.playedTrackIds.has(r.id) &&
+        !matchesAnyArtist(r.title, r.channel, excludeArtists)
+      );
       if (valid.length > 0) {
         return valid.map(r => ({ ...r, isSmartRecommendation: true }));
       }
@@ -1246,6 +1450,17 @@ async function prefetchSmartRecommendations() {
 }
 
 async function playNext() {
+  // 0. If user pressed Previous (Geri Gel) and is stepping forward through session history
+  if (state.navHistory && state.navHistoryPos >= 0 && state.navHistoryPos < state.navHistory.length - 1) {
+    state.navHistoryPos++;
+    const nextEntry = state.navHistory[state.navHistoryPos];
+    if (nextEntry && nextEntry.song) {
+      state.isNavigatingHistory = true;
+      playSong(nextEntry.song, state.currentPlaylist, nextEntry.index);
+      return;
+    }
+  }
+
   // 1. Explicit user queue
   if (state.queue.length > 0) {
     const nextSong = state.queue.shift();
@@ -1257,11 +1472,21 @@ async function playNext() {
   // 2. SMART SHUFFLE: Intelligent cross-artist discovery in the same genre
   if (state.shuffleMode === 'smart') {
     let smartCandidate = null;
+    const currentExcludedArtists = [
+      ...(state.playedArtists || []).slice(-6),
+      ...(state.currentSong ? extractClientArtists(state.currentSong) : [])
+    ];
 
-    // A. Use pre-fetched candidate if ready in queue
-    if (state.smartQueue && state.smartQueue.length > 0) {
-      smartCandidate = state.smartQueue.shift();
-    } else if (state.currentSong && !state.isOfflinePlaying) {
+    // A. Use pre-fetched candidate if ready in queue (and verify it doesn't match the current artist!)
+    while (state.smartQueue && state.smartQueue.length > 0) {
+      const cand = state.smartQueue.shift();
+      if (cand && !matchesAnyArtist(cand.title, cand.channel, currentExcludedArtists)) {
+        smartCandidate = cand;
+        break;
+      }
+    }
+
+    if (!smartCandidate && state.currentSong && !state.isOfflinePlaying) {
       // B. Fetch on the fly if queue was empty
       try {
         const recs = await fetchSmartDiverseRecommendations(state.currentSong);
@@ -1292,19 +1517,6 @@ async function playNext() {
           pickedIdx = state.unplayedShuffleIndices.splice(i, 1)[0];
           break;
         }
-      }
-      // If all songs in playlist are the same artist (e.g. searched Level C5), fetch diverse tracks rather than repeating!
-      if (pickedIdx === -1 && state.currentSong && !state.isOfflinePlaying) {
-        try {
-          const diverse = await fetchSmartDiverseRecommendations(state.currentSong);
-          if (diverse && diverse.length > 0) {
-            const nextSong = diverse[0];
-            state.smartQueue = diverse.slice(1);
-            showToast(`✨ Akıllı Mix: ${nextSong.title}`);
-            playSong(nextSong, state.currentPlaylist, state.currentIndex);
-            return;
-          }
-        } catch (e) {}
       }
       if (pickedIdx === -1 && state.unplayedShuffleIndices.length > 0) {
         pickedIdx = state.unplayedShuffleIndices.shift();
@@ -1355,12 +1567,28 @@ async function playNext() {
 }
 
 function playPrev() {
+  // 1. If we have actual session navigation history (vital for Shuffle & Smart Shuffle!),
+  // go back to the exact song that was played previously!
+  if (state.navHistory && state.navHistoryPos > 0) {
+    state.navHistoryPos--;
+    const prevEntry = state.navHistory[state.navHistoryPos];
+    if (prevEntry && prevEntry.song) {
+      state.isNavigatingHistory = true;
+      const targetIdx = (typeof prevEntry.index === 'number' && prevEntry.index >= 0)
+        ? prevEntry.index
+        : state.currentPlaylist.findIndex(s => s.id === prevEntry.song.id);
+      playSong(prevEntry.song, state.currentPlaylist, targetIdx >= 0 ? targetIdx : state.currentIndex);
+      return;
+    }
+  }
+
+  // 2. If at the very start of session history and > 5 seconds into song, restart track
   if (state.isOfflinePlaying) {
-    if (localAudio.currentTime > 3) {
+    if (localAudio.currentTime > 5) {
       localAudio.currentTime = 0;
       return;
     }
-  } else if (ytPlayer && ytPlayer.getCurrentTime && ytPlayer.getCurrentTime() > 3) {
+  } else if (ytPlayer && ytPlayer.getCurrentTime && ytPlayer.getCurrentTime() > 5) {
     ytPlayer.seekTo(0);
     return;
   }
@@ -4227,7 +4455,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.4.2';
+let CURRENT_APP_VERSION = '1.4.3';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
