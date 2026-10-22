@@ -191,12 +191,49 @@ class DiscordRpcManager {
     }
   }
 
+  cleanMetadata(rawTitle, rawArtist) {
+    let title = String(rawTitle || 'Müzik')
+      .replace(/[\(\[][^\)\]]*(?:official|video|klip|audio|lyric|lyrics|sözleri|hd|4k|hq|remastered|visualizer|uhd|mv)[^\)\]]*[\)\]]/gi, '')
+      .replace(/\b(?:official\s+music\s+video|official\s+video|official\s+audio|video\s+klip|lyric\s+video)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    let artist = String(rawArtist || 'Müzikal')
+      .replace(/\s*-\s*topic\b/gi, '')
+      .replace(/\b(?:netd\s*müzik|netd\s*muzik|doğulu\s*music|dogulu\s*music|dmc|poll\s*production|sony\s*music(?:\s*türkiye)?|universal\s*music|warner\s*music|avrupa\s*müzik|dokuz\s*sekiz\s*müzik|pasaj\s*müzik|garaj\s*müzik|mahzen\s*media|hypers|bordo\s*müzik|kalan\s*müzik|esenshop|esen\s*müzik|seyhan\s*müzik|özdemir\s*plak|vevo|official\s*channel|official|resmi\s*kanal)\b/gi, '')
+      .replace(/^(?:\s*(?:ve|&|,|-|x)\s*)+/i, '')
+      .replace(/(?:\s*(?:ve|&|,|-|x)\s*)+$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const dashParts = title.split(/\s+[-–—]\s+/);
+    if (dashParts.length >= 2) {
+      const possibleArtist = dashParts[0].trim();
+      const possibleSong = dashParts.slice(1).join(' - ').trim();
+      if (possibleArtist.length >= 2 && possibleSong.length >= 2) {
+        if (!artist || artist.length < 2 || /^(?:müzikal|bilinmeyen|unknown|various)/i.test(artist)) {
+          artist = possibleArtist;
+        }
+        title = `${possibleArtist} - ${possibleSong}`;
+      }
+    }
+
+    if (!artist || artist.length < 2) {
+      artist = 'Müzikal';
+    }
+
+    return {
+      title: title.substring(0, 128),
+      artist: artist.substring(0, 128)
+    };
+  }
+
   /**
    * Set currently playing song activity
    * @param {Object} data - { title, artist, duration, currentTime, isPlaying, thumbnail }
    */
   setActivity(data) {
-    if (!data || !data.title) {
+    if (!data || !data.title || !data.isPlaying) {
       this.clearActivity();
       return;
     }
@@ -210,11 +247,11 @@ class DiscordRpcManager {
       return;
     }
 
-    const title = (data.title || 'Müzik').substring(0, 128);
-    const artist = (data.artist || 'Müzikal').substring(0, 128);
+    const cleaned = this.cleanMetadata(data.title, data.artist);
+    const title = cleaned.title;
+    const artist = cleaned.artist;
     const durationSec = Math.max(0, parseInt(data.duration, 10) || 0);
     const currentSec = Math.max(0, parseInt(data.currentTime, 10) || 0);
-    const isPlaying = !!data.isPlaying;
 
     const activity = {
       type: 2, // 2 = LISTENING ("Listening to ...")
@@ -224,21 +261,19 @@ class DiscordRpcManager {
         large_image: (data.thumbnail && typeof data.thumbnail === 'string' && data.thumbnail.startsWith('http'))
           ? data.thumbnail
           : 'https://raw.githubusercontent.com/KaranlikPasa/M-zikal/main/public/logo.png',
-        large_text: title,
+        large_text: 'Müzikal PRO',
         small_image: 'https://raw.githubusercontent.com/KaranlikPasa/M-zikal/main/public/logo.png',
-        small_text: isPlaying ? 'Müzikal PRO' : 'Duraklatıldı'
+        small_text: 'Çalıyor'
       }
     };
 
-    if (isPlaying) {
-      const nowSec = Math.floor(Date.now() / 1000);
-      const startSec = Math.max(0, nowSec - currentSec);
-      activity.timestamps = {
-        start: startSec
-      };
-      if (durationSec > 0 && durationSec > currentSec) {
-        activity.timestamps.end = startSec + durationSec;
-      }
+    const nowSec = Math.floor(Date.now() / 1000);
+    const startSec = Math.max(0, nowSec - currentSec);
+    activity.timestamps = {
+      start: startSec
+    };
+    if (durationSec > 0 && durationSec > currentSec) {
+      activity.timestamps.end = startSec + durationSec;
     }
 
     activity.buttons = [
