@@ -11,8 +11,8 @@ const discordRpc = require('./discord-rpc');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.4.2';
-const APP_VERSION_CODE = 24;
+const APP_VERSION = '1.4.3';
+const APP_VERSION_CODE = 25;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -327,43 +327,214 @@ async function searchYouTubeInnerTube(query) {
   }
 }
 
-// --- SMART RECOMMENDATIONS & ARTIST DIVERSITY ENGINE ---
+// --- SMART RECOMMENDATIONS, OLLAMA AI & ARTIST DIVERSITY ENGINE ---
+
+function normalizeTr(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/İ/g, 'i')
+    .replace(/I/g, 'i')
+    .replace(/ı/g, 'i')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/\blevel\b/g, 'lvbel')
+    .replace(/\bblok\s*3\b/g, 'blok3')
+    .replace(/\blvbel\s*c\s*5\b/g, 'lvbel c5')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stripLabelNoise(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/\s*-\s*topic\b/gi, '')
+    .replace(/[\(\[][^\)\]]*(?:official|video|klip|audio|lyric|lyrics|sözleri|hd|4k|hq|remastered|visualizer|uhd|mv|prod|feat|ft)[^\)\]]*[\)\]]/gi, '')
+    .replace(/\b(?:netd\s*müzik|netd\s*muzik|doğulu\s*music|dogulu\s*music|dmc|poll\s*production|sony\s*music(?:\s*türkiye)?|universal\s*music(?:\s*türkiye)?|warner\s*music|avrupa\s*müzik|dokuz\s*sekiz\s*müzik|pasaj\s*müzik|garaj\s*müzik|mahzen\s*media|hypers|bordo\s*müzik|kalan\s*müzik|esenshop|esen\s*müzik|seyhan\s*müzik|özdemir\s*plak|vevo|official\s*music\s*video|official\s*video|official\s*audio|official\s*channel|official|resmi\s*kanal|video\s*klip|lyric\s*video|music|müzik|muzik|records|yapım|yapim|entertainment|tv|channel)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function extractArtistNames(title, channel) {
   const set = new Set();
-  const cLower = (channel || '').toLowerCase().trim();
-  // Filter out record labels and generic channel markers
-  if (cLower && !/(records|müzik|muzik|music|vevo|entertainment|official|audio|yapım|yapim|netd|video|tv)/i.test(cLower)) {
-    set.add(cLower);
-  }
+
+  // 1. Extract from title ("Sanatçı - Şarkı" or collaborations)
   if (title) {
-    // Look for separators like " - " or " : "
-    const parts = title.split(/\s*[-–—:]\s*/);
+    const cleanT = String(title).replace(/[\(\[][^\)\]]*[\)\]]/g, '').trim();
+    const parts = cleanT.split(/\s+[-–—:]\s+/);
     if (parts.length > 1) {
-      const lead = parts[0].replace(/[\(\[].*?[\)\]]/g, '').trim().toLowerCase();
-      // Split collaborations by &, feat, ft, x, virgül
-      const subs = lead.split(/\s*(?:&|feat\.?|ft\.?|\bx\b|,|\/)\s*/i);
+      const lead = stripLabelNoise(parts[0]);
+      const subs = lead.split(/\s*(?:&|\bve\b|\bfeat\.?|\bft\.?|\bx\b|,|\/|\bwith\b)\s*/i);
       subs.forEach(s => {
         const c = s.trim();
-        if (c.length > 1 && !/(official|video|klip|audio|hd|4k)/i.test(c)) set.add(c);
+        const norm = normalizeTr(c);
+        if (norm.length >= 2 && !/^(official|video|klip|audio|hd|4k|remix|mix|türkçe|turkce|hit)$/i.test(norm)) {
+          set.add(c);
+        }
       });
     }
   }
+
+  // 2. Extract from channel after stripping record labels ("netd müzik ve Gülşen" -> "Gülşen")
+  if (channel) {
+    const cleanedCh = stripLabelNoise(channel);
+    const chSubs = cleanedCh.split(/\s*(?:&|\bve\b|\bfeat\.?|\bft\.?|\bx\b|,|\/)\s*/i);
+    chSubs.forEach(s => {
+      const c = s.trim();
+      const norm = normalizeTr(c);
+      if (norm.length >= 2 && !/^(official|video|klip|audio|hd|4k|remix|mix|netd|dmc|topic|various|artists)$/i.test(norm)) {
+        set.add(c);
+      }
+    });
+  }
+
   return Array.from(set);
 }
 
 function matchesAnyArtist(candidateTitle, candidateChannel, targetArtists) {
   if (!targetArtists || targetArtists.length === 0) return false;
-  const candArtists = extractArtistNames(candidateTitle, candidateChannel);
-  const candStr = `${candidateTitle || ''} ${candidateChannel || ''}`.toLowerCase();
-  for (const target of targetArtists) {
-    const t = (target || '').toLowerCase().trim();
+  const candArtists = extractArtistNames(candidateTitle, candidateChannel).map(a => normalizeTr(a)).filter(Boolean);
+  const candNorm = normalizeTr(`${candidateTitle || ''} ${stripLabelNoise(candidateChannel || '')}`);
+  const candTokens = new Set(candNorm.split(' ').filter(Boolean));
+
+  for (const rawTarget of targetArtists) {
+    const t = normalizeTr(stripLabelNoise(rawTarget));
     if (!t || t.length < 2) continue;
-    if (candStr.includes(t)) return true;
+
+    // Direct phrase match with word boundaries
+    const paddedCand = ` ${candNorm} `;
+    if (paddedCand.includes(` ${t} `)) return true;
+
     for (const c of candArtists) {
-      if (c === t || c.includes(t) || t.includes(c)) return true;
+      if (c === t || ` ${c} `.includes(` ${t} `) || ` ${t} `.includes(` ${c} `)) return true;
+    }
+
+    // Handle multi-word artist where primary token is distinctive (e.g. "lvbel c5" -> "lvbel")
+    const tParts = t.split(' ').filter(w => w.length >= 4);
+    for (const tp of tParts) {
+      if (candTokens.has(tp)) return true;
     }
   }
   return false;
+}
+
+const SMART_SIMILARITY_CLUSTERS = [
+  {
+    id: 'tr_pop_club',
+    keywords: ['gulsen', 'hande yener', 'hadise', 'edis', 'simge', 'demet akalin', 'aleyna tilki', 'murat boz', 'irem derici', 'derya ulug', 'ziynet sali', 'tarkan', 'bengu', 'ajda pekkan', 'mustafa sandal', 'kenan dogulu', 'serdar ortac', 'ece Ronay', 'aylin coskun', 'berksan', 'atilla tas', 'itaat yok', 'bangir bangir', 'opucuk', 'aski olayim'],
+    artists: ['Hande Yener', 'Gülşen', 'Hadise', 'Edis', 'Simge', 'İrem Derici', 'Derya Uluğ', 'Murat Boz', 'Demet Akalın', 'Aleyna Tilki', 'Ziynet Sali', 'Tarkan', 'Bengü', 'Mustafa Sandal', 'Kenan Doğulu', 'Serdar Ortaç']
+  },
+  {
+    id: 'tr_modern_emotional_pop',
+    keywords: ['semicenk', 'dogu swag', 'reynmen', 'burak bulut', 'kurtulus kus', 'rast', 'bilal sonses', 'mustafa ceceli', 'ikilem', 'tugba yurt', 'merve ozbey', 'oguzhan koc', 'buray', 'cem adrian', 'sancak', 'taladro', 'canbay', 'wolker', 'irmak arici', 'nahide babashli', 'melek mosso'],
+    artists: ['Semicenk', 'Doğu Swag', 'Reynmen', 'Merve Özbey', 'Buray', 'Oğuzhan Koç', 'Tuğba Yurt', 'İkilem', 'Bilal Sonses', 'Mustafa Ceceli', 'Melek Mosso', 'Cem Adrian', 'Burak Bulut', 'Kurtuluş Kuş']
+  },
+  {
+    id: 'tr_indie_alt',
+    keywords: ['mert demir', 'mabel matiz', 'melike sahin', 'dedubluman', 'kofn', 'emir can igrek', 'dolu kadehi ters tut', 'yuzyuzeyken konusuruz', 'madrigal', 'adamlar', 'kalben', 'sena sener', 'evdeki saat', 'perdenin ardindakiler', 'can ozan', 'karsu', 'gaye su akyol', 'jakuzi', 'buyuk ev ablukada', 'son feci bisiklet', 'ufuk beydemir'],
+    artists: ['Mert Demir', 'Mabel Matiz', 'Melike Şahin', 'Dedublüman', 'KÖFN', 'Emir Can İğrek', 'Dolu Kadehi Ters Tut', 'Yüzyüzeyken Konuşuruz', 'Madrigal', 'Adamlar', 'Kalben', 'Evdeki Saat', 'Perdenin Ardındakiler', 'Can Ozan']
+  },
+  {
+    id: 'tr_rock',
+    keywords: ['duman', 'mor ve otesi', 'manga', 'teoman', 'sebnem ferah', 'athena', 'yuksek sadakat', 'gripin', 'pinhani', 'model', 'fatma turgut', 'hayko cepkin', 'haluk levent', 'cem karaca', 'baris manco', 'erkin koray', 'pentagram', 'kurband', 'gece yolculari', 'seksendort', 'zakkum', 'emre aydin', 'oguzhan', 'anadolu rock'],
+    artists: ['Duman', 'Mor ve Ötesi', 'maNga', 'Teoman', 'Şebnem Ferah', 'Athena', 'Yüksek Sadakat', 'Gripin', 'Pinhani', 'Fatma Turgut', 'Emre Aydın', 'Seksendört', 'Zakkum', 'Haluk Levent', 'Hayko Cepkin']
+  },
+  {
+    id: 'tr_slow_divas',
+    keywords: ['sezen aksu', 'sertab erener', 'sila', 'nilufer', 'levent yuksel', 'candan ercetin', 'goksel', 'yildiz tilbe', 'funda arar', 'ebru gundes', 'tan tasci', 'yalin', 'gokhan turkmen', 'ferhat gocer', 'toygar isikli', 'sertab', 'sezen'],
+    artists: ['Sezen Aksu', 'Sertab Erener', 'Sıla', 'Nilüfer', 'Yıldız Tilbe', 'Göksel', 'Funda Arar', 'Ebru Gündeş', 'Tan Taşçı', 'Yalın', 'Gökhan Türkmen', 'Levent Yüksel', 'Candan Erçetin']
+  },
+  {
+    id: 'tr_newschool_rap_drill',
+    keywords: ['lvbel c5', 'lvbel', 'cakal', 'uzi', 'blok3', 'motive', 'ati242', 'batuflex', 'reckol', 'organize', 'era7capone', 'poizi', 'heijan', 'muti', 'mavi', 'jeff redd', 'wegh', 'kuty', 'keskin', 'aksan', 'drill', 'trap', 'sefo', 'murda'],
+    artists: ['Lvbel C5', 'Çakal', 'Uzi', 'BLOK3', 'Motive', 'Ati242', 'Batuflex', 'Reckol', 'Organize', 'Era7capone', 'Poizi', 'Sefo', 'Murda', 'Heijan', 'Jeff Redd', 'Wegh']
+  },
+  {
+    id: 'tr_hiphop_classic',
+    keywords: ['ezhel', 'ceza', 'sagopa kajmer', 'sagopa', 'sehinşah', 'sehinsah', 'hidra', 'norm ender', 'gazapizm', 'no 1', 'no1', 'patron', 'anil piyanci', 'allame', 'contra', 'sansar salvo', 'defkhan', 'rota', 'khontkar', 'aspova', 'ozbi', 'ben fero'],
+    artists: ['Ezhel', 'Ceza', 'Sagopa Kajmer', 'Şehinşah', 'Hidra', 'Gazapizm', 'No.1', 'Norm Ender', 'Anıl Piyancı', 'Aspova', 'Patron', 'Allame', 'Ben Fero', 'Contra']
+  },
+  {
+    id: 'tr_arabesk_fantezi',
+    keywords: ['muslum gurses', 'ahmet kaya', 'ibrahim tatlises', 'ferdi tayfur', 'orhan gencebay', 'bergen', 'cengiz kurtoglu', 'hakan altun', 'serkan kaya', 'koray avci', 'azer bulbul', 'gullu', 'kibariye', 'ebru yasar', 'arabesk', 'damar'],
+    artists: ['Müslüm Gürses', 'Ahmet Kaya', 'Ferdi Tayfur', 'Orhan Gencebay', 'Bergen', 'Cengiz Kurtoğlu', 'Hakan Altun', 'İbrahim Tatlıses', 'Koray Avcı', 'Ebru Yaşar', 'Serkan Kaya']
+  },
+  {
+    id: 'global_pop',
+    keywords: ['the weeknd', 'dua lipa', 'billie eilish', 'taylor swift', 'ed sheeran', 'ariana grande', 'bruno mars', 'rihanna', 'lady gaga', 'harry styles', 'justin bieber', 'sia', 'adele', 'lana del rey', 'post malone', 'shawn mendes', 'camila cabello', 'olivia rodrigo', 'sabrina carpenter', 'charlie puth', 'katy perry', 'maroon 5', 'onerepublic', 'selena gomez', 'miley cyrus'],
+    artists: ['The Weeknd', 'Dua Lipa', 'Billie Eilish', 'Taylor Swift', 'Bruno Mars', 'Rihanna', 'Ed Sheeran', 'Ariana Grande', 'Lady Gaga', 'Adele', 'Lana Del Rey', 'Post Malone', 'Sia', 'Justin Bieber', 'OneRepublic']
+  },
+  {
+    id: 'global_hiphop',
+    keywords: ['eminem', 'travis scott', 'drake', 'kendrick lamar', '21 savage', 'future', 'metro boomin', 'kanye west', '50 cent', 'tupac', 'central cee', 'playboi carti', 'don toliver', 'pop smoke', 'lil baby', 'nicki minaj', 'cardi b', 'snoop dogg', 'dr dre', 'jay z', 'asap rocky'],
+    artists: ['Eminem', 'Travis Scott', 'Drake', 'Kendrick Lamar', 'Metro Boomin', '21 Savage', 'Future', '50 Cent', 'Kanye West', 'Central Cee', 'Don Toliver', 'Pop Smoke']
+  },
+  {
+    id: 'global_rock',
+    keywords: ['coldplay', 'linkin park', 'imagine dragons', 'arctic monkeys', 'queen', 'nirvana', 'metallica', 'guns n roses', 'red hot chili peppers', 'the neighbourhood', 'twenty one pilots', 'green day', 'evanescence', 'muse', 'radiohead', 'ac dc', 'bon jovi', 'scorpions'],
+    artists: ['Coldplay', 'Linkin Park', 'Imagine Dragons', 'Arctic Monkeys', 'Queen', 'The Neighbourhood', 'Twenty One Pilots', 'Nirvana', 'Red Hot Chili Peppers', 'Evanescence', 'Muse']
+  },
+  {
+    id: 'electronic_phonk',
+    keywords: ['alan walker', 'david guetta', 'calvin harris', 'tiesto', 'avicii', 'marshmello', 'martin garrix', 'kordhell', 'interworld', 'dvrst', 'hensonn', 'phonk', 'brazilian phonk', 'skrillex', 'daft punk', 'kygo'],
+    artists: ['Calvin Harris', 'David Guetta', 'Avicii', 'Alan Walker', 'Tiësto', 'Martin Garrix', 'Marshmello', 'Kygo', 'Kordhell', 'Interworld']
+  }
+];
+
+async function queryOllamaRecommendations(currentTitle, currentArtist, excludeArtists = []) {
+  try {
+    const cleanTitle = stripLabelNoise(currentTitle || '');
+    const parsedArtists = extractArtistNames(currentTitle, currentArtist);
+    const mainArtist = parsedArtists[0] || stripLabelNoise(currentArtist || '') || 'Bilinmeyen';
+    const excludedStr = Array.from(new Set([...parsedArtists, ...excludeArtists])).slice(0, 12).join(', ');
+
+    const prompt = `Sen uzman bir müzik DJ'isin. Şu an çalan şarkı: "${mainArtist} - ${cleanTitle}".
+Bu şarkının tam müzik türünü, dilini, dönemini ve enerjisini analiz et.
+Aynı türde, aynı dilde ve aynı atmosferde olan ama FARKLI sanatçılara ait 6 popüler gerçek şarkı öner.
+KESİNLİKLE şu sanatçıları önerme: ${excludedStr}.
+Sadece aşağıdaki JSON dizisi formatında yanıt ver, başka hiçbir açıklama yazma:
+[{"artist": "Sanatçı Adı", "song": "Şarkı Adı"}]`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4500);
+
+    const res = await fetch('http://127.0.0.1:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama3.1:8b',
+        prompt: prompt,
+        stream: false,
+        options: {
+          temperature: 0.55,
+          num_predict: 220
+        }
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    const rawText = (data && data.response) ? String(data.response) : '';
+    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(it => it && it.artist && it.song && !matchesAnyArtist(it.song, it.artist, [mainArtist, ...excludeArtists]))
+      .slice(0, 6);
+  } catch (e) {
+    // Ollama not running or timed out — silent fallback
+    return [];
+  }
 }
 
 async function getRelatedRecommendations(videoId, currentArtist, currentTitle, excludeArtists = [], excludeIds = []) {
@@ -371,103 +542,171 @@ async function getRelatedRecommendations(videoId, currentArtist, currentTitle, e
   const allExcludedArtists = [
     ...new Set([
       ...currentArtists,
-      (currentArtist || '').toLowerCase().trim(),
-      ...(excludeArtists || []).map(a => (a || '').toLowerCase().trim()).filter(Boolean)
+      stripLabelNoise(currentArtist || ''),
+      ...(excludeArtists || []).map(a => stripLabelNoise(a || '')).filter(Boolean)
     ])
-  ];
+  ].filter(a => a && a.length >= 2);
+
   const seenIds = new Set((excludeIds || []).filter(Boolean));
   if (videoId) seenIds.add(videoId);
 
+  // Track artists already added to this recommendation batch so we never return 3 songs by the same artist
+  const batchExcludedArtists = [...allExcludedArtists];
   let candidates = [];
 
-  // 1. YouTube InnerTube Watch-Next / Radio API (YouTube's genre & style algorithm)
-  if (videoId) {
-    try {
-      const res = await fetch('https://www.youtube.com/youtubei/v1/next?prettyPrint=false', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'X-YouTube-Client-Name': '1',
-          'X-YouTube-Client-Version': '2.20240101.00.00',
-          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
-        },
-        body: JSON.stringify({
-          context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'tr', gl: 'TR' } },
-          videoId: videoId
-        })
-      });
+  const addCandidateIfValid = (item) => {
+    if (!item || !item.id || !item.title || seenIds.has(item.id)) return false;
+    if (!isGenuineMusicVideo(item.title, item.channel || '', item.duration || '', '')) return false;
+    if (matchesAnyArtist(item.title, item.channel, batchExcludedArtists)) return false;
 
-      if (res.ok) {
-        const data = await res.json();
-        const results = data.contents?.twoColumnWatchNextResults?.secondaryResults?.secondaryResults?.results || [];
-        for (const it of results) {
-          let id = '', title = '', channel = '', duration = '', thumb = '';
-          if (it.lockupViewModel) {
-            const vm = it.lockupViewModel;
-            id = vm.contentId || '';
-            const meta = vm.metadata?.lockupMetadataViewModel;
-            title = meta?.title?.content || '';
-            channel = meta?.metadata?.contentMetadataViewModel?.metadataRows?.[0]?.metadataParts?.[0]?.text?.content || '';
-            const overlays = vm.contentImage?.thumbnailViewModel?.overlays || vm.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel?.overlays || [];
-            for (const ov of overlays) {
-              const badge = ov?.thumbnailBottomOverlayViewModel?.badges?.[0]?.thumbnailBadgeViewModel;
-              if (badge && badge.text) {
-                duration = badge.text;
-                break;
-              }
-            }
-            thumb = vm.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel?.image?.sources?.[0]?.url ||
-                    vm.contentImage?.thumbnailViewModel?.image?.sources?.[0]?.url ||
-                    (id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : '');
-          } else if (it.compactVideoRenderer) {
-            const v = it.compactVideoRenderer;
-            id = v.videoId || '';
-            title = v.title?.simpleText || v.title?.runs?.map(x => x.text).join('') || '';
-            channel = v.shortBylineText?.runs?.map(x => x.text).join('') || '';
-            duration = v.lengthText?.simpleText || '';
-            thumb = v.thumbnail?.thumbnails?.[0]?.url || (id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : '');
+    seenIds.add(item.id);
+    const itemArtists = extractArtistNames(item.title, item.channel);
+    if (itemArtists.length > 0) {
+      batchExcludedArtists.push(...itemArtists);
+    }
+    candidates.push({
+      id: item.id,
+      title: item.title.trim(),
+      channel: (item.channel || '').trim(),
+      duration: item.duration || '3:30',
+      thumbnail: item.thumbnail || `https://i.ytimg.com/vi/${item.id}/mqdefault.jpg`
+    });
+    return true;
+  };
+
+  // Run Ollama AI and YouTube Radio Mix in parallel for speed & accuracy
+  const [ollamaSuggestions, radioItems] = await Promise.all([
+    queryOllamaRecommendations(currentTitle, currentArtist, allExcludedArtists),
+    (async () => {
+      if (!videoId) return [];
+      const items = [];
+      try {
+        const res = await fetch('https://www.youtube.com/youtubei/v1/next?prettyPrint=false', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'X-YouTube-Client-Name': '1',
+            'X-YouTube-Client-Version': '2.20240101.00.00',
+            'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+          },
+          body: JSON.stringify({
+            context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'tr', gl: 'TR' } },
+            videoId: videoId,
+            playlistId: `RD${videoId}`
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          // Check both Radio Playlist panel and secondary watch-next results
+          const playlistContents = data.contents?.twoColumnWatchNextResults?.playlist?.playlist?.contents || [];
+          for (const plItem of playlistContents) {
+            const pv = plItem.playlistPanelVideoRenderer;
+            if (!pv) continue;
+            const id = pv.videoId || '';
+            const title = pv.title?.simpleText || pv.title?.runs?.map(x => x.text).join('') || '';
+            const channel = pv.shortBylineText?.runs?.map(x => x.text).join('') || '';
+            const duration = pv.lengthText?.simpleText || '';
+            const thumb = pv.thumbnail?.thumbnails?.[0]?.url || (id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : '');
+            if (id && title) items.push({ id, title, channel, duration, thumbnail: thumb });
           }
 
-          if (!id || !title || seenIds.has(id)) continue;
-          if (!isGenuineMusicVideo(title, channel, duration, '')) continue;
-          // Filter out the same artist and recently played artists!
-          if (matchesAnyArtist(title, channel, allExcludedArtists)) continue;
-
-          seenIds.add(id);
-          candidates.push({ id, title: title.trim(), channel: channel.trim(), duration, thumbnail: thumb });
+          const results = data.contents?.twoColumnWatchNextResults?.secondaryResults?.secondaryResults?.results || [];
+          for (const it of results) {
+            let id = '', title = '', channel = '', duration = '', thumb = '';
+            if (it.lockupViewModel) {
+              const vm = it.lockupViewModel;
+              id = vm.contentId || '';
+              const meta = vm.metadata?.lockupMetadataViewModel;
+              title = meta?.title?.content || '';
+              channel = meta?.metadata?.contentMetadataViewModel?.metadataRows?.[0]?.metadataParts?.[0]?.text?.content || '';
+              const overlays = vm.contentImage?.thumbnailViewModel?.overlays || vm.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel?.overlays || [];
+              for (const ov of overlays) {
+                const badge = ov?.thumbnailBottomOverlayViewModel?.badges?.[0]?.thumbnailBadgeViewModel;
+                if (badge && badge.text) {
+                  duration = badge.text;
+                  break;
+                }
+              }
+              thumb = vm.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel?.image?.sources?.[0]?.url ||
+                      vm.contentImage?.thumbnailViewModel?.image?.sources?.[0]?.url ||
+                      (id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : '');
+            } else if (it.compactVideoRenderer) {
+              const v = it.compactVideoRenderer;
+              id = v.videoId || '';
+              title = v.title?.simpleText || v.title?.runs?.map(x => x.text).join('') || '';
+              channel = v.shortBylineText?.runs?.map(x => x.text).join('') || '';
+              duration = v.lengthText?.simpleText || '';
+              thumb = v.thumbnail?.thumbnails?.[0]?.url || (id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : '');
+            }
+            if (id && title) items.push({ id, title, channel, duration, thumbnail: thumb });
+          }
         }
+      } catch (e) {
+        console.warn('InnerTube next recommendations error:', e.message);
       }
-    } catch (e) {
-      console.warn('InnerTube next recommendations error:', e.message);
+      return items;
+    })()
+  ]);
+
+  // 1. Resolve Ollama AI song suggestions first (highest genre & vibe relevance)
+  if (ollamaSuggestions && ollamaSuggestions.length > 0) {
+    const resolvedOllama = await Promise.all(
+      ollamaSuggestions.slice(0, 4).map(async (sug) => {
+        try {
+          const hits = await searchYouTube(`${sug.artist} ${sug.song}`);
+          return hits.find(h => h && h.id && !seenIds.has(h.id) && !matchesAnyArtist(h.title, h.channel, allExcludedArtists)) || null;
+        } catch (e) {
+          return null;
+        }
+      })
+    );
+    for (const item of resolvedOllama) {
+      if (item) addCandidateIfValid(item);
     }
   }
 
-  // 2. High-quality genre/vibe fallback search if candidates are insufficient
-  if (candidates.length < 6) {
+  // 2. Add filtered YouTube Radio / Watch-Next items (same genre/era, strictly different artists)
+  for (const rItem of radioItems) {
+    addCandidateIfValid(rItem);
+    if (candidates.length >= 10) break;
+  }
+
+  // 3. Peer-Artist Similarity Cluster Search (if more diverse tracks needed)
+  if (candidates.length < 8) {
     try {
-      const combined = `${currentTitle || ''} ${currentArtist || ''}`.toLowerCase();
-      let genreQuery = 'türkiye top popüler hit müzik şarkılar';
-      if (/rap|trap|hiphop|hip hop|drill|flow|r&b|rb/i.test(combined)) {
-        genreQuery = 'türkçe rap hip hop hit şarkılar official audio';
-      } else if (/rock|metal|anadolu rock/i.test(combined)) {
-        genreQuery = 'türkçe rock hit şarkılar';
-      } else if (/akustik|slow|hüzün|cover|romantik/i.test(combined)) {
-        genreQuery = 'türkçe akustik slow popüler şarkılar';
-      } else if (currentArtists[0]) {
-        genreQuery = `${currentArtists[0]} benzeri şarkılar hit`;
+      const combinedNorm = normalizeTr(`${currentTitle || ''} ${currentArtist || ''}`);
+      let matchedCluster = SMART_SIMILARITY_CLUSTERS.find(c =>
+        c.keywords.some(k => ` ${combinedNorm} `.includes(` ${normalizeTr(k)} `))
+      );
+
+      if (!matchedCluster) {
+        // Detect if Turkish or Global based on characters / common words
+        const isTurkish = /[çğıöşüÇĞİÖŞÜ]|\b(ve|bir|bu|için|ile|ben|sen|yok|var|aşk|ask|kalp|gece|göz|goz|sevda|yalnız|yalniz|müzik|muzik|şarkı|sarki)\b/i.test(`${currentTitle || ''} ${currentArtist || ''}`);
+        matchedCluster = isTurkish ? SMART_SIMILARITY_CLUSTERS[0] : SMART_SIMILARITY_CLUSTERS[8];
       }
 
-      const searchHits = await searchYouTube(genreQuery);
-      for (const t of searchHits) {
-        if (!t || !t.id || seenIds.has(t.id)) continue;
-        if (matchesAnyArtist(t.title, t.channel, allExcludedArtists)) continue;
-        seenIds.add(t.id);
-        candidates.push(t);
-        if (candidates.length >= 15) break;
+      const availablePeers = matchedCluster.artists.filter(p => !matchesAnyArtist(p, p, batchExcludedArtists));
+      // Shuffle peers
+      for (let i = availablePeers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [availablePeers[i], availablePeers[j]] = [availablePeers[j], availablePeers[i]];
+      }
+
+      const selectedPeers = availablePeers.slice(0, 3);
+      const peerResults = await Promise.all(
+        selectedPeers.map(peer => searchYouTube(`${peer} official audio`).catch(() => []))
+      );
+
+      for (const hits of peerResults) {
+        for (const t of hits) {
+          if (addCandidateIfValid(t)) break; // Take 1 top hit per peer artist for maximum variety!
+        }
+        if (candidates.length >= 12) break;
       }
     } catch (e) {
-      console.warn('Fallback recommendations error:', e.message);
+      console.warn('Cluster similarity recommendations error:', e.message);
     }
   }
 
