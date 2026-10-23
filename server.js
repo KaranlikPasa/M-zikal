@@ -1032,6 +1032,7 @@ async function runInAppUpdate() {
       const rawBase = 'https://raw.githubusercontent.com/KaranlikPasa/M-zikal/main';
       const updateFiles = [
         { remote: `${rawBase}/server.js`, local: path.join(__dirname, 'server.js') },
+        { remote: `${rawBase}/discord-rpc.js`, local: path.join(__dirname, 'discord-rpc.js') },
         { remote: `${rawBase}/Muzikal.bat`, local: path.join(__dirname, 'Muzikal.bat') },
         { remote: `${rawBase}/README.md`, local: path.join(__dirname, 'README.md') },
         { remote: `${rawBase}/public/app.js`, local: path.join(PUBLIC_DIR, 'app.js') },
@@ -2147,18 +2148,20 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ success: true, message: 'Sunucu yeniden başlatılıyor...' }));
       setTimeout(() => {
         try {
+          try { server.close(); } catch (e) {}
           const child = spawn(process.argv[0], process.argv.slice(1), {
             cwd: __dirname,
             detached: true,
+            windowsHide: true,
             stdio: 'ignore'
           });
           child.unref();
-          process.exit(0);
+          setTimeout(() => process.exit(0), 200);
         } catch (e) {
           console.error('Restart error:', e);
           process.exit(0);
         }
-      }, 1000);
+      }, 400);
       return;
     }
 
@@ -2209,13 +2212,31 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  const ip = getLocalNetworkIp();
-  console.log(`🎵 Müzikal Server running!`);
-  console.log(`   - Bu Bilgisayar: http://localhost:${PORT}`);
-  console.log(`   - Ağdaki Diğer PC ve Telefonlar: http://${ip}:${PORT}`);
-  console.log(`   - Mobil APK İndirme: http://${ip}:${PORT}/Muzikal.apk`);
-  if (discordRpc.enabled && discordRpc.clientId) {
-    discordRpc.connect();
+let listenRetries = 0;
+function startListening() {
+  server.listen(PORT, '0.0.0.0', () => {
+    const ip = getLocalNetworkIp();
+    console.log(`🎵 Müzikal Server running!`);
+    console.log(`   - Bu Bilgisayar: http://localhost:${PORT}`);
+    console.log(`   - Ağdaki Diğer PC ve Telefonlar: http://${ip}:${PORT}`);
+    console.log(`   - Mobil APK İndirme: http://${ip}:${PORT}/Muzikal.apk`);
+    if (discordRpc.enabled && discordRpc.clientId) {
+      discordRpc.connect();
+    }
+  });
+}
+
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE' && listenRetries < 8) {
+    listenRetries++;
+    console.warn(`Port ${PORT} busy, retrying in 600ms (${listenRetries}/8)...`);
+    setTimeout(() => {
+      try { server.close(); } catch (e) {}
+      startListening();
+    }, 600);
+  } else {
+    console.error('Server listen error:', err);
   }
 });
+
+startListening();
