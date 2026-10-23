@@ -4199,6 +4199,10 @@ function setupEventListeners() {
 
       // 1. Android Native In-App Update
       if (window.MuzikalNative && typeof window.MuzikalNative.startDirectUpdate === 'function') {
+        const finalApkUrl = (targetUrl && targetUrl.toLowerCase().endsWith('.apk'))
+          ? targetUrl
+          : 'https://github.com/KaranlikPasa/M-zikal/releases/latest/download/Muzikal.apk';
+
         window.onUpdateDownloadProgress = function(percent, statusText) {
           if (progressFill) progressFill.style.width = percent + '%';
           if (progressPercent) progressPercent.textContent = percent + '%';
@@ -4216,14 +4220,17 @@ function setupEventListeners() {
           if (btnDismiss) btnDismiss.style.display = 'inline-block';
         };
 
-        window.MuzikalNative.startDirectUpdate(targetUrl);
+        window.MuzikalNative.startDirectUpdate(finalApkUrl);
         return;
       }
 
       // 2. Android Browser (Fallback to direct APK download link)
       if (isAndroid) {
+        const finalApkUrl = (targetUrl && targetUrl.toLowerCase().endsWith('.apk'))
+          ? targetUrl
+          : 'https://github.com/KaranlikPasa/M-zikal/releases/latest/download/Muzikal.apk';
         showToast('APK doğrudan indiriliyor...');
-        window.location.href = targetUrl;
+        window.location.href = finalApkUrl;
         setTimeout(() => {
           btnStartInAppUpdate.disabled = false;
           btnStartInAppUpdate.innerHTML = '<span>Doğrudan Uygulamada Güncelle</span>';
@@ -4233,14 +4240,33 @@ function setupEventListeners() {
       }
 
       // 3. PC (Windows) In-App Hot Update
+      let applyStarted = false;
       try {
         const resp = await fetch('/api/update/in-app-apply', { method: 'POST' });
-        const data = await resp.json();
-        if (!data.success && data.message) {
-          showToast(data.message);
+        if (resp.ok) {
+          applyStarted = true;
+          const data = await resp.json();
+          if (!data.success && data.message) {
+            showToast(data.message);
+          }
         }
       } catch (err) {
         console.warn('In-app apply request error:', err);
+      }
+
+      if (!applyStarted) {
+        // Local server was closed/restarting -> directly download Muzikal-Setup.exe so user is never stuck at 3%!
+        if (progressFill) progressFill.style.width = '100%';
+        if (progressPercent) progressPercent.textContent = '100%';
+        if (progressStatus) progressStatus.textContent = 'Kurulum paketi (Muzikal-Setup.exe) indiriliyor...';
+        showToast('Arka plan sunucusu kapalı olduğu için doğrudan kurulum paketi indiriliyor...');
+        window.location.href = 'https://github.com/KaranlikPasa/M-zikal/releases/latest/download/Muzikal-Setup.exe';
+        setTimeout(() => {
+          btnStartInAppUpdate.disabled = false;
+          btnStartInAppUpdate.innerHTML = '<span>Tekrar Dene</span>';
+          if (btnDismiss) btnDismiss.style.display = 'inline-block';
+        }, 2500);
+        return;
       }
 
       // Poll progress every 300ms
@@ -4503,7 +4529,7 @@ async function checkForAppUpdates(isManual = false) {
       let downloadUrl = release.html_url || 'https://github.com/KaranlikPasa/M-zikal/releases/latest';
       if (isAndroid) {
         const apkAsset = release.assets && release.assets.find(a => a.name.endsWith('.apk'));
-        if (apkAsset) downloadUrl = apkAsset.browser_download_url;
+        downloadUrl = apkAsset ? apkAsset.browser_download_url : `https://github.com/KaranlikPasa/M-zikal/releases/download/v${remoteTag}/Muzikal.apk`;
       } else {
         const zipAsset = release.assets && (
           release.assets.find(a => a.name.toLowerCase().endsWith('-windows-x64.zip')) ||
