@@ -513,7 +513,7 @@ function getStoredLibrary() {
   return { favorites: [], playlists: [], history: [] };
 }
 
-function persistLibrary(lib) {
+function persistLibrary(lib, skipCloudSync = false) {
   try {
     const json = JSON.stringify(lib);
     localStorage.setItem('muzikal_library_data', json);
@@ -531,6 +531,9 @@ function persistLibrary(lib) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: state.user.email, library: lib })
       }).catch(() => {});
+      if (!skipCloudSync && typeof scheduleFirebaseCloudSync === 'function') {
+        scheduleFirebaseCloudSync(lib);
+      }
     }
   } catch (e) {}
 }
@@ -4574,19 +4577,252 @@ window.addEventListener('focus', () => {
   }
 });
 
-// --- GOOGLE SIGN-IN & PROFILE MANAGEMENT ---
+// --- FIREBASE CLOUD ACCOUNT & PROFILE MANAGEMENT (muzikal-a1064) ---
+const FIREBASE_DB_URL = 'https://muzikal-a1064-default-rtdb.firebaseio.com';
+let currentAuthMode = 'login'; // 'login' | 'register'
+let firebaseSyncTimer = null;
+
+function toFirebaseUserKey(identifier) {
+  if (!identifier) return '';
+  return identifier
+    .trim()
+    .replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
+    .replace(/Ğ/g, 'g').replace(/ğ/g, 'g')
+    .replace(/Ü/g, 'u').replace(/ü/g, 'u')
+    .replace(/Ş/g, 's').replace(/ş/g, 's')
+    .replace(/Ö/g, 'o').replace(/ö/g, 'o')
+    .replace(/Ç/g, 'c').replace(/ç/g, 'c')
+    .toLowerCase()
+    .replace(/@/g, '_at_')
+    .replace(/\./g, '_dot_')
+    .replace(/[^a-z0-9_-]/g, '_');
+}
+
+// Pure-JS SHA-256 so hashing works identically on Android WebView, localhost, and LAN HTTP
+function sha256Hex(ascii) {
+  function rightRotate(value, amount) {
+    return (value >>> amount) | (value << (32 - amount));
+  }
+  const mathPow = Math.pow;
+  const maxWord = mathPow(2, 32);
+  let result = '';
+  const words = [];
+  const utf8 = unescape(encodeURIComponent(ascii));
+  const asciiBitLength = utf8.length * 8;
+  let hash = sha256Hex.h = sha256Hex.h || [];
+  const k = sha256Hex.k = sha256Hex.k || [];
+  let primeCounter = k.length;
+  const isComposite = {};
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (let i = 0; i < 313; i += candidate) isComposite[i] = candidate;
+      hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0;
+      k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+    }
+  }
+  hash = hash.slice(0, 8);
+  let str = utf8 + '\x80';
+  while ((str.length % 64) - 56) str += '\x00';
+  for (let i = 0; i < str.length; i++) {
+    const j = str.charCodeAt(i);
+    words[i >> 2] |= j << ((3 - (i % 4)) * 8);
+  }
+  words[words.length] = (asciiBitLength / maxWord) | 0;
+  words[words.length] = asciiBitLength;
+  for (let j = 0; j < words.length;) {
+    const w = words.slice(j, (j += 16));
+    const oldHash = hash.slice(0);
+    for (let i = 0; i < 64; i++) {
+      const w15 = w[i - 15], w2 = w[i - 2];
+      const a = hash[0], e = hash[4];
+      const temp1 =
+        hash[7] +
+        (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) +
+        ((e & hash[5]) ^ (~e & hash[6])) +
+        k[i] +
+        (w[i] =
+          i < 16
+            ? w[i]
+            : (w[i - 16] +
+                (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
+                w[i - 7] +
+                (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) |
+              0);
+      const temp2 =
+        (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) +
+        ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+      hash = [(temp1 + temp2) | 0].concat(hash);
+      hash[4] = (hash[4] + temp1) | 0;
+      hash.pop();
+    }
+    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
+  }
+  for (let i = 0; i < 8; i++) {
+    for (let j = 3; j + 1; j--) {
+      const b = (hash[i] >> (j * 8)) & 255;
+      result += (b < 16 ? 0 : '') + b.toString(16);
+    }
+  }
+  return result;
+}
+
+function hashAccountPassword(password, userKey) {
+  return sha256Hex(`muzikal_cloud_v1:${userKey}:${password}`);
+}
+
+async function firebaseGetUser(userKey) {
+  if (!userKey) return null;
+  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(userKey)}.json`, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' },
+    cache: 'no-store'
+  });
+  if (!res.ok) throw new Error(`Firebase HTTP ${res.status}`);
+  return await res.json();
+}
+
+async function firebasePutUser(userKey, record) {
+  if (!userKey) return null;
+  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(userKey)}.json`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(record)
+  });
+  if (!res.ok) throw new Error(`Firebase HTTP ${res.status}`);
+  return await res.json();
+}
+
+async function firebaseSaveLibrary(userKey, library) {
+  if (!userKey) return;
+  const cleanLib = {
+    favorites: (library && library.favorites) || [],
+    playlists: (library && library.playlists) || [],
+    history: ((library && library.history) || []).slice(0, 50)
+  };
+  await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(userKey)}/library.json`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cleanLib)
+  });
+  const now = Date.now();
+  await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(userKey)}/user/lastSync.json`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(now)
+  });
+  if (state.user) {
+    state.user.lastSync = now;
+    localStorage.setItem('muzikal_user', JSON.stringify(state.user));
+  }
+}
+
+function scheduleFirebaseCloudSync(lib) {
+  if (!state.user || (!state.user.userKey && !state.user.email)) return;
+  if (firebaseSyncTimer) clearTimeout(firebaseSyncTimer);
+  firebaseSyncTimer = setTimeout(() => {
+    const userKey = state.user.userKey || toFirebaseUserKey(state.user.email);
+    firebaseSaveLibrary(userKey, lib || state.library).catch(e => {
+      console.warn('Auto Firebase sync warning:', e);
+    });
+  }, 600);
+}
+
+function mergeLibraries(baseLib, incomingLib) {
+  const b = baseLib || { favorites: [], playlists: [], history: [] };
+  const inc = incomingLib || { favorites: [], playlists: [], history: [] };
+
+  const favMap = new Map();
+  (inc.favorites || []).forEach(s => { if (s && s.id) favMap.set(s.id, s); });
+  (b.favorites || []).forEach(s => { if (s && s.id) favMap.set(s.id, s); });
+
+  const plMap = new Map();
+  (inc.playlists || []).forEach(p => {
+    if (!p) return;
+    const key = p.id || p.name;
+    plMap.set(key, { ...p, songs: [...(p.songs || [])] });
+  });
+  (b.playlists || []).forEach(p => {
+    if (!p) return;
+    const key = p.id || p.name;
+    if (plMap.has(key)) {
+      const existing = plMap.get(key);
+      const songMap = new Map();
+      (existing.songs || []).forEach(s => { if (s && s.id) songMap.set(s.id, s); });
+      (p.songs || []).forEach(s => { if (s && s.id) songMap.set(s.id, s); });
+      existing.songs = Array.from(songMap.values());
+      if (p.cover && !existing.cover) existing.cover = p.cover;
+    } else {
+      plMap.set(key, { ...p, songs: [...(p.songs || [])] });
+    }
+  });
+
+  const histMap = new Map();
+  (b.history || []).forEach(s => { if (s && s.id) histMap.set(s.id, s); });
+  (inc.history || []).forEach(s => { if (s && s.id && !histMap.has(s.id)) histMap.set(s.id, s); });
+
+  return {
+    favorites: Array.from(favMap.values()),
+    playlists: Array.from(plMap.values()),
+    history: Array.from(histMap.values()).slice(0, 50)
+  };
+}
+
+function setAuthMode(mode) {
+  currentAuthMode = mode === 'register' ? 'register' : 'login';
+  const tabLogin = document.getElementById('auth-tab-login');
+  const tabRegister = document.getElementById('auth-tab-register');
+  const nameGroup = document.getElementById('auth-name-group');
+  const btnText = document.getElementById('google-login-btn-text');
+  const errBox = document.getElementById('auth-error-box');
+  if (errBox) errBox.style.display = 'none';
+
+  if (currentAuthMode === 'register') {
+    if (tabRegister) {
+      tabRegister.style.background = 'linear-gradient(135deg, #8b5cf6, #6366f1)';
+      tabRegister.style.color = '#fff';
+    }
+    if (tabLogin) {
+      tabLogin.style.background = 'transparent';
+      tabLogin.style.color = 'var(--text-muted)';
+    }
+    if (nameGroup) nameGroup.style.display = 'block';
+    if (btnText) btnText.textContent = 'Hesap Oluştur & Listelerimi Buluta Kaydet';
+  } else {
+    if (tabLogin) {
+      tabLogin.style.background = 'linear-gradient(135deg, #8b5cf6, #6366f1)';
+      tabLogin.style.color = '#fff';
+    }
+    if (tabRegister) {
+      tabRegister.style.background = 'transparent';
+      tabRegister.style.color = 'var(--text-muted)';
+    }
+    if (nameGroup) nameGroup.style.display = 'none';
+    if (btnText) btnText.textContent = 'Giriş Yap & Listelerimi Getir';
+  }
+}
+
+function showAuthError(msg) {
+  const errBox = document.getElementById('auth-error-box');
+  if (errBox) {
+    errBox.textContent = msg;
+    errBox.style.display = 'block';
+  } else {
+    showToast(msg);
+  }
+}
+
 function renderUserAccount() {
   if (state.user && state.user.email) {
     if (elements.btnOpenGoogleLogin) elements.btnOpenGoogleLogin.style.display = 'none';
     if (elements.userProfileCard) elements.userProfileCard.style.display = 'flex';
-    if (elements.userProfileAvatar) elements.userProfileAvatar.src = state.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(state.user.name || 'Kullanici')}&background=4285F4&color=fff&bold=true`;
+    if (elements.userProfileAvatar) elements.userProfileAvatar.src = state.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(state.user.name || 'Kullanici')}&background=8b5cf6&color=fff&bold=true`;
     if (elements.userProfileName) elements.userProfileName.textContent = state.user.name || 'Kullanıcı';
     if (elements.userProfileEmail) elements.userProfileEmail.textContent = state.user.email;
 
     if (elements.btnTopbarUser) {
       if (elements.topbarGoogleSvg) elements.topbarGoogleSvg.style.display = 'none';
       if (elements.topbarUserAvatar) {
-        elements.topbarUserAvatar.src = state.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(state.user.name || 'Kullanici')}&background=4285F4&color=fff&bold=true`;
+        elements.topbarUserAvatar.src = state.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(state.user.name || 'Kullanici')}&background=8b5cf6&color=fff&bold=true`;
         elements.topbarUserAvatar.style.display = 'block';
       }
       if (elements.topbarUserName) {
@@ -4600,71 +4836,156 @@ function renderUserAccount() {
     if (elements.btnTopbarUser) {
       if (elements.topbarGoogleSvg) elements.topbarGoogleSvg.style.display = 'block';
       if (elements.topbarUserAvatar) elements.topbarUserAvatar.style.display = 'none';
-      if (elements.topbarUserName) elements.topbarUserName.textContent = 'Google Giriş';
+      if (elements.topbarUserName) elements.topbarUserName.textContent = 'Giriş Yap / Kayıt Ol';
     }
   }
 }
 
-async function loginWithGoogle(email, name = '') {
-  email = (email || '').trim().toLowerCase();
-  if (!email || !email.includes('@')) {
-    showToast('Lütfen geçerli bir e-posta adresi girin');
+async function loginWithGoogle(rawIdentifier, rawName = '', rawPassword = '') {
+  const identifier = (rawIdentifier || '').trim();
+  const passwordInputEl = document.getElementById('auth-password-input');
+  const password = (rawPassword || (passwordInputEl ? passwordInputEl.value : '') || '').trim();
+
+  if (!identifier || identifier.length < 2) {
+    showAuthError('⚠️ Lütfen bir kullanıcı adı veya e-posta adresi girin.');
+    return;
+  }
+  if (!password || password.length < 4) {
+    showAuthError('⚠️ Güvenliğiniz için lütfen en az 4 karakterli bir şifre girin.');
     return;
   }
 
-  name = (name || email.split('@')[0]).trim();
-  const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4285F4&color=fff&bold=true`;
+  const userKey = toFirebaseUserKey(identifier);
+  if (!userKey) {
+    showAuthError('⚠️ Geçersiz kullanıcı adı veya e-posta.');
+    return;
+  }
+
+  const passwordHash = hashAccountPassword(password, userKey);
+  const displayName = (rawName || identifier.split('@')[0]).trim();
+  const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=8b5cf6&color=fff&bold=true`;
 
   const submitBtn = elements.btnSubmitGoogleLogin;
+  const errBox = document.getElementById('auth-error-box');
+  if (errBox) errBox.style.display = 'none';
+
   let originalText = '';
   if (submitBtn) {
     const textSpan = submitBtn.querySelector('span');
     if (textSpan) {
       originalText = textSpan.textContent;
-      textSpan.textContent = 'Giriş yapılıyor...';
+      textSpan.textContent = currentAuthMode === 'register' ? 'Hesap oluşturuluyor...' : 'Buluta bağlanılıyor...';
     }
     submitBtn.disabled = true;
   }
 
   try {
-    const res = await fetch('/api/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email,
-        name,
-        avatar,
-        library: state.library
-      })
-    });
+    const existingRecord = await firebaseGetUser(userKey);
 
-    const data = await res.json();
-    if (data.success && data.user) {
-      state.user = data.user;
-      localStorage.setItem('muzikal_user', JSON.stringify(data.user));
-
-      if (data.library) {
-        state.library = data.library;
-        persistLibrary(state.library);
+    if (currentAuthMode === 'register') {
+      // REGISTER FLOW
+      if (existingRecord && existingRecord.passwordHash) {
+        if (existingRecord.passwordHash !== passwordHash) {
+          showAuthError('❌ Bu kullanıcı adı/e-posta zaten alınmış! Size aitse "Giriş Yap" sekmesinden şifrenizle giriş yapın.');
+          return;
+        }
+        // If same password, treat as login + merge
       }
+
+      const mergedLib = existingRecord && existingRecord.library
+        ? mergeLibraries(state.library, existingRecord.library)
+        : {
+            favorites: (state.library && state.library.favorites) || [],
+            playlists: (state.library && state.library.playlists) || [],
+            history: ((state.library && state.library.history) || []).slice(0, 50)
+          };
+
+      const userObj = {
+        userKey,
+        email: identifier.toLowerCase(),
+        name: displayName,
+        avatar,
+        createdAt: (existingRecord && existingRecord.user && existingRecord.user.createdAt) || Date.now(),
+        lastSync: Date.now()
+      };
+
+      await firebasePutUser(userKey, {
+        user: userObj,
+        passwordHash,
+        library: mergedLib
+      });
+
+      state.user = userObj;
+      state.library = mergedLib;
+      localStorage.setItem('muzikal_user', JSON.stringify(userObj));
+      persistLibrary(state.library, true);
+
+      // Also sync to local PC server if running
+      fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userObj.email, name: userObj.name, avatar: userObj.avatar, library: state.library })
+      }).catch(() => {});
 
       renderUserAccount();
       if (elements.googleLoginModal) elements.googleLoginModal.style.display = 'none';
-      showToast(`🎉 Google ile giriş yapıldı! (${state.user.email})`);
+      if (passwordInputEl) passwordInputEl.value = '';
       renderSidebarPlaylists();
-      if (state.currentView === 'home' && typeof renderHomeSections === 'function') {
-        renderHomeSections();
-      }
+      if (elements.favCountBadge) elements.favCountBadge.textContent = state.library.favorites.length;
+      if (state.currentView === 'home' && typeof renderHomeSections === 'function') renderHomeSections();
+      showToast(`🎉 Hesabınız oluşturuldu ve ${(mergedLib.playlists || []).length} listeniz buluta kaydedildi!`);
     } else {
-      showToast(data.error || 'Giriş yapılamadı');
+      // LOGIN FLOW
+      if (!existingRecord || !existingRecord.user) {
+        showAuthError('ℹ️ Bu kullanıcı adı/e-posta ile kayıtlı hesap bulunamadı. Üstteki "✨ Kayıt Ol" sekmesinden hemen oluşturabilirsiniz!');
+        return;
+      }
+
+      if (existingRecord.passwordHash && existingRecord.passwordHash !== passwordHash) {
+        showAuthError('❌ Girdiğiniz şifre hatalı! Lütfen kontrol edip tekrar deneyin.');
+        return;
+      }
+
+      const mergedLib = mergeLibraries(state.library, existingRecord.library || {});
+      const userObj = {
+        ...existingRecord.user,
+        userKey,
+        email: existingRecord.user.email || identifier.toLowerCase(),
+        lastSync: Date.now()
+      };
+
+      // Save merged library & passwordHash (if upgrading legacy account) back to Firebase
+      await firebasePutUser(userKey, {
+        user: userObj,
+        passwordHash,
+        library: mergedLib
+      });
+
+      state.user = userObj;
+      state.library = mergedLib;
+      localStorage.setItem('muzikal_user', JSON.stringify(userObj));
+      persistLibrary(state.library, true);
+
+      fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userObj.email, name: userObj.name, avatar: userObj.avatar, library: state.library })
+      }).catch(() => {});
+
+      renderUserAccount();
+      if (elements.googleLoginModal) elements.googleLoginModal.style.display = 'none';
+      if (passwordInputEl) passwordInputEl.value = '';
+      renderSidebarPlaylists();
+      if (elements.favCountBadge) elements.favCountBadge.textContent = state.library.favorites.length;
+      if (state.currentView === 'home' && typeof renderHomeSections === 'function') renderHomeSections();
+
+      const plCount = (mergedLib.playlists || []).length;
+      const favCount = (mergedLib.favorites || []).length;
+      showToast(`☁️ Hoş geldin ${userObj.name}! (${plCount} liste, ${favCount} favori eşitlendi)`);
     }
   } catch (err) {
-    // Offline / local fallback
-    state.user = { email, name, avatar, local: true };
-    localStorage.setItem('muzikal_user', JSON.stringify(state.user));
-    renderUserAccount();
-    if (elements.googleLoginModal) elements.googleLoginModal.style.display = 'none';
-    showToast(`Google hesabı bağlandı: ${email}`);
+    console.error('Firebase Auth Error:', err);
+    showAuthError('⚠️ Bulut sunucusuna bağlanılamadı. İnternet bağlantınızı kontrol edin.');
   } finally {
     if (submitBtn) {
       const textSpan = submitBtn.querySelector('span');
@@ -4677,6 +4998,7 @@ async function loginWithGoogle(email, name = '') {
 function openUserAccountHub() {
   if (!state.user || !state.user.email) {
     if (elements.googleLoginModal) {
+      setAuthMode('login');
       elements.googleLoginModal.style.display = 'flex';
       if (elements.googleEmailInput) elements.googleEmailInput.focus();
     }
@@ -4684,7 +5006,7 @@ function openUserAccountHub() {
   }
 
   if (elements.accountHubAvatar) {
-    elements.accountHubAvatar.src = state.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(state.user.name || 'Kullanici')}&background=4285F4&color=fff&bold=true`;
+    elements.accountHubAvatar.src = state.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(state.user.name || 'Kullanici')}&background=8b5cf6&color=fff&bold=true`;
   }
   if (elements.accountHubName) {
     elements.accountHubName.textContent = state.user.name || 'Kullanıcı';
@@ -4716,32 +5038,17 @@ function updateAccountHubStats() {
 
 async function syncPushToCloud() {
   if (!state.user || !state.user.email) {
-    showToast('Bulut eşitlemesi için önce Google ile giriş yapın.');
+    showToast('Bulut eşitlemesi için önce hesabınıza giriş yapın.');
     return;
   }
   const btn = elements.btnHubSyncPush;
   if (btn) btn.disabled = true;
 
   try {
-    const res = await fetch('/api/auth/push-library', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: state.user.email,
-        name: state.user.name,
-        avatar: state.user.avatar,
-        library: state.library
-      })
-    });
-    const data = await res.json();
-    if (data.success) {
-      state.user.lastSync = data.lastSync || Date.now();
-      localStorage.setItem('muzikal_user', JSON.stringify(state.user));
-      updateAccountHubStats();
-      showToast('☁️ Tüm çalma listeleriniz başarıyla Google hesabınıza aktarıldı!');
-    } else {
-      showToast(data.error || 'Aktarma başarısız');
-    }
+    const userKey = state.user.userKey || toFirebaseUserKey(state.user.email);
+    await firebaseSaveLibrary(userKey, state.library);
+    updateAccountHubStats();
+    showToast('☁️ Tüm çalma listeleriniz ve favorileriniz Firebase Bulut hesabınıza kaydedildi!');
   } catch (err) {
     console.error('Push error:', err);
     showToast('Aktarma sırasında bağlantı hatası oluştu.');
@@ -4750,58 +5057,42 @@ async function syncPushToCloud() {
   }
 }
 
-async function syncPullFromCloud() {
+async function syncPullFromCloud(silent = false) {
   if (!state.user || !state.user.email) {
-    showToast('Buluttan liste çekmek için önce Google ile giriş yapın.');
+    if (!silent) showToast('Buluttan liste çekmek için önce giriş yapın.');
     return;
   }
   const btn = elements.btnHubSyncPull;
-  if (btn) btn.disabled = true;
+  if (btn && !silent) btn.disabled = true;
 
   try {
-    const res = await fetch(`/api/auth/pull-library?email=${encodeURIComponent(state.user.email)}`);
-    const data = await res.json();
-    if (data.success && data.library) {
-      // Merge favorites
-      const favMap = new Map();
-      (state.library.favorites || []).forEach(s => favMap.set(s.id, s));
-      (data.library.favorites || []).forEach(s => favMap.set(s.id, s));
-      state.library.favorites = Array.from(favMap.values());
+    const userKey = state.user.userKey || toFirebaseUserKey(state.user.email);
+    const cloudRecord = await firebaseGetUser(userKey);
+    if (cloudRecord && cloudRecord.library) {
+      state.library = mergeLibraries(state.library, cloudRecord.library);
+      state.user.lastSync = Date.now();
+      localStorage.setItem('muzikal_user', JSON.stringify(state.user));
 
-      // Merge playlists with song preservation
-      const plMap = new Map();
-      (state.library.playlists || []).forEach(p => plMap.set(p.id || p.name, { ...p, songs: [...(p.songs || [])] }));
-      (data.library.playlists || []).forEach(p => {
-        const key = p.id || p.name;
-        if (plMap.has(key)) {
-          const existing = plMap.get(key);
-          const songMap = new Map();
-          (existing.songs || []).forEach(s => songMap.set(s.id, s));
-          (p.songs || []).forEach(s => songMap.set(s.id, s));
-          existing.songs = Array.from(songMap.values());
-          if (p.cover && !existing.cover) existing.cover = p.cover;
-        } else {
-          plMap.set(key, p);
-        }
-      });
-      state.library.playlists = Array.from(plMap.values());
-
-      persistLibrary(state.library);
+      persistLibrary(state.library, true);
       renderSidebarPlaylists();
       if (elements.favCountBadge) elements.favCountBadge.textContent = state.library.favorites.length;
       updateAccountHubStats();
       if (state.currentView === 'home' && typeof renderHomeSections === 'function') {
         renderHomeSections();
       }
-      showToast(`☁️ Hesaptaki ${data.playlistCount} liste ve ${data.favoriteCount} favori bu cihaza aktarıldı!`);
-    } else {
-      showToast(data.error || 'Buluttan veri çekilemedi.');
+      if (!silent) {
+        const plLen = (state.library.playlists || []).length;
+        const favLen = (state.library.favorites || []).length;
+        showToast(`☁️ Buluttaki ${plLen} liste ve ${favLen} favori bu cihaza eşitlendi!`);
+      }
+    } else if (!silent) {
+      showToast('Bulutta henüz kayıtlı liste bulunamadı.');
     }
   } catch (err) {
     console.error('Pull error:', err);
-    showToast('Buluttan veri çekilirken hata oluştu.');
+    if (!silent) showToast('Buluttan veri çekilirken hata oluştu.');
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn && !silent) btn.disabled = false;
   }
 }
 
@@ -4885,7 +5176,7 @@ function importPlaylistsFromJson(file) {
 }
 
 function logoutGoogle() {
-  if (!confirm('Google hesabınızdan çıkış yapmak istediğinize emin misiniz?\n\n(Misafir moduna geçilecek, şarkılarınız cihazınızda kalacaktır)')) {
+  if (!confirm('Hesabınızdan çıkış yapmak istediğinize emin misiniz?\n\n(Misafir moduna geçilecek, şarkılarınız bulut hesabınızda güvende kalacaktır)')) {
     return;
   }
 
@@ -4893,15 +5184,35 @@ function logoutGoogle() {
   localStorage.removeItem('muzikal_user');
   if (elements.userAccountModal) elements.userAccountModal.style.display = 'none';
   renderUserAccount();
-  showToast('Google hesabından çıkış yapıldı. Misafir moduna geçildi.');
+  showToast('Hesaptan çıkış yapıldı. Misafir moduna geçildi.');
 }
 
 function initGoogleAuth() {
   renderUserAccount();
 
+  const tabLogin = document.getElementById('auth-tab-login');
+  const tabRegister = document.getElementById('auth-tab-register');
+  const btnTogglePwd = document.getElementById('btn-toggle-password');
+  const pwdInput = document.getElementById('auth-password-input');
+
+  if (tabLogin) {
+    tabLogin.addEventListener('click', () => setAuthMode('login'));
+  }
+  if (tabRegister) {
+    tabRegister.addEventListener('click', () => setAuthMode('register'));
+  }
+  if (btnTogglePwd && pwdInput) {
+    btnTogglePwd.addEventListener('click', () => {
+      const isPwd = pwdInput.type === 'password';
+      pwdInput.type = isPwd ? 'text' : 'password';
+      btnTogglePwd.textContent = isPwd ? '🙈' : '👁️';
+    });
+  }
+
   if (elements.btnOpenGoogleLogin) {
     elements.btnOpenGoogleLogin.addEventListener('click', () => {
       if (elements.googleLoginModal) {
+        setAuthMode('login');
         elements.googleLoginModal.style.display = 'flex';
         if (elements.googleEmailInput) elements.googleEmailInput.focus();
       }
@@ -4915,6 +5226,7 @@ function initGoogleAuth() {
         openUserAccountHub();
       } else {
         if (elements.googleLoginModal) {
+          setAuthMode('login');
           elements.googleLoginModal.style.display = 'flex';
           if (elements.googleEmailInput) elements.googleEmailInput.focus();
         }
@@ -4928,6 +5240,7 @@ function initGoogleAuth() {
         openUserAccountHub();
       } else {
         if (elements.googleLoginModal) {
+          setAuthMode('login');
           elements.googleLoginModal.style.display = 'flex';
           if (elements.googleEmailInput) elements.googleEmailInput.focus();
         }
@@ -4967,16 +5280,32 @@ function initGoogleAuth() {
     elements.btnSubmitGoogleLogin.addEventListener('click', () => {
       const email = elements.googleEmailInput ? elements.googleEmailInput.value : '';
       const name = elements.googleNameInput ? elements.googleNameInput.value : '';
-      loginWithGoogle(email, name);
+      const pwd = pwdInput ? pwdInput.value : '';
+      loginWithGoogle(email, name, pwd);
     });
   }
 
   if (elements.googleEmailInput) {
     elements.googleEmailInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
+        if (pwdInput && !pwdInput.value) {
+          pwdInput.focus();
+          return;
+        }
         const email = elements.googleEmailInput.value;
         const name = elements.googleNameInput ? elements.googleNameInput.value : '';
-        loginWithGoogle(email, name);
+        const pwd = pwdInput ? pwdInput.value : '';
+        loginWithGoogle(email, name, pwd);
+      }
+    });
+  }
+
+  if (pwdInput) {
+    pwdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const email = elements.googleEmailInput ? elements.googleEmailInput.value : '';
+        const name = elements.googleNameInput ? elements.googleNameInput.value : '';
+        loginWithGoogle(email, name, pwdInput.value);
       }
     });
   }
@@ -5001,7 +5330,7 @@ function initGoogleAuth() {
   }
 
   if (elements.btnHubSyncPull) {
-    elements.btnHubSyncPull.addEventListener('click', syncPullFromCloud);
+    elements.btnHubSyncPull.addEventListener('click', () => syncPullFromCloud(false));
   }
 
   if (elements.btnExportPlaylistsJson) {
@@ -5024,12 +5353,14 @@ function initGoogleAuth() {
     elements.btnSwitchAccount.addEventListener('click', () => {
       if (elements.userAccountModal) elements.userAccountModal.style.display = 'none';
       if (elements.googleLoginModal) {
+        setAuthMode('login');
         elements.googleLoginModal.style.display = 'flex';
         if (elements.googleEmailInput) {
           elements.googleEmailInput.value = '';
           elements.googleEmailInput.focus();
         }
         if (elements.googleNameInput) elements.googleNameInput.value = '';
+        if (pwdInput) pwdInput.value = '';
       }
     });
   }
@@ -5065,6 +5396,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   updateCategoryChipsVisibility();
   await loadDownloads();
   await loadLibrary();
+  if (state.user && state.user.email) {
+    syncPullFromCloud(true).catch(() => {});
+  }
   await fetchExploreGenre('trendler');
   await loadDiscordConfig();
   setInterval(() => {
