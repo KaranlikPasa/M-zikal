@@ -7,7 +7,7 @@ import subprocess
 import urllib.request
 import webview
 
-APP_TITLE = "Müzikal PRO v1.4.3"
+APP_TITLE = "Müzikal PRO v1.4.4"
 SERVER_PORT = 3456
 SERVER_URL = f"http://127.0.0.1:{SERVER_PORT}"
 
