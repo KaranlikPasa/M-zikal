@@ -11,8 +11,8 @@ const discordRpc = require('./discord-rpc');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.4.3';
-const APP_VERSION_CODE = 25;
+const APP_VERSION = '1.4.4';
+const APP_VERSION_CODE = 26;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_FILE = path.join(__dirname, 'data', 'library.json');
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
