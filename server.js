@@ -13,12 +13,84 @@ dns.setDefaultResultOrder('ipv4first');
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
 const APP_VERSION = '1.4.4';
 const APP_VERSION_CODE = 26;
+const isLinux = process.platform === 'linux';
+const isWin = process.platform === 'win32';
+
+// Resolve writable data directory (XDG compliant on Linux / system installs)
+function resolveDataDir() {
+  if (isLinux) {
+    try {
+      const localData = path.join(__dirname, 'data');
+      if (!fs.existsSync(localData)) fs.mkdirSync(localData, { recursive: true });
+      fs.accessSync(localData, fs.constants.W_OK);
+      return localData;
+    } catch (e) {
+      const xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+      const xdgMuzikal = path.join(xdgData, 'muzikal', 'data');
+      if (!fs.existsSync(xdgMuzikal)) fs.mkdirSync(xdgMuzikal, { recursive: true });
+      return xdgMuzikal;
+    }
+  }
+  const dir = path.join(__dirname, 'data');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// Resolve music download directory (XDG Music on Linux, local or Music folder)
+function resolveDownloadsDir() {
+  if (isLinux) {
+    try {
+      const localDown = path.join(__dirname, 'downloads');
+      if (!fs.existsSync(localDown)) fs.mkdirSync(localDown, { recursive: true });
+      fs.accessSync(localDown, fs.constants.W_OK);
+      return localDown;
+    } catch (e) {
+      const musicDir = path.join(os.homedir(), 'Music', 'Muzikal');
+      if (!fs.existsSync(musicDir)) fs.mkdirSync(musicDir, { recursive: true });
+      return musicDir;
+    }
+  }
+  const dir = path.join(__dirname, 'downloads');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// Find yt-dlp executable (system PATH or local bin)
+function resolveYtDlpPath() {
+  if (isWin) {
+    const local = path.join(__dirname, 'bin', 'yt-dlp.exe');
+    if (fs.existsSync(local)) return local;
+    return 'yt-dlp.exe';
+  } else {
+    const candidates = [
+      path.join(__dirname, 'bin', 'yt-dlp'),
+      '/usr/bin/yt-dlp',
+      '/usr/local/bin/yt-dlp',
+      '/bin/yt-dlp'
+    ];
+    for (const cand of candidates) {
+      if (fs.existsSync(cand)) return cand;
+    }
+    return 'yt-dlp';
+  }
+}
+
+function isYtDlpReady() {
+  const p = resolveYtDlpPath();
+  if (path.isAbsolute(p)) {
+    return fs.existsSync(p);
+  }
+  return true;
+}
+
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const DATA_FILE = path.join(__dirname, 'data', 'library.json');
-const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
+const DATA_DIR = resolveDataDir();
+const DATA_FILE = path.join(DATA_DIR, 'library.json');
+const DOWNLOADS_DIR = resolveDownloadsDir();
 const BIN_DIR = path.join(__dirname, 'bin');
-const YT_DLP_PATH = path.join(BIN_DIR, 'yt-dlp.exe');
+const YT_DLP_PATH = resolveYtDlpPath();
 const APK_FILE = path.join(__dirname, 'Muzikal.apk');
+const USERS_DIR = path.join(DATA_DIR, 'users');
 
 function getLocalNetworkIp() {
   const interfaces = os.networkInterfaces();
@@ -32,8 +104,6 @@ function getLocalNetworkIp() {
   return 'localhost';
 }
 
-// Ensure required directories exist on Drive D
-const USERS_DIR = path.join(__dirname, 'data', 'users');
 if (!fs.existsSync(DOWNLOADS_DIR)) fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
 if (!fs.existsSync(BIN_DIR)) fs.mkdirSync(BIN_DIR, { recursive: true });
 if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR, { recursive: true });
@@ -784,8 +854,8 @@ async function fetchYouTubeMusicPlaylist(urlOrId) {
   const targetUrl = `https://music.youtube.com/playlist?list=${playlistId}`;
 
   return new Promise((resolve, reject) => {
-    if (!fs.existsSync(YT_DLP_PATH)) {
-      return reject(new Error('yt-dlp motoru bulunamadı.'));
+    if (!isYtDlpReady()) {
+      return reject(new Error('yt-dlp motoru bulunamadı. Lütfen yt-dlp paketini kurun (Arch: sudo pacman -S yt-dlp).'));
     }
 
     const { execFile } = require('child_process');
@@ -1098,20 +1168,25 @@ async function runInAppUpdate() {
     inAppUpdateState.percent = 82;
     inAppUpdateState.status = 'Güncelleme paketi açılıyor...';
 
-    // Extract using PowerShell Expand-Archive
+    // Extract archive (PowerShell on Windows, unzip on Linux)
     await new Promise((resolve, reject) => {
       fs.mkdirSync(extractDir, { recursive: true });
-      const ps = spawn('powershell', [
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-Command',
-        `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}' -Force`
-      ]);
-      ps.on('close', (code) => {
+      let child;
+      if (isLinux) {
+        child = spawn('unzip', ['-q', '-o', zipPath, '-d', extractDir]);
+      } else {
+        child = spawn('powershell', [
+          '-NoProfile',
+          '-ExecutionPolicy', 'Bypass',
+          '-Command',
+          `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}' -Force`
+        ]);
+      }
+      child.on('close', (code) => {
         if (code === 0) resolve();
         else reject(new Error(`Arşiv açılamadı, çıkış kodu: ${code}`));
       });
-      ps.on('error', reject);
+      child.on('error', reject);
     });
 
     inAppUpdateState.percent = 90;

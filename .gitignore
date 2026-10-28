@@ -9,3 +9,10 @@ server.log
 
 # User local data
 data/history.json
+
+# Linux build output
+dist_linux/
+*.pkg.tar.zst
+*.tar.gz
+__pycache__/
+*.pyc

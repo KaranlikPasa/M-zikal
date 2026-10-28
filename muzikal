@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Müzikal - Linux Başlatıcı (Arch Linux & Tüm Dağıtımlar)
+# Spotify & YouTube Müzik Çalar, Akıllı Mix ve Çevrimdışı İndirici
+# ==============================================================================
+
+set -e
+
+# Betiğin ve uygulamanın bulunduğu dizini tespit et
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+APP_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+
+# /usr/bin/muzikal symlink üzerinden çağrıldıysa asıl uygulama dizinini bul
+if [ ! -f "$APP_DIR/server.js" ]; then
+  if [ -f "/opt/muzikal/server.js" ]; then
+    APP_DIR="/opt/muzikal"
+  elif [ -f "$HOME/.local/share/muzikal/server.js" ]; then
+    APP_DIR="$HOME/.local/share/muzikal"
+  fi
+fi
+
+# Node.js gereksinimi kontrolü
+if ! command -v node >/dev/null 2>&1; then
+  echo -e "\033[1;31m[Hata]\033[0m Node.js bulunamadı!" >&2
+  echo -e "Müzikal'i çalıştırmak için Node.js gereklidir. Lütfen paket yöneticinizle kurun:" >&2
+  echo -e "  Arch Linux:   \033[1;32msudo pacman -S nodejs\033[0m" >&2
+  echo -e "  Ubuntu/Debian:\033[1;32msudo apt install nodejs\033[0m" >&2
+  echo -e "  Fedora:       \033[1;32msudo dnf install nodejs\033[0m" >&2
+  exit 1
+fi
+
+cd "$APP_DIR"
+
+# 1. Öncelik: Python pywebview ile yerel modern masaüstü penceresi
+HAS_PYWEBVIEW=false
+if command -v python3 >/dev/null 2>&1; then
+  if python3 -c "import webview" >/dev/null 2>&1; then
+    HAS_PYWEBVIEW=true
+  fi
+fi
+
+if [ "$HAS_PYWEBVIEW" = true ] && [ -f "$APP_DIR/python_app/muzikal_desktop.py" ]; then
+  exec python3 "$APP_DIR/python_app/muzikal_desktop.py" "$@"
+fi
+
+# 2. Öncelik: Web/Tarayıcı Modu (PyWebView yoksa hafif arka plan sunucusu + varsayılan tarayıcı)
+echo -e "\033[1;36m[Müzikal]\033[0m Arka plan ses ve müzik motoru başlatılıyor..."
+
+SERVER_RUNNING=false
+if command -v curl >/dev/null 2>&1; then
+  if curl -s -f http://127.0.0.1:3456/api/version >/dev/null 2>&1; then
+    SERVER_RUNNING=true
+  fi
+fi
+
+if [ "$SERVER_RUNNING" = false ]; then
+  node "$APP_DIR/server.js" &
+  BACKEND_PID=$!
+  trap "kill $BACKEND_PID 2>/dev/null || true" EXIT INT TERM
+  sleep 0.8
+fi
+
+# Varsayılan Linux tarayıcısında aç
+if command -v xdg-open >/dev/null 2>&1; then
+  xdg-open "http://localhost:3456" >/dev/null 2>&1 &
+elif command -v gio >/dev/null 2>&1; then
+  gio open "http://localhost:3456" >/dev/null 2>&1 &
+else
+  echo -e "\033[1;32m[Müzikal Aktif]\033[0m Tarayıcınızda açın: http://localhost:3456"
+fi
+
+echo -e "\033[1;32m✓ Müzikal çalışıyor.\033[0m Çıkmak için Ctrl+C tuşlarına basabilirsiniz."
+wait

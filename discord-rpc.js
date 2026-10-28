@@ -1,9 +1,27 @@
 const net = require('net');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
 
-const CONFIG_FILE = path.join(__dirname, 'data', 'discord_config.json');
+function resolveConfigPath() {
+  if (process.platform === 'linux') {
+    try {
+      const local = path.join(__dirname, 'data');
+      if (!fs.existsSync(local)) fs.mkdirSync(local, { recursive: true });
+      fs.accessSync(local, fs.constants.W_OK);
+      return path.join(local, 'discord_config.json');
+    } catch (e) {
+      const xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+      const userDir = path.join(xdgData, 'muzikal', 'data');
+      if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
+      return path.join(userDir, 'discord_config.json');
+    }
+  }
+  return path.join(__dirname, 'data', 'discord_config.json');
+}
+
+const CONFIG_FILE = resolveConfigPath();
 
 class DiscordRpcManager {
   constructor() {

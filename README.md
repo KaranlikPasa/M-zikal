@@ -6,8 +6,8 @@
 
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
-![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1ed760?style=for-the-badge&logo=android)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.4.2-blue?style=for-the-badge)
+![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Android-1ed760?style=for-the-badge&logo=linux)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.4.4-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
@@ -55,13 +55,45 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 
 | Platform | Dosya | Açıklama |
 | :--- | :--- | :--- |
-| **Windows (Kurulumlu - Önerilen)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.3.0/Muzikal-Setup.exe) | **Kolay Kurulum:** Masaüstü ve başlat simgeleri, otomatik güncelleme desteği, Denetim Masası kaldırma kaydı. |
-| **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.3.0/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.3.0/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, Spotify tarzı canlı şarkı sözleri içeren en güncel APK. |
+| **Arch Linux (Pacman Paketi)** | [🐧 **muzikal-1.4.4-1-x86_64.pkg.tar.zst**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/muzikal-1.4.4-1-x86_64.pkg.tar.zst) | **Arch Linux / Manjaro / EndeavourOS:** `sudo pacman -U` ile tek tıkla kurun. Menü kısayolu, simgeler ve `/usr/bin/muzikal` otomatik eklenir. |
+| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
+| **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
+| **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
+| **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
 
 ---
 
 ## 🚀 Başlangıç & Kullanım
+
+### 🐧 Arch Linux & Linux Kurulumu
+
+Müzikal, Arch Linux ve tüm popüler Linux dağıtımları için yerel olarak optimize edilmiştir:
+
+#### 1. Yöntem: Arch Linux (Pacman ile Doğrudan Kurulum - Önerilen)
+Releases sayfasından `.pkg.tar.zst` dosyasını indirdikten sonra terminalde çalıştırın:
+```bash
+sudo pacman -U muzikal-1.4.4-1-x86_64.pkg.tar.zst
+```
+Bağımlılıklar (`nodejs`, `yt-dlp`, `ffmpeg`) otomatik olarak çözümlenir ve uygulama menünüze eklenir.
+
+#### 2. Yöntem: PKGBUILD ile Derleme / AUR Tarzı
+```bash
+git clone https://github.com/KaranlikPasa/M-zikal.git
+cd M-zikal
+makepkg -si
+```
+
+#### 3. Yöntem: Evrensel Linux Kurulumu (Ubuntu, Debian, Fedora vb.)
+`Muzikal-Linux-x64.tar.gz` arşivini indirin ve açın:
+```bash
+tar -xzf Muzikal-Linux-x64.tar.gz
+cd Muzikal-Linux-x64
+sudo ./install.sh
+```
+Kurulum tamamlandığında uygulama menünüzden veya doğrudan terminalde `muzikal` yazarak başlatabilirsiniz.
+
+---
 
 ### 🪟 Windows (Kurulum Dosyası ile - En Kolay)
 1. [`Muzikal-Setup.exe`](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.3.0/Muzikal-Setup.exe) dosyasını indirin ve çalıştırın.

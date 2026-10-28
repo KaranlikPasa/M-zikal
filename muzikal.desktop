@@ -1,0 +1,15 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Müzikal
+GenericName=Müzik Çalar
+GenericName[tr]=Müzik Çalar
+Comment=Spotify & YouTube Müzik Çalar, Akıllı Mix ve Çevrimdışı İndirici
+Comment[tr]=Spotify & YouTube Müzik Çalar, Akıllı Mix ve Çevrimdışı İndirici
+Exec=muzikal %U
+Icon=muzikal
+Terminal=false
+Categories=AudioVideo;Audio;Player;Music;
+MimeType=x-scheme-handler/muzikal;
+Keywords=music;player;spotify;youtube;audio;muzikal;şarkı;
+StartupWMClass=muzikal

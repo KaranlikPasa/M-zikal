@@ -2,6 +2,8 @@ import os
 import sys
 import time
 import ctypes
+import shutil
+import signal
 import socket
 import subprocess
 import urllib.request
@@ -32,6 +34,14 @@ def find_app_root():
     if local_appdata:
         candidates.append(os.path.join(local_appdata, "Programs", "Muzikal"))
 
+    # Linux standard directories
+    candidates.extend([
+        "/opt/muzikal",
+        "/usr/lib/muzikal",
+        "/usr/share/muzikal",
+        os.path.expanduser("~/.local/share/muzikal"),
+    ])
+
     for path in candidates:
         if path and os.path.isfile(os.path.join(path, "server.js")):
             return path
@@ -49,11 +59,19 @@ def is_server_running():
 
 
 def find_node_executable(app_root):
-    """Find embedded bin/node.exe or system Node.js executable."""
+    """Find embedded bin/node or system Node.js executable."""
+    system_node = shutil.which("node")
+    if system_node:
+        return system_node
+
     candidates = [
         os.path.join(app_root, "bin", "node.exe"),
+        os.path.join(app_root, "bin", "node"),
         r"C:\Program Files\nodejs\node.exe",
         r"C:\Program Files (x86)\nodejs\node.exe",
+        "/usr/bin/node",
+        "/usr/local/bin/node",
+        "/bin/node",
         "node",
     ]
     for cand in candidates:
@@ -126,9 +144,16 @@ def main():
     )
 
     try:
-        icon_path = os.path.join(app_root, "Muzikal.ico")
-        if os.path.isfile(icon_path):
-            webview.start(icon=icon_path)
+        # Check high-res PNG for Linux, ICO for Windows
+        icon_candidates = [
+            os.path.join(app_root, "public", "logo.png"),
+            os.path.join(app_root, "Muzikal.png"),
+            os.path.join(app_root, "public", "favicon.png"),
+            os.path.join(app_root, "Muzikal.ico"),
+        ]
+        chosen_icon = next((p for p in icon_candidates if os.path.isfile(p)), None)
+        if chosen_icon:
+            webview.start(icon=chosen_icon)
         else:
             webview.start()
     finally:
