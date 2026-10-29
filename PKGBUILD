@@ -1,7 +1,7 @@
 # Maintainer: KaranlikPasa <https://github.com/KaranlikPasa>
 pkgname=muzikal
-pkgver=1.4.4
-pkgrel=3
+pkgver=1.4.6
+pkgrel=1
 pkgdesc="Spotify & YouTube Müzik Çalar, Akıllı Mix ve Çevrimdışı İndirici"
 arch=('any')
 url="https://github.com/KaranlikPasa/M-zikal"

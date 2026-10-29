@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -12,7 +12,7 @@ namespace MuzikalInstaller
 {
     static class Program
     {
-        public const string AppVersion = "1.4.4";
+        public const string AppVersion = "1.4.6";
         public const string AppName = "Müzikal";
         public const string RegKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Muzikal";
 

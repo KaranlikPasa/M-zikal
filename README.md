@@ -7,13 +7,14 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Android-1ed760?style=for-the-badge&logo=linux)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.4.4-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.4.6-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
+- 🐧 **Linux Bağımsız Masaüstü Motoru & Kesintisiz Ses Akışı (v1.4.6):** Linux'ta tarayıcı/localhost yerine yerel GTK3 + WebKit2 penceresi desteği, GStreamer donma ve gecikme düzeltmeleri ile kesintisiz otomatik oynatma (Autoplay) mimarisi.
 - ⬇️ **Tüm Listelerde Tek Tıkla "Tüm Şarkıları İndir" & Canlı İlerleme (v1.4.2):** Özel çalma listeleri, Spotify/YouTube Music aktarılan listeler, Beğenilen Şarkılar ve Dinleme Geçmişi dahil girdiğiniz her listede hem PC hem de Mobil (Android APK) için **"Tüm Şarkıları İndir"** butonu! Canlı ilerleme sayacı (`İndiriliyor (X/N)...`), otomatik Spotify parça çözümleme ve Discord Rich Presence ("Müzikal dinliyor") entegrasyonu.
 - 🛠️ **Tam Kapsamlı Mobil & PC İyileştirme Paketi (v1.4.1):** Çalma listesi değişikliklerinin anında diske (`data/library.json`) ve çevrimdışı belleğe çift yönlü kaydı, çalma listesi silme ve karışık çalma kontrolleri, mobil alt dolaşım çubuğu (`mobile-bottom-nav`), tam ekran mobil çalarda parmakla ilerleme çubuğu sürükleme + aşağı kaydırarak kapatma + listeye ekleme butonu, sıradakiler hızlı arama görsel düzeltmesi ve gelişmiş şarkı sözü eşleştirme motoru.
 - 🎶 **Gelişmiş Sıradakiler Çekmecesi & Sürpriz Modu (v1.4.0):** Sıradakiler çekmecesi üzerinden anında şarkı arayıp sıraya ekleme; akıllı miks ve çalma listelerindeki sıradaki tüm parçaları önceden görebilme veya dileyenler için sıradaki parçaları maskeleyen tek tıkla "Sıradakileri Gizle (Sürpriz Modu 🙈)"!
@@ -55,12 +56,12 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 
 | Platform | Dosya | Açıklama |
 | :--- | :--- | :--- |
-| **Arch Linux (Pacman Paketi)** | [🐧 **muzikal-1.4.4-1-x86_64.pkg.tar.zst**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/muzikal-1.4.4-1-x86_64.pkg.tar.zst) | **Arch Linux / Manjaro / EndeavourOS:** `sudo pacman -U` ile tek tıkla kurun. Menü kısayolu, simgeler ve `/usr/bin/muzikal` otomatik eklenir. |
-| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
-| **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
-| **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
-| **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.4/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
+| **Arch Linux (Pacman Paketi)** | [🐧 **muzikal-1.4.6-1-x86_64.pkg.tar.zst**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.6/muzikal-1.4.6-1-x86_64.pkg.tar.zst) | **Arch Linux / Manjaro / EndeavourOS:** `sudo pacman -U` ile tek tıkla kurun. Menü kısayolu, simgeler ve `/usr/bin/muzikal` otomatik eklenir. |
+| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.6/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
+| **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.6/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
+| **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.6/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
+| **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.6/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.6/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
 
 ---
 
@@ -73,7 +74,7 @@ Müzikal, Arch Linux ve tüm popüler Linux dağıtımları için yerel olarak o
 #### 1. Yöntem: Arch Linux (Pacman ile Doğrudan Kurulum - Önerilen)
 Releases sayfasından `.pkg.tar.zst` dosyasını indirdikten sonra terminalde çalıştırın:
 ```bash
-sudo pacman -U muzikal-1.4.4-1-x86_64.pkg.tar.zst
+sudo pacman -U muzikal-1.4.6-1-x86_64.pkg.tar.zst
 ```
 Bağımlılıklar (`nodejs`, `yt-dlp`, `ffmpeg`) otomatik olarak çözümlenir ve uygulama menünüze eklenir.
 
