@@ -17,10 +17,10 @@ APP_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
 # /usr/bin/muzikal symlink üzerinden çağrıldıysa asıl uygulama dizinini bul
 if [ ! -f "$APP_DIR/server.js" ]; then
-  if [ -f "/opt/muzikal/server.js" ]; then
-    APP_DIR="/opt/muzikal"
-  elif [ -f "$HOME/.local/share/muzikal/server.js" ]; then
+  if [ -f "$HOME/.local/share/muzikal/server.js" ]; then
     APP_DIR="$HOME/.local/share/muzikal"
+  elif [ -f "/opt/muzikal/server.js" ]; then
+    APP_DIR="/opt/muzikal"
   fi
 fi
 
@@ -36,19 +36,12 @@ fi
 
 cd "$APP_DIR"
 
-# 1. Öncelik: Python pywebview ile yerel modern masaüstü penceresi
-HAS_PYWEBVIEW=false
-if command -v python3 >/dev/null 2>&1; then
-  if python3 -c "import webview" >/dev/null 2>&1; then
-    HAS_PYWEBVIEW=true
-  fi
-fi
-
-if [ "$HAS_PYWEBVIEW" = true ] && [ -f "$APP_DIR/python_app/muzikal_desktop.py" ]; then
+# 1. Öncelik: Python ile bağımsız yerel masaüstü penceresi (Native GTK3 / WebKit2 / PyWebView)
+if command -v python3 >/dev/null 2>&1 && [ -f "$APP_DIR/python_app/muzikal_desktop.py" ]; then
   exec python3 "$APP_DIR/python_app/muzikal_desktop.py" "$@"
 fi
 
-# 2. Öncelik: Web/Tarayıcı Modu (PyWebView yoksa hafif arka plan sunucusu + varsayılan tarayıcı)
+# 2. Öncelik: Bağımsız Uygulama Modu (Chromium tabanlı tarayıcılar ile sekmesiz/adres çubuğusuz pencere)
 echo -e "\033[1;36m[Müzikal]\033[0m Arka plan ses ve müzik motoru başlatılıyor..."
 
 SERVER_RUNNING=false
@@ -65,7 +58,14 @@ if [ "$SERVER_RUNNING" = false ]; then
   sleep 0.8
 fi
 
-# Varsayılan Linux tarayıcısında aç
+for browser in google-chrome-stable google-chrome chromium brave-browser brave microsoft-edge-stable microsoft-edge vivaldi; do
+  if command -v "$browser" >/dev/null 2>&1; then
+    echo -e "\033[1;32m✓ Müzikal bağımsız uygulama penceresinde açılıyor ($browser)...\033[0m"
+    exec "$browser" --app="http://127.0.0.1:3456" --name="muzikal" --class="muzikal" "$@"
+  fi
+done
+
+# 3. Son Çare: Varsayılan Linux tarayıcısında aç
 if command -v xdg-open >/dev/null 2>&1; then
   xdg-open "http://localhost:3456" >/dev/null 2>&1 &
 elif command -v gio >/dev/null 2>&1; then

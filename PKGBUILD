@@ -1,16 +1,14 @@
 # Maintainer: KaranlikPasa <https://github.com/KaranlikPasa>
 pkgname=muzikal
 pkgver=1.4.4
-pkgrel=1
+pkgrel=2
 pkgdesc="Spotify & YouTube Müzik Çalar, Akıllı Mix ve Çevrimdışı İndirici"
 arch=('any')
 url="https://github.com/KaranlikPasa/M-zikal"
 license=('MIT')
-depends=('nodejs' 'yt-dlp' 'ffmpeg')
+depends=('nodejs' 'yt-dlp' 'ffmpeg' 'python' 'python-gobject' 'webkit2gtk-4.1')
 optdepends=(
-    'python: Python masaüstü uygulama desteği'
-    'python-pywebview: WebKit tabanlı modern masaüstü penceresi'
-    'webkit2gtk-4.1: Modern GTK web motoru'
+    'python-pywebview: Alternatif WebKit pencere motoru'
 )
 provides=('muzikal')
 conflicts=('muzikal')
@@ -21,6 +19,7 @@ package() {
     cp -r "${startdir}"/{server.js,discord-rpc.js,Muzikal.png,Muzikal.ico,public,python_app,muzikal,muzikal.desktop,icons,README.md} "${pkgdir}/opt/muzikal/"
     chmod -R 755 "${pkgdir}/opt/muzikal"
     chmod +x "${pkgdir}/opt/muzikal/muzikal"
+    chmod +x "${pkgdir}/opt/muzikal/python_app/muzikal_desktop.py" 2>/dev/null || true
 
     # Wrapper executable
     install -d "${pkgdir}/usr/bin"

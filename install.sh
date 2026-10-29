@@ -34,16 +34,15 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 echo -e "\n${BLUE}1/4: Sistem Bağımlılıkları Kontrol Ediliyor...${NC}"
 
 # Paket yöneticisi tespiti ve bağımlılık kontrolü
-if ! command -v node >/dev/null 2>&1; then
-  echo -e "${YELLOW}Node.js bulunamadı. Kuruluyor...${NC}"
-  if command -v pacman >/dev/null 2>&1; then
-    pacman -S --noconfirm --needed nodejs yt-dlp ffmpeg
-  elif command -v apt-get >/dev/null 2>&1; then
-    apt-get update && apt-get install -y nodejs yt-dlp ffmpeg
-  elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y nodejs yt-dlp ffmpeg
-  fi
-else
+if command -v pacman >/dev/null 2>&1; then
+  pacman -S --noconfirm --needed nodejs yt-dlp ffmpeg python python-gobject webkit2gtk-4.1
+elif command -v apt-get >/dev/null 2>&1; then
+  apt-get update && apt-get install -y nodejs yt-dlp ffmpeg python3 python3-gi gir1.2-webkit2-4.1
+elif command -v dnf >/dev/null 2>&1; then
+  dnf install -y nodejs yt-dlp ffmpeg python3 python3-gobject webkit2gtk4.1
+fi
+
+if command -v node >/dev/null 2>&1; then
   echo -e "${GREEN}✓ Node.js kurulu ($(node -v))${NC}"
 fi
 
