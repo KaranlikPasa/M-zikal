@@ -1,12 +1,12 @@
 # Maintainer: KaranlikPasa <https://github.com/KaranlikPasa>
 pkgname=muzikal-bin
 pkgver=1.4.4
-pkgrel=2
+pkgrel=3
 pkgdesc="Spotify & YouTube Müzik Çalar, Akıllı Mix ve Çevrimdışı İndirici"
 arch=('x86_64')
 url="https://github.com/KaranlikPasa/M-zikal"
 license=('MIT')
-depends=('nodejs' 'yt-dlp' 'ffmpeg' 'python' 'python-gobject' 'webkit2gtk-4.1')
+depends=('nodejs' 'yt-dlp' 'ffmpeg' 'python' 'python-gobject' 'webkit2gtk-4.1' 'gst-plugins-good')
 optdepends=(
     'python-pywebview: Alternatif WebKit pencere motoru'
 )

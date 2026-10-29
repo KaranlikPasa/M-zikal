@@ -6,6 +6,13 @@
 
 import os
 import sys
+
+# Ensure GStreamer discovers audio sink plugins (pulsesink, autoaudiosink) in user or system path
+local_gst_dir = os.path.expanduser("~/.local/lib/gstreamer-1.0")
+if os.path.isdir(local_gst_dir):
+    cur_gst = os.environ.get("GST_PLUGIN_PATH", "")
+    os.environ["GST_PLUGIN_PATH"] = f"{local_gst_dir}:{cur_gst}" if cur_gst else local_gst_dir
+
 import time
 import shutil
 import signal
@@ -15,7 +22,7 @@ import webbrowser
 
 APP_TITLE = "Müzikal"
 SERVER_PORT = 3456
-SERVER_URL = f"http://127.0.0.1:{SERVER_PORT}"
+SERVER_URL = f"http://localhost:{SERVER_PORT}"
 
 
 def find_app_root():
@@ -131,7 +138,7 @@ def get_icon_path(app_root):
 
 
 def run_gtk_webkit(app_root, server_proc):
-    """Native Linux GTK 3 + WebKit2 window (no third-party pip dependencies)."""
+    """Native Linux GTK 3 + WebKit2 window with full hardware audio & autoplay support."""
     import gi
     gi.require_version("Gtk", "3.0")
     for ver in ["4.1", "4.0"]:
@@ -168,7 +175,19 @@ def run_gtk_webkit(app_root, server_proc):
         except Exception:
             pass
 
-    webview = WebKit2.WebView()
+    # Unrestricted Autoplay policy for music playback
+    wp = None
+    if hasattr(WebKit2, "WebsitePolicies") and hasattr(WebKit2, "AutoplayPolicy"):
+        try:
+            wp = WebKit2.WebsitePolicies(autoplay=WebKit2.AutoplayPolicy.ALLOW)
+        except Exception:
+            pass
+
+    if wp is not None:
+        webview = WebKit2.WebView(website_policies=wp)
+    else:
+        webview = WebKit2.WebView()
+
     settings = webview.get_settings()
     settings.set_enable_media_stream(True)
     settings.set_enable_mediasource(True)
@@ -176,14 +195,18 @@ def run_gtk_webkit(app_root, server_proc):
     settings.set_enable_javascript(True)
     settings.set_enable_smooth_scrolling(True)
 
-    # Background audio uninterrupted playback
+    if hasattr(settings, "set_enable_encrypted_media"):
+        settings.set_enable_encrypted_media(True)
+    if hasattr(settings, "set_enable_media"):
+        settings.set_enable_media(True)
+    if hasattr(settings, "set_enable_media_capabilities"):
+        settings.set_enable_media_capabilities(True)
+    if hasattr(settings, "set_media_playback_allows_inline"):
+        settings.set_media_playback_allows_inline(True)
     if hasattr(settings, "set_media_playback_requires_user_gesture"):
         settings.set_media_playback_requires_user_gesture(False)
     if hasattr(settings, "set_hardware_acceleration_policy"):
         settings.set_hardware_acceleration_policy(WebKit2.HardwareAccelerationPolicy.ON_DEMAND)
-
-    # Clean modern browser User-Agent
-    settings.set_user_agent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Muzikal/1.4.4")
 
     # Update window title when song title changes
     def on_title_changed(view, param):
@@ -321,8 +344,7 @@ def main():
         try:
             run_gtk_webkit(app_root, server_proc)
             return
-        except Exception as e:
-            # GTK/WebKit not available or error, try next method
+        except Exception:
             pass
 
     # 2. PyWebView

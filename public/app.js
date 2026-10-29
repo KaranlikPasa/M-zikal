@@ -388,9 +388,6 @@ function playOnlineYouTubeTrack(song) {
   };
 
   let embedOrigin = window.location.origin || 'http://localhost:3456';
-  if (embedOrigin.includes('127.0.0.1')) {
-    embedOrigin = embedOrigin.replace('127.0.0.1', 'localhost');
-  }
   if (embedOrigin.startsWith('http')) {
     playerVars.origin = embedOrigin;
     playerVars.widget_referrer = embedOrigin;
