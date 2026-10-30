@@ -7,13 +7,14 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Android-1ed760?style=for-the-badge&logo=linux)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.4.7-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.4.8-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
+- 📱 **Android Kurulum Hatası Giderildi & Resmi APK İmzası (v1.4.8):** Android sistemlerinde yaşanan "Uygulama yüklenemedi" paket hatası kökten çözüldü; yerel kütüphaneler (`.so`) 4096-byte bellek sayfasına ve `resources.arsc` 4-byte standardına göre tam hizalandı (ZipAlign), v1, v2 ve v3 resmi geliştirici imzalarıyla paketlendi.
 - 🎵 **Spotify Tarzı Akıllı Geri Sarma & Önceki Şarkı Mantığı (v1.4.7):** Çalan şarkıda ilk geri tuşuna basışta şarkıyı baştan başlatma, 3 saniye içinde ikinci basışta ise önceki parçaya geçme mantığı (Spotify standardı) masaüstü, mobil tam ekran çalar, bildirim ve kilit ekranı kumandalarına uygulandı.
 - 📱 **Mobil Sürüm Güncelleme Döngüsü ve Sürüm Kararlılığı Düzeltmesi (v1.4.7):** Güncelleme sonrasında uygulamanın eski sürümde (v1.4.4) kilitli kalması ve sürekli güncelleme uyarısı vermesi sorunu çözüldü; APK paketleme ve sürüm senkronizasyonu tüm platformlarda v1.4.7 ile eşitlendi.
 - 🐧 **Linux Bağımsız Masaüstü Motoru & Kesintisiz Ses Akışı (v1.4.6):** Linux'ta tarayıcı/localhost yerine yerel GTK3 + WebKit2 penceresi desteği, GStreamer donma ve gecikme düzeltmeleri ile kesintisiz otomatik oynatma (Autoplay) mimarisi.
@@ -58,12 +59,12 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 
 | Platform | Dosya | Açıklama |
 | :--- | :--- | :--- |
-| **Arch Linux (Pacman Paketi)** | [🐧 **muzikal-1.4.7-1-any.pkg.tar.zst**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.7/muzikal-1.4.7-1-any.pkg.tar.zst) | **Arch Linux / Manjaro / EndeavourOS:** `sudo pacman -U` ile tek tıkla kurun. Menü kısayolu, simgeler ve `/usr/bin/muzikal` otomatik eklenir. |
-| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.7/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
-| **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.7/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
-| **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.7/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
-| **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.7/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.7/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
+| **Arch Linux (Pacman Paketi)** | [🐧 **muzikal-1.4.8-1-any.pkg.tar.zst**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.8/muzikal-1.4.8-1-any.pkg.tar.zst) | **Arch Linux / Manjaro / EndeavourOS:** `sudo pacman -U` ile tek tıkla kurun. Menü kısayolu, simgeler ve `/usr/bin/muzikal` otomatik eklenir. |
+| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.8/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
+| **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.8/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
+| **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.8/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
+| **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.8/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.4.8/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
 
 ---
 
@@ -76,7 +77,7 @@ Müzikal, Arch Linux ve tüm popüler Linux dağıtımları için yerel olarak o
 #### 1. Yöntem: Arch Linux (Pacman ile Doğrudan Kurulum - Önerilen)
 Releases sayfasından `.pkg.tar.zst` dosyasını indirdikten sonra terminalde çalıştırın:
 ```bash
-sudo pacman -U muzikal-1.4.7-1-any.pkg.tar.zst
+sudo pacman -U muzikal-1.4.8-1-any.pkg.tar.zst
 ```
 Bağımlılıklar (`nodejs`, `yt-dlp`, `ffmpeg`) otomatik olarak çözümlenir ve uygulama menünüze eklenir.
 
