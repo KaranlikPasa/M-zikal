@@ -136,6 +136,44 @@ function writeUserData(email, data) {
   }
 }
 
+function mergeUserStats(baseStats, incomingStats) {
+  const merged = { years: { ...(baseStats?.years || {}) } };
+  if (!incomingStats?.years) return merged;
+
+  for (const [y, incY] of Object.entries(incomingStats.years)) {
+    if (!merged.years[y]) {
+      merged.years[y] = JSON.parse(JSON.stringify(incY));
+      continue;
+    }
+    const baseY = merged.years[y];
+    baseY.totalPlays = Math.max(baseY.totalPlays || 0, incY.totalPlays || 0);
+    baseY.totalSeconds = Math.max(baseY.totalSeconds || 0, incY.totalSeconds || 0);
+    baseY.tracks = baseY.tracks || {};
+    for (const [tid, trk] of Object.entries(incY.tracks || {})) {
+      if (!baseY.tracks[tid]) {
+        baseY.tracks[tid] = { ...trk };
+      } else {
+        baseY.tracks[tid].playCount = Math.max(baseY.tracks[tid].playCount || 0, trk.playCount || 0);
+        baseY.tracks[tid].totalSeconds = Math.max(baseY.tracks[tid].totalSeconds || 0, trk.totalSeconds || 0);
+        baseY.tracks[tid].lastPlayed = Math.max(baseY.tracks[tid].lastPlayed || 0, trk.lastPlayed || 0);
+        if (trk.thumbnail && !baseY.tracks[tid].thumbnail) baseY.tracks[tid].thumbnail = trk.thumbnail;
+      }
+    }
+    baseY.artists = baseY.artists || {};
+    for (const [artName, art] of Object.entries(incY.artists || {})) {
+      if (!baseY.artists[artName]) {
+        baseY.artists[artName] = { ...art };
+      } else {
+        baseY.artists[artName].playCount = Math.max(baseY.artists[artName].playCount || 0, art.playCount || 0);
+        baseY.artists[artName].totalSeconds = Math.max(baseY.artists[artName].totalSeconds || 0, art.totalSeconds || 0);
+      }
+    }
+    baseY.monthlyPlays = { ...(baseY.monthlyPlays || {}), ...(incY.monthlyPlays || {}) };
+    baseY.hourlyPlays = { ...(baseY.hourlyPlays || {}), ...(incY.hourlyPlays || {}) };
+  }
+  return merged;
+}
+
 // In-memory cache for search queries (15 minutes TTL)
 const searchCache = new Map();
 const lyricsCache = new Map();
@@ -1550,7 +1588,8 @@ const server = http.createServer(async (req, res) => {
             favorites: incomingLibrary.favorites || [],
             playlists: incomingLibrary.playlists || [],
             history: incomingLibrary.history || []
-          }
+          },
+          stats: body.stats || { years: {} }
         };
       } else {
         // Merge favorites (preserve unique)
@@ -1587,6 +1626,13 @@ const server = http.createServer(async (req, res) => {
         });
         existingUser.library.history = Array.from(histMap.values()).slice(0, 100);
 
+        // Merge stats if provided
+        if (body.stats) {
+          existingUser.stats = mergeUserStats(existingUser.stats || { years: {} }, body.stats);
+        } else if (!existingUser.stats) {
+          existingUser.stats = { years: {} };
+        }
+
         // Update profile details if provided
         existingUser.user.name = name;
         if (body.avatar) existingUser.user.avatar = body.avatar;
@@ -1599,7 +1645,8 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({
         success: true,
         user: existingUser.user,
-        library: existingUser.library
+        library: existingUser.library,
+        stats: existingUser.stats || { years: {} }
       }));
       return;
     }
@@ -1615,7 +1662,12 @@ const server = http.createServer(async (req, res) => {
       const userData = readUserData(email);
       if (userData) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, user: userData.user, library: userData.library }));
+        res.end(JSON.stringify({
+          success: true,
+          user: userData.user,
+          library: userData.library,
+          stats: userData.stats || { years: {} }
+        }));
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, message: 'Kullanıcı bulunamadı' }));
@@ -1626,10 +1678,11 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/auth/sync' && req.method === 'POST') {
       const body = await parseBody(req);
       const email = (body.email || '').trim().toLowerCase();
-      if (email && body.library) {
+      if (email) {
         let userData = readUserData(email);
         if (userData) {
-          userData.library = body.library;
+          if (body.library) userData.library = body.library;
+          if (body.stats) userData.stats = mergeUserStats(userData.stats || { years: {} }, body.stats);
           userData.user.lastSync = Date.now();
           writeUserData(email, userData);
         }
@@ -1652,10 +1705,12 @@ const server = http.createServer(async (req, res) => {
       if (!userData) {
         userData = {
           user: { email, name: (body.name || email.split('@')[0]), avatar: body.avatar || '', createdAt: Date.now() },
-          library: body.library
+          library: body.library,
+          stats: body.stats || { years: {} }
         };
       } else {
         userData.library = body.library;
+        if (body.stats) userData.stats = mergeUserStats(userData.stats || { years: {} }, body.stats);
         userData.user.lastSync = Date.now();
       }
       writeUserData(email, userData);
@@ -1689,9 +1744,173 @@ const server = http.createServer(async (req, res) => {
         success: true,
         user: userData.user,
         library: userData.library,
+        stats: userData.stats || { years: {} },
         playlistCount: (userData.library.playlists || []).length,
         favoriteCount: (userData.library.favorites || []).length
       }));
+      return;
+    }
+
+    // --- SPOTIFY-LIKE WRAPPED & USER PLAYBACK TRACKING (ACCOUNTS ONLY) ---
+
+    // Record a completed or qualified listen (> 25s) for logged-in user
+    if (pathname === '/api/user/record-play' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const email = (body.email || '').trim().toLowerCase();
+      if (!email || !email.includes('@')) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Yıllık özet biriktirmek için geçerli bir kullanıcı hesabı gereklidir' }));
+        return;
+      }
+
+      let userData = readUserData(email);
+      if (!userData) {
+        userData = {
+          user: { email, name: email.split('@')[0], createdAt: Date.now() },
+          library: { favorites: [], playlists: [], history: [] },
+          stats: { years: {} }
+        };
+      }
+      userData.stats = userData.stats || { years: {} };
+
+      const year = String(body.year || new Date().getFullYear());
+      if (!userData.stats.years[year]) {
+        userData.stats.years[year] = {
+          year: parseInt(year, 10),
+          totalPlays: 0,
+          totalSeconds: 0,
+          tracks: {},
+          artists: {},
+          monthlyPlays: {},
+          hourlyPlays: {}
+        };
+      }
+
+      const yStats = userData.stats.years[year];
+      const durSec = Math.max(0, parseInt(body.durationSeconds, 10) || 30);
+      const isNewPlay = body.isNewPlay !== false; // defaults to true
+
+      if (isNewPlay) {
+        yStats.totalPlays = (yStats.totalPlays || 0) + 1;
+      }
+      yStats.totalSeconds = (yStats.totalSeconds || 0) + durSec;
+
+      const song = body.song;
+      if (song && song.id) {
+        const artists = extractArtistNames(song.title, song.channel);
+        const primaryArtist = (artists && artists.length > 0) ? artists[0] : (song.channel || 'Bilinmeyen Sanatçı');
+
+        // Update track stats
+        if (!yStats.tracks[song.id]) {
+          yStats.tracks[song.id] = {
+            id: song.id,
+            title: song.title || 'Bilinmeyen Şarkı',
+            artist: primaryArtist,
+            channel: song.channel || '',
+            thumbnail: song.thumbnail || '',
+            playCount: 0,
+            totalSeconds: 0,
+            lastPlayed: Date.now()
+          };
+        }
+        const trk = yStats.tracks[song.id];
+        if (isNewPlay) trk.playCount = (trk.playCount || 0) + 1;
+        trk.totalSeconds = (trk.totalSeconds || 0) + durSec;
+        trk.lastPlayed = Date.now();
+        if (song.thumbnail && !trk.thumbnail) trk.thumbnail = song.thumbnail;
+
+        // Update artist stats
+        if (!yStats.artists[primaryArtist]) {
+          yStats.artists[primaryArtist] = {
+            name: primaryArtist,
+            playCount: 0,
+            totalSeconds: 0,
+            thumbnail: song.thumbnail || ''
+          };
+        }
+        const art = yStats.artists[primaryArtist];
+        if (isNewPlay) art.playCount = (art.playCount || 0) + 1;
+        art.totalSeconds = (art.totalSeconds || 0) + durSec;
+        if (song.thumbnail && !art.thumbnail) art.thumbnail = song.thumbnail;
+
+        // Time distributions
+        const now = new Date();
+        const m = String(now.getMonth());
+        yStats.monthlyPlays[m] = (yStats.monthlyPlays[m] || 0) + (isNewPlay ? 1 : 0);
+        const h = String(now.getHours());
+        if (!yStats.hourlyPlays) yStats.hourlyPlays = {};
+        yStats.hourlyPlays[h] = (yStats.hourlyPlays[h] || 0) + (isNewPlay ? 1 : 0);
+      }
+
+      writeUserData(email, userData);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, stats: yStats }));
+      return;
+    }
+
+    // Get annual stats / Wrapped data for user
+    if (pathname === '/api/user/stats' && req.method === 'GET') {
+      const email = (parsedUrl.searchParams.get('email') || '').trim().toLowerCase();
+      if (!email) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Email adresi gereklidir' }));
+        return;
+      }
+      const userData = readUserData(email);
+      if (!userData) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Kullanıcı bulunamadı' }));
+        return;
+      }
+      const year = parsedUrl.searchParams.get('year') || String(new Date().getFullYear());
+      const stats = userData.stats || { years: {} };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        user: userData.user,
+        stats: stats,
+        yearStats: stats.years ? stats.years[year] : null
+      }));
+      return;
+    }
+
+    // Sync all user stats from client/cloud
+    if (pathname === '/api/user/stats/sync' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const email = (body.email || '').trim().toLowerCase();
+      if (email && body.stats) {
+        let userData = readUserData(email);
+        if (userData) {
+          userData.stats = mergeUserStats(userData.stats || { years: {} }, body.stats);
+          writeUserData(email, userData);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, stats: userData.stats }));
+          return;
+        }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+
+    // Reset user stats (for specific year or all)
+    if (pathname === '/api/user/stats/reset' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const email = (body.email || '').trim().toLowerCase();
+      const year = body.year ? String(body.year) : null;
+      if (email) {
+        let userData = readUserData(email);
+        if (userData && userData.stats) {
+          if (year && userData.stats.years && userData.stats.years[year]) {
+            delete userData.stats.years[year];
+          } else if (!year) {
+            userData.stats = { years: {} };
+          }
+          writeUserData(email, userData);
+        }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
       return;
     }
 
