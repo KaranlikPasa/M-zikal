@@ -11,8 +11,8 @@ const discordRpc = require('./discord-rpc');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.4.6';
-const APP_VERSION_CODE = 28;
+const APP_VERSION = '1.4.7';
+const APP_VERSION_CODE = 29;
 const isLinux = process.platform === 'linux';
 const isWin = process.platform === 'win32';
 

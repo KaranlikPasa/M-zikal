@@ -873,6 +873,7 @@ async function playSong(song, playlist = null, index = -1) {
   }
 
   const isDifferentSong = !state.currentSong || state.currentSong.id !== song.id;
+  lastPrevRestartTime = 0;
   state.currentSong = song;
   if (playlist) {
     const isNewPlaylist = state.currentPlaylist !== playlist;
@@ -1566,9 +1567,69 @@ async function playNext() {
   playSong(nextSong, state.currentPlaylist, nextIdx);
 }
 
+let lastPrevRestartTime = 0;
+
+function getCurrentPlaybackTime() {
+  if (state.isOfflinePlaying && localAudio) {
+    return localAudio.currentTime || 0;
+  }
+  if (ytReady && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+    try {
+      return ytPlayer.getCurrentTime() || 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+  return 0;
+}
+
+function restartCurrentSong() {
+  if (state.isOfflinePlaying && localAudio) {
+    try {
+      localAudio.currentTime = 0;
+      if (state.isPlaying && localAudio.paused) {
+        localAudio.play();
+      }
+    } catch (e) {}
+  } else if (ytReady && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+    try {
+      ytPlayer.seekTo(0, true);
+      if (state.isPlaying && typeof ytPlayer.playVideo === 'function') {
+        ytPlayer.playVideo();
+      }
+    } catch (e) {}
+  }
+
+  // Immediately reflect reset on player UI bars and timers
+  if (elements.progressBar) elements.progressBar.value = 0;
+  if (elements.currentTime) elements.currentTime.textContent = '0:00';
+  if (elements.mfpProgressBar) elements.mfpProgressBar.value = 0;
+  if (elements.mfpCurrentTime) elements.mfpCurrentTime.textContent = '0:00';
+  if (elements.vinylProgressBar) elements.vinylProgressBar.value = 0;
+  if (elements.vinylCurrentTime) elements.vinylCurrentTime.textContent = '0:00';
+  if (typeof syncLyricsWithTime === 'function') {
+    syncLyricsWithTime(0, true);
+  }
+}
+
 function playPrev() {
-  // 1. If we have actual session navigation history (vital for Shuffle & Smart Shuffle!),
-  // go back to the exact song that was played previously!
+  const curTime = getCurrentPlaybackTime();
+  const now = Date.now();
+
+  // Spotify-standard rewind vs previous song logic:
+  // 1. If currently playing song has progressed for more than 3 seconds and wasn't just restarted in the last 3 seconds:
+  // First press rewinds the current track back to 0:00!
+  if (curTime > 3 && (now - lastPrevRestartTime > 3000)) {
+    lastPrevRestartTime = now;
+    restartCurrentSong();
+    return;
+  }
+
+  // 2. Second press within 3 seconds, or pressed while already in the first 3 seconds:
+  // Go to previous track!
+  lastPrevRestartTime = 0;
+
+  // Check actual session navigation history (for Shuffle, Smart Shuffle, etc.)
   if (state.navHistory && state.navHistoryPos > 0) {
     state.navHistoryPos--;
     const prevEntry = state.navHistory[state.navHistoryPos];
@@ -1580,17 +1641,6 @@ function playPrev() {
       playSong(prevEntry.song, state.currentPlaylist, targetIdx >= 0 ? targetIdx : state.currentIndex);
       return;
     }
-  }
-
-  // 2. If at the very start of session history and > 5 seconds into song, restart track
-  if (state.isOfflinePlaying) {
-    if (localAudio.currentTime > 5) {
-      localAudio.currentTime = 0;
-      return;
-    }
-  } else if (ytPlayer && ytPlayer.getCurrentTime && ytPlayer.getCurrentTime() > 5) {
-    ytPlayer.seekTo(0);
-    return;
   }
 
   if (state.currentPlaylist.length === 0) return;
@@ -4481,7 +4531,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.4.6';
+let CURRENT_APP_VERSION = '1.4.7';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
