@@ -1,6 +1,6 @@
 # Maintainer: KaranlikPasa <https://github.com/KaranlikPasa>
 pkgname=muzikal
-pkgver=1.4.8
+pkgver=1.4.9
 pkgrel=1
 pkgdesc="Spotify & YouTube Müzik Çalar, Akıllı Mix ve Çevrimdışı İndirici"
 arch=('any')
@@ -8,6 +8,7 @@ url="https://github.com/KaranlikPasa/M-zikal"
 license=('MIT')
 depends=('nodejs' 'yt-dlp' 'ffmpeg' 'python' 'python-gobject' 'webkit2gtk-4.1' 'gst-plugins-good')
 optdepends=(
+    'pipewire: Gelişmiş Linux ses yönlendirmesi, patchbay ve Discord ses köprüsü koruyucusu'
     'python-pywebview: Alternatif WebKit pencere motoru'
 )
 provides=('muzikal')
@@ -15,8 +16,8 @@ conflicts=('muzikal')
 
 package() {
     install -d "${pkgdir}/opt/muzikal"
-    cp -r "${srcdir}/.."/{server.js,discord-rpc.js,Muzikal.png,Muzikal.ico,public,python_app,muzikal,muzikal.desktop,icons,README.md} "${pkgdir}/opt/muzikal/" 2>/dev/null || \
-    cp -r "${startdir}"/{server.js,discord-rpc.js,Muzikal.png,Muzikal.ico,public,python_app,muzikal,muzikal.desktop,icons,README.md} "${pkgdir}/opt/muzikal/"
+    cp -r "${srcdir}/.."/{server.js,discord-rpc.js,pipewire-preserver.js,Muzikal.png,Muzikal.ico,public,python_app,muzikal,muzikal.desktop,icons,README.md} "${pkgdir}/opt/muzikal/" 2>/dev/null || \
+    cp -r "${startdir}"/{server.js,discord-rpc.js,pipewire-preserver.js,Muzikal.png,Muzikal.ico,public,python_app,muzikal,muzikal.desktop,icons,README.md} "${pkgdir}/opt/muzikal/"
     chmod -R 755 "${pkgdir}/opt/muzikal"
     chmod +x "${pkgdir}/opt/muzikal/muzikal"
     chmod +x "${pkgdir}/opt/muzikal/python_app/muzikal_desktop.py" 2>/dev/null || true

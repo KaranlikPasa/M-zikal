@@ -11,7 +11,7 @@
   <title>Müzikal - Müzik Dinleme Uygulaması</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=1.4.8">
+  <link rel="stylesheet" href="style.css?v=1.4.9">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -113,7 +113,7 @@
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
           </svg>
           <span>Güncellemeleri Kontrol Et</span>
-          <span class="badge" id="sidebar-app-ver">v1.4.8</span>
+          <span class="badge" id="sidebar-app-ver">v1.4.9</span>
         </button>
         <button class="nav-item nav-discord-btn" id="btn-open-discord-modal" title="Discord'da 'Dinliyor' Durumunu Ayarla">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="#5865F2" class="discord-svg-icon">
@@ -767,6 +767,34 @@
         <span class="discord-status-pill" id="discord-modal-status-pill">⚪ Bağlantı Bekleniyor</span>
       </div>
 
+      <!-- LINUX PIPEWIRE SES KÖPRÜSÜ & PATCHBAY KORUYUCU -->
+      <div id="discord-voice-bridge-section" style="margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.08);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">🎙️</span>
+            <div>
+              <div style="font-size:13px; font-weight:700; color:#fff;">Linux Ses & Discord Yayın Köprüsü</div>
+              <div style="font-size:11px; color:var(--text-muted);">Müzikal sesini doğrudan Discord ses kanalına aktarın</div>
+            </div>
+          </div>
+          <span class="badge" id="discord-voice-status-pill" style="font-size:11px; padding:3px 8px; background:rgba(255,255,255,0.08); border-radius:12px;">Kontrol Ediliyor...</span>
+        </div>
+
+        <div style="background:rgba(88,101,242,0.08); border:1px solid rgba(88,101,242,0.25); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:12px; font-size:12px; line-height:1.45; color:var(--text-muted);">
+          <strong style="color:#5865F2;">🛡️ PipeWire Link Preserver Aktif:</strong> Şarkı bittiğinde veya değiştiğinde qpwgraph / Helvum veya Discord bağlantısı kopmaz; yeni şarkı başladığında ses otomatik olarak kesintisiz aktarılmaya devam eder.
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.04); padding:10px 14px; border-radius:var(--radius-md); border:1px solid rgba(255,255,255,0.06);">
+          <div>
+            <div style="font-size:12px; font-weight:600; color:#fff;">Müziği Discord Sesine Aktar</div>
+            <div style="font-size:11px; color:var(--text-muted);" id="discord-voice-bridge-desc">WEBRTC VoiceEngine ses kanalına aktarılıyor</div>
+          </div>
+          <button type="button" class="btn-primary" id="btn-toggle-discord-voice" style="padding:6px 14px; font-size:12px; border-radius:8px; background:#5865F2;">
+            Discord'a Bağla
+          </button>
+        </div>
+      </div>
+
       <div class="modal-actions" style="margin-top: 20px;">
         <button class="btn-secondary" id="btn-cancel-discord-modal">Kapat</button>
         <button class="btn-primary btn-discord-blurple" id="btn-save-discord-config">
@@ -783,7 +811,7 @@
         <div class="update-icon-badge">🚀</div>
         <div>
           <h3 id="update-title">Yeni Güncelleme Mevcut!</h3>
-          <p id="update-version-text" style="color:var(--accent); font-weight:700;">Sürüm v1.4.8</p>
+          <p id="update-version-text" style="color:var(--accent); font-weight:700;">Sürüm v1.4.9</p>
         </div>
       </div>
       <p style="font-size:12px; margin-bottom:8px; color:var(--text-muted);">Yenilikler:</p>
@@ -1175,7 +1203,7 @@
   <div class="toast-notification" id="toast-notification"></div>
 
   <!-- APPLICATION SCRIPT & YOUTUBE API -->
-  <script src="app.js?v=1.4.8"></script>
+  <script src="app.js?v=1.4.9"></script>
   <script id="yt-iframe-api-tag" src="https://www.youtube.com/iframe_api"></script>
 </body>
 </html>

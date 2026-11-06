@@ -13,6 +13,10 @@ if os.path.isdir(local_gst_dir):
     cur_gst = os.environ.get("GST_PLUGIN_PATH", "")
     os.environ["GST_PLUGIN_PATH"] = f"{local_gst_dir}:{cur_gst}" if cur_gst else local_gst_dir
 
+# Set clean PulseAudio / PipeWire stream properties (prevents M??zikal UTF-8 corruption in patchbays)
+os.environ["PULSE_PROP_application_name"] = "Muzikal"
+os.environ["PULSE_PROP_media_role"] = "music"
+
 import time
 import shutil
 import signal
@@ -151,7 +155,7 @@ def run_gtk_webkit(app_root, server_proc):
     from gi.repository import Gtk, WebKit2, GLib, Gdk
 
     GLib.set_prgname("muzikal")
-    GLib.set_application_name("Müzikal")
+    GLib.set_application_name("Muzikal")
 
     win = Gtk.Window(title=APP_TITLE)
     win.set_wmclass("muzikal", "muzikal")
@@ -263,7 +267,7 @@ def run_pywebview(app_root, server_proc):
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Muzikal.Desktop.1.4.8")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Muzikal.Desktop.1.4.9")
         except Exception:
             pass
 

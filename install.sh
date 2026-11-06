@@ -57,6 +57,7 @@ echo -e "\n${BLUE}2/4: Uygulama Dosyaları /opt/muzikal Dizinine Kopyalanıyor..
 mkdir -p "$INSTALL_DIR"
 cp -r "$SCRIPT_DIR/server.js" "$INSTALL_DIR/"
 cp -r "$SCRIPT_DIR/discord-rpc.js" "$INSTALL_DIR/"
+cp -r "$SCRIPT_DIR/pipewire-preserver.js" "$INSTALL_DIR/"
 cp -r "$SCRIPT_DIR/public" "$INSTALL_DIR/"
 cp -r "$SCRIPT_DIR/python_app" "$INSTALL_DIR/"
 cp -r "$SCRIPT_DIR/muzikal" "$INSTALL_DIR/"

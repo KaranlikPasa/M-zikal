@@ -14,5 +14,7 @@ data/history.json
 dist_linux/
 *.pkg.tar.zst
 *.tar.gz
+pkg/
+src/
 __pycache__/
 *.pyc

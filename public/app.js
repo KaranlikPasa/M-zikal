@@ -217,6 +217,10 @@ const elements = {
   discordEnableToggle: document.getElementById('discord-enable-toggle'),
   sidebarDiscordStatus: document.getElementById('sidebar-discord-status'),
   discordModalStatusPill: document.getElementById('discord-modal-status-pill'),
+  discordVoiceSection: document.getElementById('discord-voice-bridge-section'),
+  discordVoiceStatusPill: document.getElementById('discord-voice-status-pill'),
+  discordVoiceBridgeDesc: document.getElementById('discord-voice-bridge-desc'),
+  btnToggleDiscordVoice: document.getElementById('btn-toggle-discord-voice'),
 
   toast: document.getElementById('toast-notification'),
 
@@ -3608,9 +3612,100 @@ function setupEventListeners() {
   if (elements.btnSidebarYtm) elements.btnSidebarYtm.addEventListener('click', openYtmModal);
   if (elements.btnHeroYtm) elements.btnHeroYtm.addEventListener('click', openYtmModal);
 
+  // Linux PipeWire Audio Bridge State & Functions
+  let linuxAudioBridgeActive = false;
+
+  async function refreshLinuxAudioBridge() {
+    if (!elements.discordVoiceSection) return;
+    try {
+      const res = await fetch('/api/audio/status');
+      if (!res.ok) {
+        elements.discordVoiceSection.style.display = 'none';
+        return;
+      }
+      const data = await res.json();
+      if (!data.isLinux || !data.available) {
+        elements.discordVoiceSection.style.display = 'none';
+        return;
+      }
+
+      elements.discordVoiceSection.style.display = 'block';
+      linuxAudioBridgeActive = !!data.discordBridgeEnabled;
+
+      if (elements.discordVoiceStatusPill) {
+        if (data.discordBridgeEnabled) {
+          elements.discordVoiceStatusPill.textContent = '🟢 Discord Sesine Bağlı';
+          elements.discordVoiceStatusPill.style.color = '#1ed760';
+          elements.discordVoiceStatusPill.style.background = 'rgba(30, 215, 96, 0.15)';
+        } else if (data.discordVoiceDetected) {
+          elements.discordVoiceStatusPill.textContent = '🔵 Discord Ses Girişi Hazır';
+          elements.discordVoiceStatusPill.style.color = '#5865F2';
+          elements.discordVoiceStatusPill.style.background = 'rgba(88, 101, 242, 0.15)';
+        } else {
+          elements.discordVoiceStatusPill.textContent = '⚪ Discord Bekleniyor';
+          elements.discordVoiceStatusPill.style.color = 'var(--text-muted)';
+          elements.discordVoiceStatusPill.style.background = 'rgba(255, 255, 255, 0.08)';
+        }
+      }
+
+      if (elements.btnToggleDiscordVoice) {
+        if (data.discordBridgeEnabled) {
+          elements.btnToggleDiscordVoice.textContent = 'Bağlantıyı Kes';
+          elements.btnToggleDiscordVoice.style.background = '#e91e63';
+        } else {
+          elements.btnToggleDiscordVoice.textContent = "Discord'a Bağla";
+          elements.btnToggleDiscordVoice.style.background = '#5865F2';
+        }
+      }
+
+      if (elements.discordVoiceBridgeDesc) {
+        if (data.discordBridgeEnabled) {
+          elements.discordVoiceBridgeDesc.textContent = 'Müzik şu anda Discord ses kanalında canlı çalıyor (şarkı geçişlerinde korunur)';
+          elements.discordVoiceBridgeDesc.style.color = '#1ed760';
+        } else if (data.discordVoiceDetected) {
+          elements.discordVoiceBridgeDesc.textContent = 'WEBRTC VoiceEngine algılandı, tek tıkla sesi Discord kanalına yönlendirebilirsiniz';
+          elements.discordVoiceBridgeDesc.style.color = 'var(--text-muted)';
+        } else {
+          elements.discordVoiceBridgeDesc.textContent = 'Discord uygulamasında bir ses kanalına katılın veya ses ayarını açın';
+          elements.discordVoiceBridgeDesc.style.color = 'var(--text-muted)';
+        }
+      }
+    } catch (e) {
+      if (elements.discordVoiceSection) elements.discordVoiceSection.style.display = 'none';
+    }
+  }
+
+  async function toggleLinuxDiscordVoiceBridge() {
+    const targetState = !linuxAudioBridgeActive;
+    try {
+      if (elements.btnToggleDiscordVoice) {
+        elements.btnToggleDiscordVoice.disabled = true;
+        elements.btnToggleDiscordVoice.textContent = targetState ? 'Bağlanıyor...' : 'Ayrılıyor...';
+      }
+      const res = await fetch('/api/audio/discord-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: targetState })
+      });
+      const result = await res.json();
+      if (result.success) {
+        linuxAudioBridgeActive = !!result.enabled;
+        showToast(result.enabled ? '🎙️ Müzikal Discord ses kanalına bağlandı! Şarkı geçişlerinde otomatik korunacak.' : '🔌 Discord ses bağlantısı kesildi.');
+      } else {
+        showToast(result.reason || 'Discord ses köprüsü bağlanamadı.');
+      }
+    } catch (err) {
+      showToast('Ses köprüsü işlemi sırasında hata oluştu.');
+    } finally {
+      if (elements.btnToggleDiscordVoice) elements.btnToggleDiscordVoice.disabled = false;
+      refreshLinuxAudioBridge();
+    }
+  }
+
   // Discord Rich Presence Modal triggers
   const openDiscordModal = () => {
     loadDiscordConfig();
+    refreshLinuxAudioBridge();
     if (elements.discordModal) elements.discordModal.style.display = 'flex';
     if (elements.discordClientIdInput) {
       elements.discordClientIdInput.value = discordState.clientId;
@@ -3622,6 +3717,10 @@ function setupEventListeners() {
     if (elements.sidebar) elements.sidebar.classList.remove('mobile-open');
     if (elements.sidebarBackdrop) elements.sidebarBackdrop.classList.remove('active');
   };
+
+  if (elements.btnToggleDiscordVoice) {
+    elements.btnToggleDiscordVoice.addEventListener('click', toggleLinuxDiscordVoiceBridge);
+  }
 
   if (elements.btnOpenDiscordModal) {
     elements.btnOpenDiscordModal.addEventListener('click', openDiscordModal);
@@ -4531,7 +4630,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.4.8';
+let CURRENT_APP_VERSION = '1.4.9';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {

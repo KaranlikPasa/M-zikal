@@ -6,13 +6,14 @@ const os = require('os');
 const dns = require('dns');
 const { spawn } = require('child_process');
 const discordRpc = require('./discord-rpc');
+const pipewirePreserver = require('./pipewire-preserver');
 
 // Force IPv4 first to avoid connection timeouts on Windows
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.4.8';
-const APP_VERSION_CODE = 30;
+const APP_VERSION = '1.4.9';
+const APP_VERSION_CODE = 31;
 const isLinux = process.platform === 'linux';
 const isWin = process.platform === 'win32';
 
@@ -1141,6 +1142,7 @@ async function runInAppUpdate() {
       const updateFiles = [
         { remote: `${rawBase}/server.js`, local: path.join(__dirname, 'server.js') },
         { remote: `${rawBase}/discord-rpc.js`, local: path.join(__dirname, 'discord-rpc.js') },
+        { remote: `${rawBase}/pipewire-preserver.js`, local: path.join(__dirname, 'pipewire-preserver.js') },
         { remote: `${rawBase}/Muzikal.bat`, local: path.join(__dirname, 'Muzikal.bat') },
         { remote: `${rawBase}/README.md`, local: path.join(__dirname, 'README.md') },
         { remote: `${rawBase}/public/app.js`, local: path.join(PUBLIC_DIR, 'app.js') },
@@ -1974,6 +1976,22 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // --- LINUX PIPEWIRE LINK PRESERVER & DISCORD AUDIO BRIDGE ---
+    if (pathname === '/api/audio/status' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(pipewirePreserver.getStatus()));
+      return;
+    }
+
+    if (pathname === '/api/audio/discord-bridge' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const enabled = !!(body && body.enabled);
+      const result = pipewirePreserver.setDiscordBridge(enabled);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
     // 4. Toggle Favorite
     if (pathname === '/api/library/toggle-favorite' && req.method === 'POST') {
       const { song } = await parseBody(req);
@@ -2517,8 +2535,20 @@ function startListening() {
     if (discordRpc.enabled && discordRpc.clientId) {
       discordRpc.connect();
     }
+    if (isLinux) {
+      pipewirePreserver.start();
+    }
   });
 }
+
+function handleCleanExit() {
+  if (isLinux) {
+    try { pipewirePreserver.stop(); } catch (e) {}
+  }
+}
+process.on('SIGINT', () => { handleCleanExit(); process.exit(0); });
+process.on('SIGTERM', () => { handleCleanExit(); process.exit(0); });
+process.on('exit', () => { handleCleanExit(); });
 
 server.on('error', (err) => {
   if (err && err.code === 'EADDRINUSE' && listenRetries < 8) {
