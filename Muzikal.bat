@@ -29,18 +29,29 @@ if %errorlevel% neq 0 (
     )
 )
 
-:: 3. Launch application UI (Chrome App Mode -> Edge App Mode -> Default Browser)
-if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
-    start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app="http://localhost:3456" --window-size=1280,820
-) else if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" (
-    start "" "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" --app="http://localhost:3456" --window-size=1280,820
-) else if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" (
-    start "" "%LocalAppData%\Google\Chrome\Application\chrome.exe" --app="http://localhost:3456" --window-size=1280,820
-) else if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
-    start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app="http://localhost:3456" --window-size=1280,820
+:: 3. Launch application UI (Edge App Mode -> Chrome App Mode -> Brave -> Default Browser)
+set "PROFILE_DIR=%~dp0data\profile"
+if not exist "%PROFILE_DIR%" mkdir "%PROFILE_DIR%" >nul 2>nul
+
+set "APP_URL=http://localhost:3456"
+
+if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
+    start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app="%APP_URL%" --user-data-dir="%PROFILE_DIR%" --window-size=1280,820
 ) else if exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" (
-    start "" "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" --app="http://localhost:3456" --window-size=1280,820
+    start "" "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" --app="%APP_URL%" --user-data-dir="%PROFILE_DIR%" --window-size=1280,820
+) else if exist "%LocalAppData%\Microsoft\Edge\Application\msedge.exe" (
+    start "" "%LocalAppData%\Microsoft\Edge\Application\msedge.exe" --app="%APP_URL%" --user-data-dir="%PROFILE_DIR%" --window-size=1280,820
+) else if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
+    start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app="%APP_URL%" --user-data-dir="%PROFILE_DIR%" --window-size=1280,820
+) else if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" (
+    start "" "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" --app="%APP_URL%" --user-data-dir="%PROFILE_DIR%" --window-size=1280,820
+) else if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" (
+    start "" "%LocalAppData%\Google\Chrome\Application\chrome.exe" --app="%APP_URL%" --user-data-dir="%PROFILE_DIR%" --window-size=1280,820
+) else if exist "%ProgramFiles%\BraveSoftware\Brave-Browser\Application\brave.exe" (
+    start "" "%ProgramFiles%\BraveSoftware\Brave-Browser\Application\brave.exe" --app="%APP_URL%" --user-data-dir="%PROFILE_DIR%" --window-size=1280,820
+) else if exist "%LocalAppData%\BraveSoftware\Brave-Browser\Application\brave.exe" (
+    start "" "%LocalAppData%\BraveSoftware\Brave-Browser\Application\brave.exe" --app="%APP_URL%" --user-data-dir="%PROFILE_DIR%" --window-size=1280,820
 ) else (
-    start "" "http://localhost:3456"
+    start "" "%APP_URL%"
 )
 exit

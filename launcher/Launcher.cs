@@ -11,7 +11,7 @@ namespace MuzikalLauncher
     static class Program
     {
         private const int Port = 3456;
-        private static readonly string ServerUrl = "http://127.0.0.1:" + Port;
+        private static readonly string ServerUrl = "http://localhost:" + Port;
         private static readonly string HealthUrl = ServerUrl + "/api/version";
 
         [STAThread]
@@ -211,7 +211,19 @@ namespace MuzikalLauncher
 
         private static string FindBestBrowser()
         {
-            // 1. Google Chrome (64-bit & 32-bit & User-level)
+            // 1. Microsoft Edge (Always present on Windows 10/11, highly reliable PWA/App Mode)
+            string[] edgePaths = new string[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft", "Edge", "Application", "msedge.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft", "Edge", "Application", "msedge.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "Edge", "Application", "msedge.exe")
+            };
+            foreach (string p in edgePaths)
+            {
+                if (File.Exists(p)) return p;
+            }
+
+            // 2. Google Chrome (64-bit & 32-bit & User-level)
             string[] chromePaths = new string[]
             {
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Google", "Chrome", "Application", "chrome.exe"),
@@ -219,17 +231,6 @@ namespace MuzikalLauncher
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Google", "Chrome", "Application", "chrome.exe")
             };
             foreach (string p in chromePaths)
-            {
-                if (File.Exists(p)) return p;
-            }
-
-            // 2. Microsoft Edge (Always present on Windows 10/11)
-            string[] edgePaths = new string[]
-            {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft", "Edge", "Application", "msedge.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft", "Edge", "Application", "msedge.exe")
-            };
-            foreach (string p in edgePaths)
             {
                 if (File.Exists(p)) return p;
             }

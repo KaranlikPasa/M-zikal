@@ -46,7 +46,7 @@ echo -e "\033[1;36m[Müzikal]\033[0m Arka plan ses ve müzik motoru başlatılı
 
 SERVER_RUNNING=false
 if command -v curl >/dev/null 2>&1; then
-  if curl -s -f http://127.0.0.1:3456/api/version >/dev/null 2>&1; then
+  if curl -s -f http://localhost:3456/api/version >/dev/null 2>&1; then
     SERVER_RUNNING=true
   fi
 fi
@@ -58,10 +58,12 @@ if [ "$SERVER_RUNNING" = false ]; then
   sleep 0.8
 fi
 
+mkdir -p "$APP_DIR/data/profile" 2>/dev/null || true
+
 for browser in google-chrome-stable google-chrome chromium brave-browser brave microsoft-edge-stable microsoft-edge vivaldi; do
   if command -v "$browser" >/dev/null 2>&1; then
     echo -e "\033[1;32m✓ Müzikal bağımsız uygulama penceresinde açılıyor ($browser)...\033[0m"
-    exec "$browser" --app="http://127.0.0.1:3456" --name="muzikal" --class="muzikal" "$@"
+    exec "$browser" --app="http://localhost:3456" --user-data-dir="$APP_DIR/data/profile" --name="muzikal" --class="muzikal" "$@"
   fi
 done
 

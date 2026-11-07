@@ -267,7 +267,7 @@ def run_pywebview(app_root, server_proc):
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Muzikal.Desktop.1.4.9")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Muzikal.Desktop.1.5.0")
         except Exception:
             pass
 
@@ -299,32 +299,56 @@ def run_pywebview(app_root, server_proc):
 
 def run_app_mode_browser(app_root, server_proc):
     """Launch dedicated standalone app window using Chromium/Chrome/Brave/Edge."""
-    browsers = [
-        "google-chrome-stable",
-        "google-chrome",
-        "chromium",
-        "brave-browser",
-        "brave",
-        "microsoft-edge-stable",
-        "microsoft-edge",
-        "vivaldi",
-    ]
-    for b in browsers:
-        path = shutil.which(b)
-        if path:
-            args = [
-                path,
-                f"--app={SERVER_URL}",
-                "--name=muzikal",
-                "--class=muzikal",
-                f"--window-size=1380,860",
-            ]
-            try:
-                proc = subprocess.Popen(args)
-                proc.wait()
-                return True
-            except Exception:
-                pass
+    profile_dir = os.path.join(app_root, "data", "profile")
+    try:
+        os.makedirs(profile_dir, exist_ok=True)
+    except Exception:
+        pass
+
+    candidates = []
+    if sys.platform == "win32":
+        win_candidates = [
+            os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%LocalAppData%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%ProgramFiles%\BraveSoftware\Brave-Browser\Application\brave.exe"),
+            os.path.expandvars(r"%LocalAppData%\BraveSoftware\Brave-Browser\Application\brave.exe"),
+        ]
+        candidates = [c for c in win_candidates if os.path.isfile(c)]
+    else:
+        linux_browsers = [
+            "google-chrome-stable",
+            "google-chrome",
+            "chromium",
+            "brave-browser",
+            "brave",
+            "microsoft-edge-stable",
+            "microsoft-edge",
+            "vivaldi",
+        ]
+        for b in linux_browsers:
+            p = shutil.which(b)
+            if p:
+                candidates.append(p)
+
+    for path in candidates:
+        args = [
+            path,
+            f"--app={SERVER_URL}",
+            f"--user-data-dir={profile_dir}",
+            "--name=muzikal",
+            "--class=muzikal",
+            f"--window-size=1380,860",
+        ]
+        try:
+            proc = subprocess.Popen(args)
+            proc.wait()
+            return True
+        except Exception:
+            pass
     return False
 
 

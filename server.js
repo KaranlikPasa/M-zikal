@@ -12,8 +12,8 @@ const pipewirePreserver = require('./pipewire-preserver');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.4.9';
-const APP_VERSION_CODE = 31;
+const APP_VERSION = '1.5.0';
+const APP_VERSION_CODE = 50;
 const isLinux = process.platform === 'linux';
 const isWin = process.platform === 'win32';
 
@@ -1144,6 +1144,7 @@ async function runInAppUpdate() {
         { remote: `${rawBase}/discord-rpc.js`, local: path.join(__dirname, 'discord-rpc.js') },
         { remote: `${rawBase}/pipewire-preserver.js`, local: path.join(__dirname, 'pipewire-preserver.js') },
         { remote: `${rawBase}/Muzikal.bat`, local: path.join(__dirname, 'Muzikal.bat') },
+        { remote: `${rawBase}/python_app/muzikal_desktop.py`, local: path.join(__dirname, 'python_app', 'muzikal_desktop.py') },
         { remote: `${rawBase}/README.md`, local: path.join(__dirname, 'README.md') },
         { remote: `${rawBase}/public/app.js`, local: path.join(PUBLIC_DIR, 'app.js') },
         { remote: `${rawBase}/public/index.html`, local: path.join(PUBLIC_DIR, 'index.html') },
@@ -1275,7 +1276,19 @@ async function runInAppUpdate() {
       }
     }
 
-    // 5. Cleanup temp directory
+    // 5. Copy python_app/muzikal_desktop.py
+    const srcPython = path.join(sourceRoot, 'python_app', 'muzikal_desktop.py');
+    if (fs.existsSync(srcPython)) {
+      try {
+        const destPyDir = path.join(__dirname, 'python_app');
+        if (!fs.existsSync(destPyDir)) fs.mkdirSync(destPyDir, { recursive: true });
+        fs.copyFileSync(srcPython, path.join(destPyDir, 'muzikal_desktop.py'));
+      } catch (e) {
+        console.warn('muzikal_desktop.py overwrite warning:', e.message);
+      }
+    }
+
+    // 6. Cleanup temp directory
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
     } catch (e) {
