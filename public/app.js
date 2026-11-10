@@ -4740,12 +4740,17 @@ function setupEventListeners() {
       }
 
       if (!applyStarted) {
-        // Local server was closed/restarting -> directly download Muzikal-Setup.exe so user is never stuck at 3%!
+        const isLinuxDesktop = !isAndroid && navigator.userAgent.toLowerCase().includes('linux');
+        const fallbackPkgUrl = isLinuxDesktop
+          ? 'https://github.com/KaranlikPasa/M-zikal/releases/latest/download/Muzikal-Linux-x64.tar.gz'
+          : 'https://github.com/KaranlikPasa/M-zikal/releases/latest/download/Muzikal-Setup.exe';
         if (progressFill) progressFill.style.width = '100%';
         if (progressPercent) progressPercent.textContent = '100%';
-        if (progressStatus) progressStatus.textContent = 'Kurulum paketi (Muzikal-Setup.exe) indiriliyor...';
+        if (progressStatus) progressStatus.textContent = isLinuxDesktop
+          ? 'Kurulum paketi (Muzikal-Linux-x64.tar.gz) indiriliyor...'
+          : 'Kurulum paketi (Muzikal-Setup.exe) indiriliyor...';
         showToast('Arka plan sunucusu kapalı olduğu için doğrudan kurulum paketi indiriliyor...');
-        window.location.href = 'https://github.com/KaranlikPasa/M-zikal/releases/latest/download/Muzikal-Setup.exe';
+        window.location.href = fallbackPkgUrl;
         setTimeout(() => {
           btnStartInAppUpdate.disabled = false;
           btnStartInAppUpdate.innerHTML = '<span>Tekrar Dene</span>';
@@ -5119,13 +5124,13 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.5.2';
+let CURRENT_APP_VERSION = '1.5.3';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
   // Sync current version dynamically with backend if available
   try {
-    const vRes = await fetch('/api/version');
+    const vRes = await fetch('/api/version?t=' + Date.now(), { cache: 'no-store' });
     if (vRes.ok) {
       const vData = await vRes.json();
       if (vData && vData.version && compareSemver(vData.version, CURRENT_APP_VERSION) >= 0) {
@@ -5133,6 +5138,8 @@ async function checkForAppUpdates(isManual = false) {
       }
       const sidebarVer = document.getElementById('sidebar-app-ver');
       if (sidebarVer) sidebarVer.textContent = 'v' + CURRENT_APP_VERSION;
+      const settingsVer = document.getElementById('settings-version-label');
+      if (settingsVer) settingsVer.textContent = 'v' + CURRENT_APP_VERSION;
     }
   } catch (e) {}
 
@@ -5143,7 +5150,7 @@ async function checkForAppUpdates(isManual = false) {
   }
 
   try {
-    const res = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest');
+    const res = await fetch('https://api.github.com/repos/KaranlikPasa/M-zikal/releases/latest?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) {
       if (isManual) showToast('Güncelleme sunucusuna bağlanılamadı.');
       return;
@@ -5160,11 +5167,18 @@ async function checkForAppUpdates(isManual = false) {
     if (compareSemver(remoteTag, CURRENT_APP_VERSION) > 0) {
       const isAndroid = (window.MuzikalNative && typeof window.MuzikalNative.isNative === 'function') ||
                         navigator.userAgent.toLowerCase().includes('android');
+      const isLinuxDesktop = !isAndroid && navigator.userAgent.toLowerCase().includes('linux');
 
       let downloadUrl = release.html_url || 'https://github.com/KaranlikPasa/M-zikal/releases/latest';
       if (isAndroid) {
         const apkAsset = release.assets && release.assets.find(a => a.name.endsWith('.apk'));
         downloadUrl = apkAsset ? apkAsset.browser_download_url : `https://github.com/KaranlikPasa/M-zikal/releases/download/v${remoteTag}/Muzikal.apk`;
+      } else if (isLinuxDesktop) {
+        const linuxAsset = release.assets && (
+          release.assets.find(a => a.name.toLowerCase().endsWith('.pkg.tar.zst')) ||
+          release.assets.find(a => a.name.toLowerCase().includes('linux') && a.name.toLowerCase().endsWith('.tar.gz'))
+        );
+        if (linuxAsset) downloadUrl = linuxAsset.browser_download_url;
       } else {
         const zipAsset = release.assets && (
           release.assets.find(a => a.name.toLowerCase().endsWith('-windows-x64.zip')) ||
@@ -6527,7 +6541,7 @@ function initAudioStudio() {
 // --- BOOTSTRAP APP ---
 window.addEventListener('DOMContentLoaded', async () => {
   try {
-    const vRes = await fetch('/api/version');
+    const vRes = await fetch('/api/version?t=' + Date.now(), { cache: 'no-store' });
     if (vRes.ok) {
       const vData = await vRes.json();
       if (vData && vData.version && compareSemver(vData.version, CURRENT_APP_VERSION) >= 0) {
@@ -6538,6 +6552,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const sidebarVer = document.getElementById('sidebar-app-ver');
   if (sidebarVer) sidebarVer.textContent = 'v' + CURRENT_APP_VERSION;
+  const settingsVer = document.getElementById('settings-version-label');
+  if (settingsVer) settingsVer.textContent = 'v' + CURRENT_APP_VERSION;
 
   checkYearEndWrappedVisibility();
   setupEventListeners();

@@ -12,7 +12,7 @@ namespace MuzikalInstaller
 {
     static class Program
     {
-        public const string AppVersion = "1.5.2";
+        public const string AppVersion = "1.5.3";
         public const string AppName = "Müzikal";
         public const string RegKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Muzikal";
 
@@ -110,15 +110,19 @@ namespace MuzikalInstaller
 
             try
             {
-                Process[] procs = Process.GetProcessesByName("node");
-                foreach (Process p in procs)
+                string[] procNames = new string[] { "node", "Muzikal", "Muzikal-Python" };
+                foreach (string pName in procNames)
                 {
-                    try
+                    Process[] procs = Process.GetProcessesByName(pName);
+                    foreach (Process p in procs)
                     {
-                        p.Kill();
-                        p.WaitForExit(1000);
+                        try
+                        {
+                            p.Kill();
+                            p.WaitForExit(1000);
+                        }
+                        catch { }
                     }
-                    catch { }
                 }
             }
             catch { }
@@ -176,21 +180,23 @@ namespace MuzikalInstaller
                         foreach (ZipArchiveEntry entry in archive.Entries)
                         {
                             cur++;
-                            if (string.IsNullOrEmpty(entry.Name)) continue; // Directory entry
+                            string relPath = entry.FullName.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+                            if (string.IsNullOrEmpty(entry.Name) || relPath.EndsWith(Path.DirectorySeparatorChar.ToString())) continue; // Directory entry
 
-                            string destPath = Path.Combine(targetDir, entry.FullName);
+                            string destPath = Path.Combine(targetDir, relPath);
                             string destFolder = Path.GetDirectoryName(destPath);
-                            if (!Directory.Exists(destFolder))
+                            if (!string.IsNullOrEmpty(destFolder) && !Directory.Exists(destFolder))
                             {
                                 Directory.CreateDirectory(destFolder);
                             }
 
                             // Preserve existing playlists and downloads on update!
-                            if (entry.FullName.Equals("data/library.json", StringComparison.OrdinalIgnoreCase) && File.Exists(destPath))
+                            string normCheck = entry.FullName.Replace('\\', '/');
+                            if (normCheck.Equals("data/library.json", StringComparison.OrdinalIgnoreCase) && File.Exists(destPath))
                             {
                                 continue;
                             }
-                            if (entry.FullName.StartsWith("downloads/", StringComparison.OrdinalIgnoreCase) && File.Exists(destPath))
+                            if (normCheck.StartsWith("downloads/", StringComparison.OrdinalIgnoreCase) && File.Exists(destPath))
                             {
                                 continue;
                             }
@@ -239,14 +245,16 @@ namespace MuzikalInstaller
                 foreach (ZipArchiveEntry entry in archive.Entries)
                 {
                     cur++;
-                    if (string.IsNullOrEmpty(entry.Name)) continue;
-                    string destPath = Path.Combine(targetDir, entry.FullName);
+                    string relPath = entry.FullName.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+                    if (string.IsNullOrEmpty(entry.Name) || relPath.EndsWith(Path.DirectorySeparatorChar.ToString())) continue;
+                    string destPath = Path.Combine(targetDir, relPath);
                     string destFolder = Path.GetDirectoryName(destPath);
-                    if (!Directory.Exists(destFolder)) Directory.CreateDirectory(destFolder);
+                    if (!string.IsNullOrEmpty(destFolder) && !Directory.Exists(destFolder)) Directory.CreateDirectory(destFolder);
 
-                    if (entry.FullName.Equals("data/library.json", StringComparison.OrdinalIgnoreCase) && File.Exists(destPath))
+                    string normCheck = entry.FullName.Replace('\\', '/');
+                    if (normCheck.Equals("data/library.json", StringComparison.OrdinalIgnoreCase) && File.Exists(destPath))
                         continue;
-                    if (entry.FullName.StartsWith("downloads/", StringComparison.OrdinalIgnoreCase) && File.Exists(destPath))
+                    if (normCheck.StartsWith("downloads/", StringComparison.OrdinalIgnoreCase) && File.Exists(destPath))
                         continue;
 
                     entry.ExtractToFile(destPath, true);

@@ -12,8 +12,8 @@ const pipewirePreserver = require('./pipewire-preserver');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.5.2';
-const APP_VERSION_CODE = 52;
+const APP_VERSION = '1.5.3';
+const APP_VERSION_CODE = 53;
 const isLinux = process.platform === 'linux';
 const isWin = process.platform === 'win32';
 
@@ -84,7 +84,24 @@ function isYtDlpReady() {
   return true;
 }
 
-const PUBLIC_DIR = path.join(__dirname, 'public');
+function resolvePublicDir() {
+  const localPub = path.join(__dirname, 'public');
+  if (isLinux) {
+    try {
+      const userPub = path.join(os.homedir(), '.local', 'share', 'muzikal', 'public');
+      const userApp = path.join(userPub, 'app.js');
+      const localApp = path.join(localPub, 'app.js');
+      if (fs.existsSync(userApp) && fs.existsSync(localApp)) {
+        if (fs.statSync(userApp).mtimeMs > fs.statSync(localApp).mtimeMs) {
+          return userPub;
+        }
+      }
+    } catch (e) {}
+  }
+  return localPub;
+}
+
+let PUBLIC_DIR = resolvePublicDir();
 const DATA_DIR = resolveDataDir();
 const DATA_FILE = path.join(DATA_DIR, 'library.json');
 const DOWNLOADS_DIR = resolveDownloadsDir();
@@ -1176,7 +1193,7 @@ async function runInAppUpdate() {
         const item = updateFiles[i];
         const res = await fetch(`${item.remote}?t=${Date.now()}`, {
           headers: {
-            'User-Agent': 'Muzikal-Updater/1.5.1',
+            'User-Agent': 'Muzikal-Updater/1.5.3',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache'
           }
@@ -1194,6 +1211,7 @@ async function runInAppUpdate() {
         inAppUpdateState.status = `Dosyalar güncelleniyor: %${inAppUpdateState.percent} (${i + 1}/${updateFiles.length})...`;
       }
 
+      PUBLIC_DIR = updatePublicDir;
       inAppUpdateState.percent = 100;
       inAppUpdateState.status = 'Güncelleme başarıyla tamamlandı! Sayfa yenileniyor...';
       inAppUpdateState.done = true;
@@ -2596,8 +2614,25 @@ const server = http.createServer(async (req, res) => {
       setTimeout(() => {
         try {
           try { server.close(); } catch (e) {}
-          const child = spawn(process.argv[0], process.argv.slice(1), {
-            cwd: __dirname,
+          let targetDir = __dirname;
+          let targetScript = path.join(__dirname, 'server.js');
+          if (isLinux) {
+            const userShareDir = path.join(os.homedir(), '.local', 'share', 'muzikal');
+            const userServerJs = path.join(userShareDir, 'server.js');
+            if (fs.existsSync(userServerJs)) {
+              try {
+                if (!fs.existsSync(targetScript) || fs.statSync(userServerJs).mtimeMs >= fs.statSync(targetScript).mtimeMs) {
+                  targetDir = userShareDir;
+                  targetScript = userServerJs;
+                }
+              } catch (e) {
+                targetDir = userShareDir;
+                targetScript = userServerJs;
+              }
+            }
+          }
+          const child = spawn(process.argv[0], [targetScript], {
+            cwd: targetDir,
             detached: true,
             windowsHide: true,
             stdio: 'ignore'
