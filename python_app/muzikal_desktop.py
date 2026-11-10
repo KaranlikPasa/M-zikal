@@ -271,7 +271,7 @@ def run_pywebview(app_root, server_proc):
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Muzikal.Desktop.1.5.3")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Muzikal.Desktop.1.5.4")
         except Exception:
             pass
 
@@ -343,6 +343,9 @@ def run_app_mode_browser(app_root, server_proc):
             path,
             f"--app={SERVER_URL}",
             f"--user-data-dir={profile_dir}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-features=Translate,EdgeSidebar,EdgeWallet,EdgeShopping",
             "--name=muzikal",
             "--class=muzikal",
             f"--window-size=1380,860",

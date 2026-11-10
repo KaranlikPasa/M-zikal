@@ -12,7 +12,6 @@ namespace MuzikalLauncher
     {
         private const int Port = 3456;
         private static readonly string ServerUrl = "http://localhost:" + Port;
-        private static readonly string HealthUrl = ServerUrl + "/api/version";
 
         [STAThread]
         static void Main(string[] args)
@@ -104,20 +103,27 @@ namespace MuzikalLauncher
 
         private static bool IsServerRunning()
         {
-            try
+            string[] checkUrls = new string[]
             {
-                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(HealthUrl);
-                req.Timeout = 1200;
-                req.Method = "GET";
-                using (HttpWebResponse res = (HttpWebResponse)req.GetResponse())
+                "http://127.0.0.1:" + Port + "/api/version",
+                "http://localhost:" + Port + "/api/version"
+            };
+
+            foreach (string url in checkUrls)
+            {
+                try
                 {
-                    return res.StatusCode == HttpStatusCode.OK;
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                    req.Timeout = 1000;
+                    req.Method = "GET";
+                    using (HttpWebResponse res = (HttpWebResponse)req.GetResponse())
+                    {
+                        if (res.StatusCode == HttpStatusCode.OK) return true;
+                    }
                 }
+                catch { }
             }
-            catch
-            {
-                return false;
-            }
+            return false;
         }
 
         private static string FindNodeExecutable(string appDir)
@@ -170,6 +176,9 @@ namespace MuzikalLauncher
             try
             {
                 if (!Directory.Exists(profileDir)) Directory.CreateDirectory(profileDir);
+                // Remove stale Chromium lockfiles so app mode never hangs or breaks out into browser tabs
+                string lockFile = Path.Combine(profileDir, "lockfile");
+                if (File.Exists(lockFile)) File.Delete(lockFile);
             }
             catch { }
 
@@ -180,8 +189,9 @@ namespace MuzikalLauncher
                 try
                 {
                     // App mode: frameless window without URL/tab bars, feels like a 100% native desktop app!
+                    // CRITICAL: --app={0} without quotes around URL so Chromium parser treats it strictly as an application window!
                     string args = string.Format(
-                        "--app=\"{0}\" --user-data-dir=\"{1}\" --window-size=1280,820",
+                        "--app={0} --user-data-dir=\"{1}\" --no-first-run --no-default-browser-check --disable-features=Translate,EdgeSidebar,EdgeWallet,EdgeShopping --window-size=1380,860",
                         ServerUrl,
                         profileDir
                     );
@@ -242,6 +252,17 @@ namespace MuzikalLauncher
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BraveSoftware", "Brave-Browser", "Application", "brave.exe")
             };
             foreach (string p in bravePaths)
+            {
+                if (File.Exists(p)) return p;
+            }
+
+            // 4. Vivaldi Browser
+            string[] vivaldiPaths = new string[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Vivaldi", "Application", "vivaldi.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Vivaldi", "Application", "vivaldi.exe")
+            };
+            foreach (string p in vivaldiPaths)
             {
                 if (File.Exists(p)) return p;
             }

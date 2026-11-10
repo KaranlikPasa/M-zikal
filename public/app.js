@@ -5124,7 +5124,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.5.3';
+let CURRENT_APP_VERSION = '1.5.4';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
