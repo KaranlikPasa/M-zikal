@@ -12,8 +12,8 @@ const pipewirePreserver = require('./pipewire-preserver');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.5.0';
-const APP_VERSION_CODE = 50;
+const APP_VERSION = '1.5.1';
+const APP_VERSION_CODE = 51;
 const isLinux = process.platform === 'linux';
 const isWin = process.platform === 'win32';
 
@@ -178,6 +178,7 @@ function mergeUserStats(baseStats, incomingStats) {
 // In-memory cache for search queries (15 minutes TTL)
 const searchCache = new Map();
 const lyricsCache = new Map();
+const artistImageCache = new Map();
 const CACHE_TTL = 15 * 60 * 1000;
 
 // Download status tracker
@@ -1138,35 +1139,56 @@ async function runInAppUpdate() {
       inAppUpdateState.status = 'Güncelleme dosyaları indiriliyor (%20)...';
       inAppUpdateState.percent = 20;
 
+      // Resolve writable installation root (if /opt/muzikal or /usr/lib/muzikal is root-owned on Linux, mirror to ~/.local/share/muzikal)
+      let updateRoot = __dirname;
+      let updatePublicDir = PUBLIC_DIR;
+      if (isLinux) {
+        try {
+          fs.accessSync(__dirname, fs.constants.W_OK);
+        } catch (permErr) {
+          const userShareDir = path.join(os.homedir(), '.local', 'share', 'muzikal');
+          if (!fs.existsSync(userShareDir)) fs.mkdirSync(userShareDir, { recursive: true });
+          copyDirRecursiveSync(__dirname, userShareDir);
+          updateRoot = userShareDir;
+          updatePublicDir = path.join(userShareDir, 'public');
+        }
+      }
+
       const rawBase = 'https://raw.githubusercontent.com/KaranlikPasa/M-zikal/main';
       const updateFiles = [
-        { remote: `${rawBase}/server.js`, local: path.join(__dirname, 'server.js') },
-        { remote: `${rawBase}/discord-rpc.js`, local: path.join(__dirname, 'discord-rpc.js') },
-        { remote: `${rawBase}/pipewire-preserver.js`, local: path.join(__dirname, 'pipewire-preserver.js') },
-        { remote: `${rawBase}/Muzikal.bat`, local: path.join(__dirname, 'Muzikal.bat') },
-        { remote: `${rawBase}/python_app/muzikal_desktop.py`, local: path.join(__dirname, 'python_app', 'muzikal_desktop.py') },
-        { remote: `${rawBase}/README.md`, local: path.join(__dirname, 'README.md') },
-        { remote: `${rawBase}/public/app.js`, local: path.join(PUBLIC_DIR, 'app.js') },
-        { remote: `${rawBase}/public/index.html`, local: path.join(PUBLIC_DIR, 'index.html') },
-        { remote: `${rawBase}/public/style.css`, local: path.join(PUBLIC_DIR, 'style.css') },
-        { remote: `${rawBase}/public/favicon.ico`, local: path.join(PUBLIC_DIR, 'favicon.ico') },
-        { remote: `${rawBase}/public/favicon.png`, local: path.join(PUBLIC_DIR, 'favicon.png') },
-        { remote: `${rawBase}/public/favicon-32.png`, local: path.join(PUBLIC_DIR, 'favicon-32.png') },
-        { remote: `${rawBase}/public/apple-touch-icon.png`, local: path.join(PUBLIC_DIR, 'apple-touch-icon.png') }
+        { remote: `${rawBase}/server.js`, local: path.join(updateRoot, 'server.js') },
+        { remote: `${rawBase}/discord-rpc.js`, local: path.join(updateRoot, 'discord-rpc.js') },
+        { remote: `${rawBase}/pipewire-preserver.js`, local: path.join(updateRoot, 'pipewire-preserver.js') },
+        { remote: `${rawBase}/Muzikal.bat`, local: path.join(updateRoot, 'Muzikal.bat') },
+        { remote: `${rawBase}/muzikal`, local: path.join(updateRoot, 'muzikal'), chmod: 0o755 },
+        { remote: `${rawBase}/python_app/muzikal_desktop.py`, local: path.join(updateRoot, 'python_app', 'muzikal_desktop.py'), chmod: 0o755 },
+        { remote: `${rawBase}/README.md`, local: path.join(updateRoot, 'README.md') },
+        { remote: `${rawBase}/public/app.js`, local: path.join(updatePublicDir, 'app.js') },
+        { remote: `${rawBase}/public/index.html`, local: path.join(updatePublicDir, 'index.html') },
+        { remote: `${rawBase}/public/style.css`, local: path.join(updatePublicDir, 'style.css') },
+        { remote: `${rawBase}/public/favicon.ico`, local: path.join(updatePublicDir, 'favicon.ico') },
+        { remote: `${rawBase}/public/favicon.png`, local: path.join(updatePublicDir, 'favicon.png') },
+        { remote: `${rawBase}/public/favicon-32.png`, local: path.join(updatePublicDir, 'favicon-32.png') },
+        { remote: `${rawBase}/public/apple-touch-icon.png`, local: path.join(updatePublicDir, 'apple-touch-icon.png') }
       ];
 
       for (let i = 0; i < updateFiles.length; i++) {
         const item = updateFiles[i];
         const res = await fetch(`${item.remote}?t=${Date.now()}`, {
           headers: {
-            'User-Agent': 'Muzikal-Updater/1.4.0',
+            'User-Agent': 'Muzikal-Updater/1.5.1',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache'
           }
         });
         if (res.ok) {
           const buf = Buffer.from(await res.arrayBuffer());
+          const parentDir = path.dirname(item.local);
+          if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
           fs.writeFileSync(item.local, buf);
+          if (item.chmod && isLinux) {
+            try { fs.chmodSync(item.local, item.chmod); } catch (ce) {}
+          }
         }
         inAppUpdateState.percent = 20 + Math.round(((i + 1) / updateFiles.length) * 75);
         inAppUpdateState.status = `Dosyalar güncelleniyor: %${inAppUpdateState.percent} (${i + 1}/${updateFiles.length})...`;
@@ -1312,13 +1334,7 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${host || 'localhost:3456'}`);
   const pathname = parsedUrl.pathname;
 
-  // Auto-redirect raw IP 127.0.0.1 to localhost for Web UI so YouTube embed origin restriction does not block music
-  if (host.startsWith('127.0.0.1') && !pathname.startsWith('/api/') && !pathname.endsWith('.apk')) {
-    res.writeHead(302, { 'Location': `http://localhost:${PORT}${req.url}` });
-    res.end();
-    return;
-  }
-
+  // Serve directly on both localhost and 127.0.0.1 so standalone desktop --app windows never break out into a browser tab
   // CORS and Referrer Policy headers so embedded YouTube player is never rejected by Error 153 (MISSING_REFERRER)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
@@ -1420,17 +1436,57 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 2.1 Lyrics API (Multi-pass intelligent Spotify-style synchronized lyrics)
+    // 2.05 Artist Image API (Fetches official artist portrait from Deezer API with caching)
+    if (pathname === '/api/artist-image' && req.method === 'GET') {
+      const artistName = (parsedUrl.searchParams.get('name') || '').trim();
+      if (!artistName) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false }));
+        return;
+      }
+      const cacheKey = artistName.toLowerCase();
+      if (artistImageCache.has(cacheKey)) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, name: artistName, imageUrl: artistImageCache.get(cacheKey) }));
+        return;
+      }
+      try {
+        const dzUrl = `https://api.deezer.com/search/artist?limit=5&q=${encodeURIComponent(artistName)}`;
+        const dzRes = await fetch(dzUrl, { headers: { 'User-Agent': 'Muzikal/1.5.1' } });
+        if (dzRes.ok) {
+          const dzData = await dzRes.json();
+          if (dzData && Array.isArray(dzData.data) && dzData.data.length > 0) {
+            const normTarget = artistName.toLowerCase().replace(/[^a-z0-9çğıöşü]/gi, '');
+            const best = dzData.data.find(a => a && a.name && a.name.toLowerCase().replace(/[^a-z0-9çğıöşü]/gi, '') === normTarget && (a.picture_medium || a.picture_big)) || dzData.data[0];
+            const img = (best && (best.picture_medium || best.picture_big || best.picture)) || null;
+            if (img && !img.includes('/artist//')) {
+              artistImageCache.set(cacheKey, img);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true, name: artistName, imageUrl: img }));
+              return;
+            }
+          }
+        }
+      } catch (e) {}
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false }));
+      return;
+    }
+
+    // 2.1 Lyrics API (Multi-pass intelligent Spotify-style synchronized lyrics with duration matching)
     if (pathname === '/api/lyrics' && req.method === 'GET') {
       const rawTitle = (parsedUrl.searchParams.get('title') || '').trim();
       const rawArtist = (parsedUrl.searchParams.get('artist') || '').trim();
+      const rawDuration = parseFloat(parsedUrl.searchParams.get('duration') || '0') || 0;
 
-      const cacheKey = `${rawArtist}:::${rawTitle}`.toLowerCase();
+      const cacheKey = `${rawArtist}:::${rawTitle}:::${Math.round(rawDuration / 5) * 5}`.toLowerCase();
       if (lyricsCache.has(cacheKey)) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(lyricsCache.get(cacheKey)));
         return;
       }
+
+      const wantsRemix = /\b(remix|slowed|sped\s*up|nightcore|akustik|acoustic|live|canlı)\b/i.test(rawTitle);
 
       // 1. Clean up title
       let cleanTitle = rawTitle
@@ -1486,9 +1542,51 @@ const server = http.createServer(async (req, res) => {
         queriesToTry.push(rawTitle.replace(/\s*[\[\(][^\)\]]*[\)\]]/g, '').trim());
       }
 
-      const headers = { 'User-Agent': 'Muzikal/1.4.0 (https://github.com/KaranlikPasa/M-zikal)' };
+      const headers = { 'User-Agent': 'Muzikal/1.5.1 (https://github.com/KaranlikPasa/M-zikal)' };
 
-      // Helper to try LRCLIB search
+      const normStr = (s) => (s || '').toLowerCase()
+        .replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
+        .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c')
+        .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+      const normTargetTrack = normStr(finalTrackName);
+      const normTargetArtist = normStr(cleanArtist);
+
+      function scoreLrclibItem(it) {
+        if (!it || (!it.syncedLyrics && !it.plainLyrics)) return -999;
+        let score = 0;
+        if (it.syncedLyrics && it.syncedLyrics.trim().length > 0) score += 100;
+        else if (it.plainLyrics && it.plainLyrics.trim().length > 0) score += 25;
+
+        const itTrack = normStr(it.trackName || it.name || '');
+        const itArtist = normStr(it.artistName || '');
+
+        if (normTargetTrack && itTrack) {
+          if (itTrack === normTargetTrack) score += 45;
+          else if (itTrack.includes(normTargetTrack) || normTargetTrack.includes(itTrack)) score += 25;
+        }
+        if (normTargetArtist && itArtist) {
+          if (itArtist === normTargetArtist) score += 40;
+          else if (itArtist.includes(normTargetArtist) || normTargetArtist.includes(itArtist)) score += 25;
+        }
+
+        if (!wantsRemix && /\b(remix|slowed|sped\s*up|nightcore|live|karaoke|instrumental)\b/i.test(`${it.trackName || ''} ${it.albumName || ''}`)) {
+          score -= 55;
+        }
+
+        const itemDur = parseFloat(it.duration || 0);
+        if (rawDuration > 20 && itemDur > 20) {
+          const diff = Math.abs(itemDur - rawDuration);
+          if (diff <= 2.5) score += 70;
+          else if (diff <= 6) score += 50;
+          else if (diff <= 12) score += 25;
+          else if (diff <= 22) score += 5;
+          else score -= Math.min(60, Math.round(diff));
+        }
+        return score;
+      }
+
+      // Helper to try LRCLIB search with duration-aware scoring
       async function tryLrclib(query) {
         try {
           const url = `https://lrclib.net/api/search?q=${encodeURIComponent(query)}`;
@@ -1496,21 +1594,28 @@ const server = http.createServer(async (req, res) => {
           if (!fetchRes.ok) return null;
           const items = await fetchRes.json();
           if (Array.isArray(items) && items.length > 0) {
-            // Find best matching item that has lyrics (preferably synced)
-            const withSynced = items.find(it => it && it.syncedLyrics && it.syncedLyrics.trim().length > 0);
-            if (withSynced) return withSynced;
-            const withPlain = items.find(it => it && it.plainLyrics && it.plainLyrics.trim().length > 0);
-            if (withPlain) return withPlain;
-            return items[0];
+            let bestItem = null;
+            let bestScore = -999;
+            for (const it of items) {
+              const sc = scoreLrclibItem(it);
+              if (sc > bestScore) {
+                bestScore = sc;
+                bestItem = it;
+              }
+            }
+            return bestItem;
           }
         } catch (e) {}
         return null;
       }
 
-      // Helper to try LRCLIB direct get
+      // Helper to try LRCLIB direct get (including duration hint when available)
       async function tryLrclibGet(artist, track) {
         try {
-          const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(track)}`;
+          let url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(track)}`;
+          if (rawDuration > 20) {
+            url += `&duration=${Math.round(rawDuration)}`;
+          }
           const fetchRes = await fetch(url, { headers });
           if (!fetchRes.ok) return null;
           const data = await fetchRes.json();
@@ -1524,6 +1629,13 @@ const server = http.createServer(async (req, res) => {
       // Pass 1: Direct get if both artist and track exist
       if (cleanArtist && finalTrackName) {
         matchedItem = await tryLrclibGet(cleanArtist, finalTrackName);
+        // If direct get has a large duration mismatch (> 6s), also check search to see if there's an exact-duration match!
+        if (matchedItem && rawDuration > 20 && matchedItem.duration && Math.abs(matchedItem.duration - rawDuration) > 6) {
+          const searchCandidate = await tryLrclib(`${cleanArtist} ${finalTrackName}`);
+          if (searchCandidate && scoreLrclibItem(searchCandidate) > scoreLrclibItem(matchedItem)) {
+            matchedItem = searchCandidate;
+          }
+        }
       }
 
       // Pass 2: Search queries in order
@@ -1560,12 +1672,22 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (matchedItem && (matchedItem.syncedLyrics || matchedItem.plainLyrics)) {
+        const lrcDur = parseFloat(matchedItem.duration || 0);
+        let recommendedOffset = 0;
+        // If official video is slightly longer than studio audio (e.g. 4s-18s cinematic intro), provide auto-offset hint
+        if (rawDuration > 20 && lrcDur > 20) {
+          const diff = rawDuration - lrcDur;
+          if (diff >= 3.5 && diff <= 16) {
+            recommendedOffset = Math.round(diff * 2) / 2;
+          }
+        }
         const payload = {
           success: true,
           trackName: matchedItem.trackName || finalTrackName,
           artistName: matchedItem.artistName || cleanArtist,
           albumName: matchedItem.albumName || null,
           duration: matchedItem.duration || null,
+          recommendedOffset,
           plainLyrics: matchedItem.plainLyrics || null,
           syncedLyrics: matchedItem.syncedLyrics || null
         };

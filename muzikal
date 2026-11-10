@@ -15,13 +15,13 @@ while [ -h "$SOURCE" ]; do
 done
 APP_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
-# /usr/bin/muzikal symlink üzerinden çağrıldıysa asıl uygulama dizinini bul
-if [ ! -f "$APP_DIR/server.js" ]; then
-  if [ -f "$HOME/.local/share/muzikal/server.js" ]; then
+# Kullanıcı dizininde güncel sürüm varsa (~/.local/share/muzikal) öncelik ver
+if [ -f "$HOME/.local/share/muzikal/server.js" ]; then
+  if [ ! -f "$APP_DIR/server.js" ] || [ "$HOME/.local/share/muzikal/server.js" -nt "$APP_DIR/server.js" ]; then
     APP_DIR="$HOME/.local/share/muzikal"
-  elif [ -f "/opt/muzikal/server.js" ]; then
-    APP_DIR="/opt/muzikal"
   fi
+elif [ ! -f "$APP_DIR/server.js" ] && [ -f "/opt/muzikal/server.js" ]; then
+  APP_DIR="/opt/muzikal"
 fi
 
 # Node.js gereksinimi kontrolü

@@ -12,7 +12,7 @@ namespace MuzikalInstaller
 {
     static class Program
     {
-        public const string AppVersion = "1.5.0";
+        public const string AppVersion = "1.5.1";
         public const string AppName = "Müzikal";
         public const string RegKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Muzikal";
 

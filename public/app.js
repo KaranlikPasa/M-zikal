@@ -325,6 +325,46 @@ const elements = {
 let pendingSongToPlay = null;
 let ytApiLoaded = false;
 
+// --- MOBILE & WEB PLAYBACK CUTOFF GUARD STATE ---
+let lastValidPlaybackTime = 0;
+let lastValidDuration = 0;
+let songStartTimestamp = 0;
+let cutoffRecoveryCount = 0;
+let bufferingStartTimestamp = 0;
+let cutoffGuardEnabled = localStorage.getItem('muzikal_cutoff_guard') !== '0';
+let mobileKeepAliveCtx = null;
+
+function parseSongDurationSecs(durStr) {
+  if (!durStr) return 0;
+  if (typeof durStr === 'number') return durStr;
+  const parts = String(durStr).trim().split(':').map(Number);
+  if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+  if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
+  return 0;
+}
+
+function ensureMobileKeepAliveAudio() {
+  try {
+    const isMob = (window.MuzikalNative && typeof window.MuzikalNative.isNative === 'function') ||
+                  /android|iphone|ipad|mobile/i.test(navigator.userAgent);
+    if (!isMob) return;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!mobileKeepAliveCtx) {
+      mobileKeepAliveCtx = new AudioCtx();
+      const osc = mobileKeepAliveCtx.createOscillator();
+      const gain = mobileKeepAliveCtx.createGain();
+      gain.gain.value = 0.00001; // Inaudible keep-alive prevents Android WebView renderer suspension
+      osc.connect(gain);
+      gain.connect(mobileKeepAliveCtx.destination);
+      osc.start();
+    }
+    if (mobileKeepAliveCtx.state === 'suspended') {
+      mobileKeepAliveCtx.resume().catch(() => {});
+    }
+  } catch (e) {}
+}
+
 function ensureYouTubeApiScript() {
   if (document.getElementById('yt-iframe-api-tag')) return;
   const tag = document.createElement('script');
@@ -348,8 +388,19 @@ if (window.YT && window.YT.Player) {
   ensureYouTubeApiScript();
 }
 
-function playOnlineYouTubeTrack(song) {
+function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
   if (!song || !song.id) return;
+
+  if (resumeAtSec <= 0) {
+    lastValidPlaybackTime = 0;
+    lastValidDuration = parseSongDurationSecs(song.duration);
+    songStartTimestamp = Date.now();
+    cutoffRecoveryCount = 0;
+    bufferingStartTimestamp = 0;
+    song._midSongRetryCount = 0;
+  }
+
+  ensureMobileKeepAliveAudio();
 
   if (!window.YT || !window.YT.Player) {
     pendingSongToPlay = song;
@@ -360,12 +411,17 @@ function playOnlineYouTubeTrack(song) {
   // If a player is already instantiated and ready, load video into it
   if (ytPlayer && ytReady && typeof ytPlayer.loadVideoById === 'function') {
     try {
-      ytPlayer.loadVideoById({ videoId: song.id, startSeconds: 0 });
-      if (!state.isVideoVisible && typeof ytPlayer.setPlaybackQuality === 'function') {
-        try { ytPlayer.setPlaybackQuality('small'); } catch (qErr) {}
+      ytPlayer.loadVideoById({ videoId: song.id, startSeconds: Math.max(0, resumeAtSec) });
+      if (typeof ytPlayer.setPlaybackQuality === 'function') {
+        try { ytPlayer.setPlaybackQuality(state.isVideoVisible ? 'large' : 'small'); } catch (qErr) {}
       }
-      if (!state.isMuted && typeof ytPlayer.unMute === 'function') {
+      if (state.isOfflinePlaying) {
+        try { ytPlayer.mute(); } catch (e) {}
+      } else if (!state.isMuted && typeof ytPlayer.unMute === 'function') {
         try { ytPlayer.unMute(); } catch (e) {}
+      }
+      if (state.playbackSpeed && typeof ytPlayer.setPlaybackRate === 'function') {
+        try { ytPlayer.setPlaybackRate(state.playbackSpeed); } catch (e) {}
       }
       ytPlayer.playVideo();
       return;
@@ -373,6 +429,12 @@ function playOnlineYouTubeTrack(song) {
       console.warn('loadVideoById failed, re-creating player:', e);
     }
   }
+
+  try {
+    if (ytPlayer && typeof ytPlayer.destroy === 'function') {
+      ytPlayer.destroy();
+    }
+  } catch (e) {}
 
   // Reset the wrapper element to a pristine div so YT.Player can cleanly construct the iframe
   const wrapper = document.querySelector('.video-wrapper');
@@ -390,11 +452,16 @@ function playOnlineYouTubeTrack(song) {
     'playsinline': 1,
     'enablejsapi': 1
   };
+  if (resumeAtSec > 0) {
+    playerVars.start = Math.floor(resumeAtSec);
+  }
 
   let embedOrigin = window.location.origin || 'http://localhost:3456';
-  if (embedOrigin.startsWith('http')) {
+  if (embedOrigin.startsWith('http') && !embedOrigin.includes('127.0.0.1')) {
     playerVars.origin = embedOrigin;
     playerVars.widget_referrer = embedOrigin;
+  } else if (embedOrigin.includes('127.0.0.1')) {
+    playerVars.widget_referrer = 'http://localhost:3456';
   }
 
   try {
@@ -410,15 +477,20 @@ function playOnlineYouTubeTrack(song) {
             const iframe = typeof event.target.getIframe === 'function' ? event.target.getIframe() : null;
             if (iframe) {
               iframe.setAttribute('referrerpolicy', 'origin');
-              iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+              iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
             }
           } catch (e) {}
-          if (!state.isMuted && typeof event.target.unMute === 'function') {
+          if (state.isOfflinePlaying) {
+            try { event.target.mute(); } catch (e) {}
+          } else if (!state.isMuted && typeof event.target.unMute === 'function') {
             try { event.target.unMute(); } catch (e) {}
           }
           try { event.target.setVolume(state.volume); } catch (e) {}
-          if (!state.isVideoVisible && typeof event.target.setPlaybackQuality === 'function') {
-            try { event.target.setPlaybackQuality('small'); } catch (qErr) {}
+          if (typeof event.target.setPlaybackQuality === 'function') {
+            try { event.target.setPlaybackQuality(state.isVideoVisible ? 'large' : 'small'); } catch (qErr) {}
+          }
+          if (state.playbackSpeed && typeof event.target.setPlaybackRate === 'function') {
+            try { event.target.setPlaybackRate(state.playbackSpeed); } catch (e) {}
           }
           try { event.target.playVideo(); } catch (e) {}
         },
@@ -694,6 +766,7 @@ function onPlayerStateChange(event) {
   if (state.isOfflinePlaying) return; // Managed by localAudio
 
   if (event.data === YT.PlayerState.BUFFERING) {
+    if (!bufferingStartTimestamp) bufferingStartTimestamp = Date.now();
     if (resumeDebounceTimer) {
       clearTimeout(resumeDebounceTimer);
       resumeDebounceTimer = null;
@@ -702,6 +775,7 @@ function onPlayerStateChange(event) {
   }
 
   if (event.data === YT.PlayerState.PLAYING) {
+    bufferingStartTimestamp = 0;
     if (resumeDebounceTimer) {
       clearTimeout(resumeDebounceTimer);
       resumeDebounceTimer = null;
@@ -709,12 +783,21 @@ function onPlayerStateChange(event) {
     autoResumeAttempts = 0;
     userRequestedPause = false;
     state.isPlaying = true;
+    ensureMobileKeepAliveAudio();
+    if (state.playbackSpeed && ytPlayer && typeof ytPlayer.setPlaybackRate === 'function') {
+      try { ytPlayer.setPlaybackRate(state.playbackSpeed); } catch (e) {}
+    }
+    try {
+      const d = ytPlayer && typeof ytPlayer.getDuration === 'function' ? ytPlayer.getDuration() : 0;
+      if (d > 0) lastValidDuration = d;
+    } catch (e) {}
     updatePlayPauseButton();
     startProgressTracker();
     elements.heroVinyl.classList.remove('paused');
     elements.playingIndicator.classList.add('active');
     updateNativePlaybackState(state.currentSong, true);
   } else if (event.data === YT.PlayerState.PAUSED) {
+    bufferingStartTimestamp = 0;
     // Honor pause immediately! When Android AudioFocus (Incoming/Outgoing Call, Instagram, TikTok, X)
     // or Headphone Unplug (ACTION_AUDIO_BECOMING_NOISY) pauses the player, never force-resume it.
     if (resumeDebounceTimer) {
@@ -729,10 +812,38 @@ function onPlayerStateChange(event) {
     elements.playingIndicator.classList.remove('active');
     updateNativePlaybackState(state.currentSong, false);
   } else if (event.data === YT.PlayerState.ENDED) {
+    bufferingStartTimestamp = 0;
     if (resumeDebounceTimer) {
       clearTimeout(resumeDebounceTimer);
       resumeDebounceTimer = null;
     }
+
+    // Mobile & Web Mid-Song Cutoff Guard:
+    // If YouTube IFrame fires ENDED prematurely due to mobile network switch or WebView buffer drop
+    // when >12 seconds of the song still remain, resume from lastValidPlaybackTime instead of skipping!
+    let playerCur = 0;
+    let playerDur = 0;
+    try {
+      playerCur = (ytPlayer && typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0) || 0;
+      playerDur = (ytPlayer && typeof ytPlayer.getDuration === 'function' ? ytPlayer.getDuration() : 0) || 0;
+    } catch (e) {}
+
+    // If YT resets currentTime to 0 on premature ENDED, use lastValidPlaybackTime
+    const effectiveCur = (playerCur > 2 && (!lastValidPlaybackTime || Math.abs(playerCur - lastValidPlaybackTime) < 15))
+      ? playerCur
+      : lastValidPlaybackTime;
+    const effectiveDur = playerDur > 20
+      ? playerDur
+      : (lastValidDuration || parseSongDurationSecs(state.currentSong && state.currentSong.duration));
+
+    if (cutoffGuardEnabled && state.currentSong && effectiveDur > 25 && effectiveCur > 3 && (effectiveDur - effectiveCur) > 12 && cutoffRecoveryCount < 4) {
+      cutoffRecoveryCount++;
+      const resumeSec = Math.max(0, effectiveCur - 1);
+      console.warn(`[CutoffGuard] Premature ENDED detected at ${effectiveCur.toFixed(1)}s / ${effectiveDur.toFixed(1)}s. Recovering at ${resumeSec.toFixed(1)}s (attempt ${cutoffRecoveryCount}/4)...`);
+      playOnlineYouTubeTrack(state.currentSong, resumeSec);
+      return;
+    }
+
     updateNativePlaybackState(state.currentSong, false);
     onSongEnded();
   }
@@ -745,6 +856,20 @@ async function onPlayerError(event) {
   const song = state.currentSong;
   if (!song) {
     playNext();
+    return;
+  }
+
+  // If the song was already playing and hit a transient mid-song network blip on mobile,
+  // resume from the last valid position instead of abandoning the song!
+  if (cutoffGuardEnabled && lastValidPlaybackTime > 5 && (song._midSongRetryCount || 0) < 3) {
+    song._midSongRetryCount = (song._midSongRetryCount || 0) + 1;
+    const resumeSec = Math.max(0, lastValidPlaybackTime - 1);
+    console.warn(`[CutoffGuard] Mid-song error (${event.data}) at ${lastValidPlaybackTime.toFixed(1)}s. Retrying same track (${song._midSongRetryCount}/3)...`);
+    setTimeout(() => {
+      if (state.currentSong && state.currentSong.id === song.id) {
+        playOnlineYouTubeTrack(song, resumeSec);
+      }
+    }, 700);
     return;
   }
 
@@ -971,18 +1096,26 @@ async function playSong(song, playlist = null, index = -1) {
     elements.mfpDownloadLabel.textContent = isOffline ? 'Cihazda Kayıtlı' : 'Cihaza İndir';
   }
 
-  if (hasServerFile) {
+  const videoTitleLabel = document.getElementById('video-clip-title-label');
+  if (videoTitleLabel) {
+    videoTitleLabel.textContent = `🎬 ${song.title}`;
+  }
+
+  if (hasServerFile && !state.isVideoVisible) {
     // Play locally through HTML5 audio!
     state.isOfflinePlaying = true;
     elements.playerOfflineBadge.style.display = 'inline-block';
 
-    // Stop YouTube
     if (ytReady && ytPlayer && typeof ytPlayer.stopVideo === 'function') {
       try { ytPlayer.stopVideo(); } catch (e) {}
     }
 
     localAudio.src = `/downloads/${song.id}.m4a`;
+    localAudio.playbackRate = currentPlaybackRate || 1.0;
     localAudio.volume = state.isMuted ? 0 : (state.volume / 100);
+    if (typeof ensureWebAudioEqualizer === 'function') {
+      ensureWebAudioEqualizer();
+    }
     localAudio.play().catch(e => console.warn('Autoplay prevented:', e));
   } else {
     // Play online through YouTube (still show offline badge if saved on device)
@@ -992,7 +1125,7 @@ async function playSong(song, playlist = null, index = -1) {
     // Stop local audio
     localAudio.pause();
 
-    playOnlineYouTubeTrack(song);
+    playOnlineYouTubeTrack(song, 0);
   }
 
   // Fast highlight active song in grid without full DOM scan (O(1))
@@ -1017,23 +1150,8 @@ async function playSong(song, playlist = null, index = -1) {
   // Defer non-critical tasks so audio playback and player UI transition with zero frame drop
   setTimeout(() => {
     persistLibrary(state.library);
-    if (state.currentView === 'home' && elements.homeRecentGrid && elements.homeRecentSection) {
-      elements.homeRecentSection.style.display = 'flex';
-      const recents = state.library.history.slice(0, 6);
-      elements.homeRecentGrid.innerHTML = recents.map((s, idx) => `
-        <div class="recent-track-card" data-idx="${idx}">
-          <img src="${s.thumbnail || 'https://via.placeholder.com/60'}" class="recent-track-thumb" alt="${escapeHtml(s.title)}" loading="lazy" decoding="async">
-          <div class="recent-track-info">
-            <div class="recent-track-title">${escapeHtml(s.title)}</div>
-            <div class="recent-track-artist">${escapeHtml(s.channel)}</div>
-          </div>
-          <div class="recent-track-play">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-          </div>
-        </div>
-      `).join('');
+    if (state.currentView === 'home' && typeof renderRecentTracksGrid === 'function') {
+      renderRecentTracksGrid();
     }
 
     fetch('/api/library/history', {
@@ -1451,6 +1569,7 @@ async function prefetchSmartRecommendations() {
     console.warn('Smart recommendations prefetch warning:', err);
   } finally {
     state.isFetchingSmartQueue = false;
+    updateQueueDrawer();
   }
 }
 
@@ -1789,12 +1908,20 @@ window.toggleShuffle = cycleShuffleMode;
 window.toggleRepeat = cycleRepeatMode;
 
 function onSongEnded() {
+  if (state.sleepStopAtEndOfSong) {
+    state.sleepStopAtEndOfSong = false;
+    if (typeof updateSleepTimerUI === 'function') updateSleepTimerUI();
+    window.pauseOnly('sleep_timer_end_of_song');
+    showToast('🌙 Uyku Zamanlayıcısı: Şarkı tamamlandı, müzik durduruldu.');
+    return;
+  }
   if (state.repeatMode === 'one' && state.currentSong) {
     if (state.isOfflinePlaying) {
       localAudio.currentTime = 0;
       localAudio.play();
     } else {
       if (ytReady && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+        lastValidPlaybackTime = 0;
         ytPlayer.seekTo(0);
         ytPlayer.playVideo();
       } else {
@@ -1813,11 +1940,26 @@ function startProgressTracker() {
 
   progressInterval = setInterval(() => {
     if (state.isOfflinePlaying) return; // Handled by localAudio timeupdate
-    if (!ytReady || !ytPlayer || !state.isPlaying) return;
+    if (!ytReady || !ytPlayer) return;
+
+    // Watchdog for stalled mobile buffering (> 9s mid-song)
+    if (cutoffGuardEnabled && bufferingStartTimestamp > 0 && lastValidPlaybackTime > 3 && (Date.now() - bufferingStartTimestamp) > 9000) {
+      bufferingStartTimestamp = Date.now();
+      if (state.currentSong && cutoffRecoveryCount < 4) {
+        cutoffRecoveryCount++;
+        playOnlineYouTubeTrack(state.currentSong, Math.max(0, lastValidPlaybackTime - 0.5));
+        return;
+      }
+    }
+
+    if (!state.isPlaying) return;
 
     try {
       const current = ytPlayer.getCurrentTime() || 0;
       const duration = ytPlayer.getDuration() || 0;
+
+      if (current > 0) lastValidPlaybackTime = current;
+      if (duration > 0) lastValidDuration = duration;
 
       elements.currentTime.textContent = formatTime(current);
       elements.totalDuration.textContent = formatTime(duration);
@@ -1834,7 +1976,7 @@ function startProgressTracker() {
         if (elements.mfpTotalDuration) elements.mfpTotalDuration.textContent = formatTime(duration);
       }
     } catch (e) {}
-  }, 500);
+  }, 200);
 }
 
 function getEventClientX(event) {
@@ -1951,6 +2093,10 @@ function getUpcomingTracks(limit = 20) {
   let source = 'Sırada şarkı yok';
   let tracks = [];
 
+  if (state.currentPlaylist && state.currentPlaylist.length > 0 && (!state.unplayedShuffleIndices || state.unplayedShuffleIndices.length === 0)) {
+    initShufflePool();
+  }
+
   if (state.shuffleMode === 'smart') {
     source = '✨ Akıllı Mix & Keşif';
     const smarts = (state.smartQueue || []).map(s => ({ ...s, isSmartRecommendation: true }));
@@ -1964,6 +2110,9 @@ function getUpcomingTracks(limit = 20) {
         }
       }
     }
+    if (tracks.length === 0 && state.currentSong && !state.isFetchingSmartQueue) {
+      prefetchSmartRecommendations();
+    }
   } else if (state.shuffleMode === 'standard' || state.isShuffled) {
     source = '🔀 Karışık Çalma';
     if (state.currentPlaylist && state.unplayedShuffleIndices) {
@@ -1974,13 +2123,20 @@ function getUpcomingTracks(limit = 20) {
         }
       }
     }
-  } else if (state.currentPlaylist && state.currentPlaylist.length > 0 && state.currentIndex >= 0) {
+  } else if (state.currentPlaylist && state.currentPlaylist.length > 0) {
     source = '▶️ Sırayla Çalma';
-    const nextSlice = state.currentPlaylist.slice(state.currentIndex + 1);
-    tracks.push(...nextSlice);
-    if (state.repeatMode === 'all') {
-      const wrapped = state.currentPlaylist.slice(0, state.currentIndex);
-      tracks.push(...wrapped);
+    const baseIdx = state.currentIndex >= 0
+      ? state.currentIndex
+      : (state.currentSong ? state.currentPlaylist.findIndex(s => s && s.id === state.currentSong.id) : -1);
+    if (baseIdx >= 0) {
+      const nextSlice = state.currentPlaylist.slice(baseIdx + 1);
+      tracks.push(...nextSlice);
+      if (state.repeatMode === 'all') {
+        const wrapped = state.currentPlaylist.slice(0, baseIdx);
+        tracks.push(...wrapped);
+      }
+    } else {
+      tracks.push(...state.currentPlaylist.filter(s => s && (!state.currentSong || s.id !== state.currentSong.id)));
     }
   }
 
@@ -1997,7 +2153,7 @@ function updateQueueDrawer() {
           <div class="queue-item-title" style="color: var(--accent);">${escapeHtml(state.currentSong.title)}</div>
           <div class="queue-item-artist">${escapeHtml(state.currentSong.channel)}</div>
         </div>
-        <div class="playing-indicator" style="display: flex;">
+        <div class="queue-wave-indicator">
           <span></span><span></span><span></span>
         </div>
       </div>
@@ -2721,22 +2877,92 @@ function renderSongs(songs, isSearching = false) {
 // --- DATA FETCHING & UI VISIBILITY ---
 
 const RECOMMENDED_ARTISTS = [
-  { name: 'Semicenk', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=260&h=260&fit=crop' },
-  { name: 'Sezen Aksu', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=260&h=260&fit=crop' },
-  { name: 'Duman', role: 'Grup', img: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=260&h=260&fit=crop' },
-  { name: 'Lvbel C5', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=260&h=260&fit=crop' },
-  { name: 'Manga', role: 'Grup', img: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=260&h=260&fit=crop' },
-  { name: 'Mor ve Ötesi', role: 'Grup', img: 'https://images.unsplash.com/photo-1511735111819-9a3f7709049c?w=260&h=260&fit=crop' },
-  { name: 'Gülşen', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=260&h=260&fit=crop' },
-  { name: 'Teoman', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=260&h=260&fit=crop' },
-  { name: 'Tarkan', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=260&h=260&fit=crop' },
-  { name: 'Simge', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1520523839898-507125cd53c1?w=260&h=260&fit=crop' },
-  { name: 'Melike Şahin', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=260&h=260&fit=crop' },
-  { name: 'Dedublüman', role: 'Grup', img: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=260&h=260&fit=crop' },
-  { name: 'Coldplay', role: 'Grup', img: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=260&h=260&fit=crop' },
-  { name: 'The Weeknd', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=260&h=260&fit=crop' },
-  { name: 'Billie Eilish', role: 'Sanatçı', img: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=260&h=260&fit=crop' }
+  { name: 'Semicenk', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/92d79c731144ebfc8b8b154261cf8eb0/250x250-000000-80-0-0.jpg' },
+  { name: 'Sezen Aksu', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/46ceaa75ba3efde019fbda9c9ff49732/250x250-000000-80-0-0.jpg' },
+  { name: 'Duman', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/09fc4fc5a31932e8a037444b7ba7f95c/250x250-000000-80-0-0.jpg' },
+  { name: 'Lvbel C5', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/f8a1b1615fd2c118f40b50d60eb6088b/250x250-000000-80-0-0.jpg' },
+  { name: 'Manga', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/79923d4ac9b76cf9ef44cdacff211386/250x250-000000-80-0-0.jpg' },
+  { name: 'Mor ve Ötesi', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/3ce1dc67ba8eb5814ff4e6a95cb00d24/250x250-000000-80-0-0.jpg' },
+  { name: 'Gülşen', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/ec2aa3be325a5d4776c9df8dc05dfbe0/250x250-000000-80-0-0.jpg' },
+  { name: 'Teoman', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/423c37f43a59c03966d85a98ed61c85d/250x250-000000-80-0-0.jpg' },
+  { name: 'Tarkan', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/459cd1646be1663ebad2e8fa4a72f5f6/250x250-000000-80-0-0.jpg' },
+  { name: 'Simge', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/053d2807a889eb4a87e4bf12085687a5/250x250-000000-80-0-0.jpg' },
+  { name: 'Melike Şahin', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/f0591c6306332f7f1fd5cf0bc2359337/250x250-000000-80-0-0.jpg' },
+  { name: 'Dedublüman', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/d0c9543997ff5f577d646735ab0852a5/250x250-000000-80-0-0.jpg' },
+  { name: 'Coldplay', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/e65d62ecd00b8bf1ba89073943ac62a1/250x250-000000-80-0-0.jpg' },
+  { name: 'The Weeknd', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/033d460f704896c9c489a1d753a13776/250x250-000000-80-0-0.jpg' },
+  { name: 'Billie Eilish', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/37abe67c1fd9bbcd0ce0ac9e761e6809/250x250-000000-80-0-0.jpg' }
 ];
+
+const ARTIST_GRADIENTS = [
+  'linear-gradient(135deg, #1db954, #0f766e)',
+  'linear-gradient(135deg, #8b5cf6, #ec4899)',
+  'linear-gradient(135deg, #06b6d4, #3b82f6)',
+  'linear-gradient(135deg, #f59e0b, #ef4444)',
+  'linear-gradient(135deg, #10b981, #3b82f6)'
+];
+
+function getArtistInitials(name) {
+  if (!name) return '🎵';
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return name.trim().slice(0, 2).toUpperCase();
+}
+
+window.handleArtistImgError = function(imgEl, artistName, idx = 0) {
+  if (!imgEl || imgEl.dataset.fallbackApplied === '1') return;
+  imgEl.dataset.fallbackApplied = '1';
+  const wrap = imgEl.parentElement;
+  const grad = ARTIST_GRADIENTS[idx % ARTIST_GRADIENTS.length];
+  const initials = getArtistInitials(artistName);
+  imgEl.style.display = 'none';
+  if (wrap && !wrap.querySelector('.artist-fallback-monogram')) {
+    const mono = document.createElement('div');
+    mono.className = 'artist-fallback-monogram';
+    mono.style.background = grad;
+    mono.textContent = initials;
+    wrap.insertBefore(mono, wrap.firstChild);
+  }
+  // Try fetching fresh portrait from backend Deezer resolver if available
+  fetch(`/api/artist-image?name=${encodeURIComponent(artistName)}`)
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (data && data.success && data.imageUrl && data.imageUrl !== imgEl.src) {
+        imgEl.onload = () => {
+          imgEl.style.display = 'block';
+          const m = wrap && wrap.querySelector('.artist-fallback-monogram');
+          if (m) m.remove();
+        };
+        imgEl.src = data.imageUrl;
+      }
+    })
+    .catch(() => {});
+};
+
+function renderRecentTracksGrid() {
+  if (!elements.homeRecentSection || !elements.homeRecentGrid) return;
+  const historySongs = state.library.history || [];
+  if (historySongs.length > 0) {
+    elements.homeRecentSection.style.display = 'flex';
+    const recents = historySongs.slice(0, 6);
+    elements.homeRecentGrid.innerHTML = recents.map((s, idx) => `
+      <div class="recent-track-card" data-idx="${idx}" data-id="${escapeHtml(s.id || '')}">
+        <img src="${s.thumbnail || 'https://via.placeholder.com/60'}" class="recent-track-thumb" alt="${escapeHtml(s.title)}" loading="lazy" decoding="async">
+        <div class="recent-track-info">
+          <div class="recent-track-title">${escapeHtml(s.title)}</div>
+          <div class="recent-track-artist">${escapeHtml(s.channel)}</div>
+        </div>
+        <div class="recent-track-play">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+        </div>
+      </div>
+    `).join('');
+  } else {
+    elements.homeRecentSection.style.display = 'none';
+  }
+}
 
 function renderHomeSections() {
   if (!elements.homeCustomSections) return;
@@ -2748,44 +2974,14 @@ function renderHomeSections() {
   elements.homeCustomSections.style.display = 'flex';
 
   // 1. Son Dinlenenler (History)
-  if (elements.homeRecentSection && elements.homeRecentGrid) {
-    const historySongs = state.library.history || [];
-    if (historySongs.length > 0) {
-      elements.homeRecentSection.style.display = 'flex';
-      const recents = historySongs.slice(0, 6);
-      elements.homeRecentGrid.innerHTML = recents.map((s, idx) => `
-        <div class="recent-track-card" data-idx="${idx}">
-          <img src="${s.thumbnail || 'https://via.placeholder.com/60'}" class="recent-track-thumb" alt="${escapeHtml(s.title)}" loading="lazy">
-          <div class="recent-track-info">
-            <div class="recent-track-title">${escapeHtml(s.title)}</div>
-            <div class="recent-track-artist">${escapeHtml(s.channel)}</div>
-          </div>
-          <div class="recent-track-play">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-          </div>
-        </div>
-      `).join('');
-
-      elements.homeRecentGrid.querySelectorAll('.recent-track-card').forEach(card => {
-        card.addEventListener('click', () => {
-          const idx = parseInt(card.dataset.idx, 10);
-          const s = recents[idx];
-          if (s) playSong(s, recents, idx);
-        });
-      });
-    } else {
-      elements.homeRecentSection.style.display = 'none';
-    }
-  }
+  renderRecentTracksGrid();
 
   // 2. Önerilen Sanatçılar (Spotify-style Circular Artist Cards)
   if (elements.homeArtistsRow && elements.homeArtistsRow.children.length === 0) {
-    elements.homeArtistsRow.innerHTML = RECOMMENDED_ARTISTS.map(a => `
+    elements.homeArtistsRow.innerHTML = RECOMMENDED_ARTISTS.map((a, idx) => `
       <div class="artist-circle-card" data-artist="${escapeHtml(a.name)}">
         <div class="artist-avatar-wrap">
-          <img src="${a.img}" class="artist-avatar-img" alt="${escapeHtml(a.name)}" loading="lazy">
+          <img src="${a.img}" class="artist-avatar-img" alt="${escapeHtml(a.name)}" loading="lazy" onerror="window.handleArtistImgError(this, '${escapeHtml(a.name).replace(/'/g, "\\'")}', ${idx})">
           <div class="artist-hover-play">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -2875,13 +3071,29 @@ async function fetchExploreGenre(genreKey, forceRefresh = false) {
   }
 }
 
+function showMainSongArea(visible = true) {
+  const settingsViewEl = document.getElementById('settings-view');
+  const wrappedViewEl = document.getElementById('wrapped-view');
+  const sectionHeaderEl = document.querySelector('#content-scroll > .section-header');
+  if (settingsViewEl) settingsViewEl.style.display = 'none';
+  if (wrappedViewEl) wrappedViewEl.style.display = 'none';
+  if (sectionHeaderEl) sectionHeaderEl.style.display = visible ? 'flex' : 'none';
+  if (elements.songsGrid) elements.songsGrid.style.display = visible ? '' : 'none';
+  if (!visible) {
+    if (elements.loadingState) elements.loadingState.style.display = 'none';
+    if (elements.emptyState) elements.emptyState.style.display = 'none';
+  }
+}
+
 async function performSearch(query) {
   if (!query || query.trim() === '') {
+    showMainSongArea(true);
     updateCategoryChipsVisibility();
     fetchExploreGenre(state.currentGenre);
     return;
   }
 
+  showMainSongArea(true);
   elements.heroBanner.style.display = 'none';
   if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
   updateCategoryChipsVisibility();
@@ -3331,11 +3543,14 @@ function openPlaylistView(plId) {
 
   state.currentView = 'playlist';
   state.currentPlaylistId = plId;
+  showMainSongArea(true);
 
   // Close mobile sidebar drawer when selecting a playlist
   if (elements.sidebar) elements.sidebar.classList.remove('mobile-open');
   if (elements.sidebarBackdrop) elements.sidebarBackdrop.classList.remove('active');
   elements.navItems.forEach(b => b.classList.remove('active'));
+  const btnTopSettings = document.getElementById('btn-topbar-settings');
+  if (btnTopSettings) btnTopSettings.classList.remove('active');
   renderSidebarPlaylists();
 
   if (elements.searchInput) elements.searchInput.value = '';
@@ -3354,6 +3569,7 @@ function openPlaylistView(plId) {
 
 function openDownloadsView() {
   state.currentView = 'downloads';
+  showMainSongArea(true);
   if (elements.searchInput) elements.searchInput.value = '';
   if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
   elements.heroBanner.style.display = 'none';
@@ -3486,10 +3702,13 @@ async function handleYouTubeMusicImport() {
 
 function navigateTo(view) {
   state.currentView = view;
-  elements.navItems.forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  const allNavItems = document.querySelectorAll('.nav-item');
+  allNavItems.forEach(b => b.classList.toggle('active', b.dataset.view === view));
   if (elements.mobileNavBtns) {
     elements.mobileNavBtns.forEach(b => b.classList.toggle('active', b.dataset.view === view));
   }
+  const btnTopSettings = document.getElementById('btn-topbar-settings');
+  if (btnTopSettings) btnTopSettings.classList.toggle('active', view === 'settings');
 
   // Close mobile sidebar if open
   if (elements.sidebar) elements.sidebar.classList.remove('mobile-open');
@@ -3501,6 +3720,28 @@ function navigateTo(view) {
 
   updateCategoryChipsVisibility();
   if (elements.contentScroll) elements.contentScroll.scrollTop = 0;
+
+  if (view === 'settings') {
+    showMainSongArea(false);
+    elements.heroBanner.style.display = 'none';
+    if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
+    const settingsViewEl = document.getElementById('settings-view');
+    if (settingsViewEl) settingsViewEl.style.display = 'block';
+    refreshSettingsViewUI();
+    return;
+  }
+
+  if (view === 'wrapped') {
+    showMainSongArea(false);
+    elements.heroBanner.style.display = 'none';
+    if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
+    const wrappedViewEl = document.getElementById('wrapped-view');
+    if (wrappedViewEl) wrappedViewEl.style.display = 'block';
+    renderYearEndWrappedView();
+    return;
+  }
+
+  showMainSongArea(true);
 
   if (view === 'home') {
     elements.heroBanner.style.display = 'flex';
@@ -3538,6 +3779,30 @@ function navigateTo(view) {
 }
 
 function setupEventListeners() {
+  // Delegated click listener for "Son Dinlenenler" (Recent Tracks Grid) so mobile & desktop clicks always switch tracks
+  if (elements.homeRecentGrid) {
+    elements.homeRecentGrid.addEventListener('click', (e) => {
+      const card = e.target.closest('.recent-track-card');
+      if (!card) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const historyList = (state.library.history || []).slice();
+      const targetId = card.dataset.id;
+      const idxAttr = parseInt(card.dataset.idx, 10);
+      let targetIdx = -1;
+      if (targetId) {
+        targetIdx = historyList.findIndex(s => s && String(s.id) === String(targetId));
+      }
+      if (targetIdx < 0 && !isNaN(idxAttr) && historyList[idxAttr]) {
+        targetIdx = idxAttr;
+      }
+      const songObj = targetIdx >= 0 ? historyList[targetIdx] : null;
+      if (songObj) {
+        playSong(songObj, historyList, targetIdx);
+      }
+    });
+  }
+
   // Home See All History Button
   if (elements.btnHomeSeeHistory) {
     elements.btnHomeSeeHistory.addEventListener('click', () => {
@@ -3545,12 +3810,28 @@ function setupEventListeners() {
     });
   }
 
-  // Desktop Sidebar Navigation
-  elements.navItems.forEach(btn => {
+  // Desktop Sidebar Navigation (including Settings & Year-End Wrapped)
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
-      navigateTo(btn.dataset.view);
+      if (btn.dataset.view) {
+        navigateTo(btn.dataset.view);
+      }
     });
   });
+
+  // Topbar & Mobile Header Settings Buttons
+  const btnTopbarSettings = document.getElementById('btn-topbar-settings');
+  if (btnTopbarSettings) {
+    btnTopbarSettings.addEventListener('click', () => {
+      navigateTo(state.currentView === 'settings' ? 'home' : 'settings');
+    });
+  }
+  const btnMobileSettingsTop = document.getElementById('btn-mobile-settings-top');
+  if (btnMobileSettingsTop) {
+    btnMobileSettingsTop.addEventListener('click', () => {
+      navigateTo(state.currentView === 'settings' ? 'home' : 'settings');
+    });
+  }
 
   // Mobile Bottom Navigation
   if (elements.mobileNavBtns) {
@@ -4081,6 +4362,7 @@ function setupEventListeners() {
 
   // Queue Quick Search & Add
   let queueSearchDebounce = null;
+  let lastQuickSearchSongs = [];
   if (elements.queueQuickSearchInput) {
     elements.queueQuickSearchInput.addEventListener('input', (e) => {
       const q = e.target.value.trim();
@@ -4096,9 +4378,10 @@ function setupEventListeners() {
         try {
           const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
           const results = data && data.results ? data.results : (Array.isArray(data) ? data : []);
-          if (results.length > 0 && elements.queueQuickSearchDropdown) {
-            elements.queueQuickSearchDropdown.innerHTML = results.slice(0, 5).map(s => `
-              <div class="queue-quick-search-item" data-song='${JSON.stringify(s).replace(/'/g, "&apos;")}'>
+          lastQuickSearchSongs = results.slice(0, 5);
+          if (lastQuickSearchSongs.length > 0 && elements.queueQuickSearchDropdown) {
+            elements.queueQuickSearchDropdown.innerHTML = lastQuickSearchSongs.map((s, idx) => `
+              <div class="queue-quick-search-item" data-qidx="${idx}">
                 <img src="${escapeHtml(s.thumbnail || '')}" alt="${escapeHtml(s.title)}" />
                 <div class="info">
                   <div class="title">${escapeHtml(s.title)}</div>
@@ -4111,8 +4394,12 @@ function setupEventListeners() {
 
             elements.queueQuickSearchDropdown.querySelectorAll('.queue-quick-search-item').forEach(item => {
               item.addEventListener('click', () => {
-                const song = JSON.parse(item.dataset.song);
-                addToQueue(song);
+                const idx = parseInt(item.dataset.qidx, 10);
+                const song = lastQuickSearchSongs[idx];
+                if (song) {
+                  addToQueue(song);
+                  updateQueueDrawer();
+                }
                 elements.queueQuickSearchInput.value = '';
                 if (elements.btnClearQueueSearch) elements.btnClearQueueSearch.style.display = 'none';
                 elements.queueQuickSearchDropdown.style.display = 'none';
@@ -4154,25 +4441,91 @@ function setupEventListeners() {
     });
   }
 
-  // Video mode toggle
-  elements.btnToggleVideo.addEventListener('click', () => {
-    state.isVideoVisible = !state.isVideoVisible;
-    elements.videoContainer.classList.toggle('active', state.isVideoVisible);
-    elements.btnToggleVideo.classList.toggle('active', state.isVideoVisible);
-    elements.btnVideoText.textContent = state.isVideoVisible ? 'Klibi Gizle' : 'Klip Modu';
-    if (ytPlayer && typeof ytPlayer.setPlaybackQuality === 'function') {
-      try { ytPlayer.setPlaybackQuality(state.isVideoVisible ? 'default' : 'small'); } catch (e) {}
+  // Video mode toggle (Klip Modu)
+  const toggleVideoClipMode = async (forceState = null) => {
+    const nextState = (typeof forceState === 'boolean') ? forceState : !state.isVideoVisible;
+    if (nextState && !state.currentSong) {
+      if (state.currentPlaylist && state.currentPlaylist.length > 0) {
+        await playSong(state.currentPlaylist[0], state.currentPlaylist, 0);
+      } else {
+        showToast('🎬 Klip Modu için önce bir şarkı başlatın.');
+        return;
+      }
     }
-  });
-  elements.btnCloseVideo.addEventListener('click', () => {
-    state.isVideoVisible = false;
-    elements.videoContainer.classList.remove('active');
-    elements.btnToggleVideo.classList.remove('active');
-    elements.btnVideoText.textContent = 'Klip Modu';
-    if (ytPlayer && typeof ytPlayer.setPlaybackQuality === 'function') {
+
+    state.isVideoVisible = nextState;
+    if (elements.videoContainer) {
+      elements.videoContainer.classList.toggle('active', state.isVideoVisible);
+      if (!state.isVideoVisible) {
+        elements.videoContainer.classList.remove('pip-mode');
+      }
+    }
+    if (elements.btnToggleVideo) {
+      elements.btnToggleVideo.classList.toggle('active', state.isVideoVisible);
+    }
+    if (elements.btnVideoText) {
+      elements.btnVideoText.textContent = state.isVideoVisible ? 'Klibi Gizle' : 'Klip Modu';
+    }
+    const videoTitleLabel = document.getElementById('video-clip-title-label');
+    if (videoTitleLabel && state.currentSong) {
+      videoTitleLabel.textContent = `🎬 ${state.currentSong.title}`;
+    }
+
+    if (state.isVideoVisible && state.currentSong) {
+      // Collapse mobile full player if open so user can watch the video
+      if (elements.mobileFullPlayer) elements.mobileFullPlayer.classList.remove('open');
+
+      // If currently playing from local offline MP3, switch to online YouTube video at exact timestamp!
+      if (state.isOfflinePlaying) {
+        const curSec = localAudio.currentTime || 0;
+        localAudio.pause();
+        state.isOfflinePlaying = false;
+        showToast('🎬 Klip Modu aktif: Video akışına geçiliyor...');
+        await resolveTrackIfNeeded(state.currentSong);
+        playOnlineYouTubeTrack(state.currentSong, curSec);
+      } else if (ytPlayer && typeof ytPlayer.setPlaybackQuality === 'function') {
+        try { ytPlayer.setPlaybackQuality('hd720'); } catch (e) {}
+      }
+
+      if (elements.contentScroll && elements.videoContainer && !elements.videoContainer.classList.contains('pip-mode')) {
+        elements.contentScroll.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } else if (!state.isVideoVisible && ytPlayer && typeof ytPlayer.setPlaybackQuality === 'function') {
       try { ytPlayer.setPlaybackQuality('small'); } catch (e) {}
     }
-  });
+  };
+
+  if (elements.btnToggleVideo) {
+    elements.btnToggleVideo.addEventListener('click', () => toggleVideoClipMode());
+  }
+  if (elements.btnCloseVideo) {
+    elements.btnCloseVideo.addEventListener('click', () => toggleVideoClipMode(false));
+  }
+  const mfpBtnVideo = document.getElementById('mfp-btn-video');
+  if (mfpBtnVideo) {
+    mfpBtnVideo.addEventListener('click', () => toggleVideoClipMode(true));
+  }
+  const btnVideoPip = document.getElementById('btn-video-pip');
+  if (btnVideoPip) {
+    btnVideoPip.addEventListener('click', () => {
+      if (elements.videoContainer) {
+        const isPip = elements.videoContainer.classList.toggle('pip-mode');
+        btnVideoPip.textContent = isPip ? '🔼 Üste Sabitle' : '🗗 Küçük Pencere';
+      }
+    });
+  }
+  const btnVideoFullscreen = document.getElementById('btn-video-fullscreen');
+  if (btnVideoFullscreen) {
+    btnVideoFullscreen.addEventListener('click', () => {
+      const target = document.querySelector('#video-container .video-wrapper') || elements.videoContainer;
+      if (!target) return;
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else if (target.requestFullscreen) {
+        target.requestFullscreen().catch(() => {});
+      }
+    });
+  }
 
   // Hero play
   elements.btnHeroPlay.addEventListener('click', () => {
@@ -4479,24 +4832,147 @@ function escapeHtml(str) {
   }[tag] || tag));
 }
 
+// --- LYRIC SYNC OFFSET & DURATION-MATCHED LYRICS ENGINE ---
+let songLyricOffsets = {};
+try {
+  songLyricOffsets = JSON.parse(localStorage.getItem('muzikal_lyric_offsets') || '{}');
+} catch (e) {
+  songLyricOffsets = {};
+}
+let globalLyricOffsetSec = parseFloat(localStorage.getItem('muzikal_global_lyric_offset') || '0') || 0;
+
+function getEffectiveLyricOffset(song) {
+  if (!song) return globalLyricOffsetSec;
+  const key = song.id || `${song.title || ''}_${song.channel || ''}`;
+  if (typeof songLyricOffsets[key] === 'number' && !isNaN(songLyricOffsets[key])) {
+    return songLyricOffsets[key];
+  }
+  if (state.lyrics && typeof state.lyrics.recommendedOffset === 'number' && state.lyrics.recommendedOffset !== 0) {
+    return state.lyrics.recommendedOffset + globalLyricOffsetSec;
+  }
+  return globalLyricOffsetSec;
+}
+
+function setSongLyricOffset(song, offsetSec) {
+  const rounded = Math.round(offsetSec * 10) / 10;
+  if (song) {
+    const key = song.id || `${song.title || ''}_${song.channel || ''}`;
+    songLyricOffsets[key] = rounded;
+    try { localStorage.setItem('muzikal_lyric_offsets', JSON.stringify(songLyricOffsets)); } catch (e) {}
+  } else {
+    globalLyricOffsetSec = rounded;
+    try { localStorage.setItem('muzikal_global_lyric_offset', String(rounded)); } catch (e) {}
+  }
+  updateLyricOffsetUI();
+  const currentTime = state.isOfflinePlaying
+    ? (localAudio.currentTime || 0)
+    : ((ytReady && ytPlayer && ytPlayer.getCurrentTime) ? ytPlayer.getCurrentTime() : 0);
+  syncLyricsWithTime(currentTime, true);
+}
+
+function updateLyricOffsetUI() {
+  const valEl = document.getElementById('lyric-sync-offset-val');
+  if (!valEl) return;
+  const off = getEffectiveLyricOffset(state.currentSong);
+  const sign = off > 0 ? '+' : '';
+  valEl.textContent = `${sign}${off.toFixed(1)}s`;
+}
+
 function parseLrc(lrcText) {
   if (!lrcText) return [];
   const lines = lrcText.split('\n');
   const result = [];
-  const timeRegex = /\[(\d{2}):(\d{2}(?:\.\d{2,3})?)\](.*)/;
+  let lrcHeaderOffsetSec = 0;
+  const offsetMatch = /\[offset:\s*([+-]?\d+)\s*\]/i.exec(lrcText);
+  if (offsetMatch) {
+    lrcHeaderOffsetSec = (parseInt(offsetMatch[1], 10) || 0) / 1000;
+  }
+  const timeRegex = /\[(\d{1,2}):(\d{2}(?:[.:]\d{1,3})?)\](.*)/;
 
   for (const line of lines) {
     const match = timeRegex.exec(line.trim());
     if (match) {
       const min = parseInt(match[1], 10);
-      const sec = parseFloat(match[2]);
-      const text = match[3].trim();
+      const sec = parseFloat(match[2].replace(':', '.'));
+      const text = match[3].replace(/\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/g, '').trim();
       if (text) {
-        result.push({ time: (min * 60) + sec, text });
+        const t = Math.max(0, (min * 60) + sec - lrcHeaderOffsetSec);
+        result.push({ time: t, text });
       }
     }
   }
   return result.sort((a, b) => a.time - b.time);
+}
+
+function getSongDurationSeconds(song) {
+  if (!song) return 0;
+  if (typeof song.durationSec === 'number' && song.durationSec > 0) return song.durationSec;
+  if (song.duration && typeof song.duration === 'string') {
+    const parts = song.duration.split(':').map(Number);
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) return parts[0] * 60 + parts[1];
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  if (lastValidDuration > 0) return lastValidDuration;
+  return 0;
+}
+
+async function fetchDirectLrcLibFallback(title, artist, targetDurationSec) {
+  const cleanTitle = (title || '')
+    .replace(/\(.*?\)|\[.*?\]/g, '')
+    .replace(/(official\s*(music\s*)?video|video\s*klip|klip|lyrics|lyric\s*video|audio|hd|4k|hq|resmi\s*video|şarkı\s*sözleri|visualizer)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const cleanArtist = (artist || '')
+    .replace(/(-?\s*Topic|VEVO|Official|Music|Müzik|Netd\s*Müzik)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  let searchTerm = cleanTitle;
+  if (cleanArtist && !cleanTitle.toLowerCase().includes(cleanArtist.toLowerCase())) {
+    searchTerm = `${cleanArtist} ${cleanTitle}`;
+  }
+  const resp = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(searchTerm)}`);
+  if (!resp.ok) return null;
+  const list = await resp.json();
+  if (!Array.isArray(list) || list.length === 0) return null;
+
+  let bestMatch = null;
+  let bestScore = -999999;
+  for (const item of list) {
+    if (!item.syncedLyrics && !item.plainLyrics) continue;
+    let score = item.syncedLyrics ? 500 : 100;
+    const itemDur = Number(item.duration) || 0;
+    if (targetDurationSec > 0 && itemDur > 0) {
+      const diff = Math.abs(itemDur - targetDurationSec);
+      if (diff <= 2) score += 350;
+      else if (diff <= 5) score += 250;
+      else if (diff <= 10) score += 120;
+      else if (diff <= 20) score += 20;
+      else score -= Math.min(400, diff * 6);
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = item;
+    }
+  }
+  if (!bestMatch) return null;
+  let recommendedOffset = 0;
+  const bestDur = Number(bestMatch.duration) || 0;
+  if (targetDurationSec > 0 && bestDur > 0) {
+    const durDiff = targetDurationSec - bestDur;
+    if (durDiff >= 2.5 && durDiff <= 14) {
+      recommendedOffset = Math.round(durDiff * 2) / 2;
+    }
+  }
+  return {
+    success: true,
+    trackName: bestMatch.trackName,
+    artistName: bestMatch.artistName,
+    duration: bestDur,
+    recommendedOffset,
+    syncedLyrics: bestMatch.syncedLyrics || null,
+    plainLyrics: bestMatch.plainLyrics || null
+  };
 }
 
 async function fetchLyricsForSong(song) {
@@ -4509,10 +4985,15 @@ async function fetchLyricsForSong(song) {
     showLyricsLoading();
   }
 
+  const durSec = getSongDurationSeconds(song);
   try {
     const cleanTitle = song.title || '';
     const cleanArtist = song.channel || '';
-    const res = await apiFetch(`/api/lyrics?title=${encodeURIComponent(cleanTitle)}&artist=${encodeURIComponent(cleanArtist)}`);
+    let res = await apiFetch(`/api/lyrics?title=${encodeURIComponent(cleanTitle)}&artist=${encodeURIComponent(cleanArtist)}&duration=${encodeURIComponent(durSec)}`);
+
+    if (!res || !res.success) {
+      res = await fetchDirectLrcLibFallback(cleanTitle, cleanArtist, durSec);
+    }
 
     if (res && res.success) {
       state.lyrics = res;
@@ -4524,10 +5005,19 @@ async function fetchLyricsForSong(song) {
       state.syncedLyrics = [];
     }
   } catch (err) {
-    state.lyrics = null;
-    state.syncedLyrics = [];
+    try {
+      const fallback = await fetchDirectLrcLibFallback(song.title || '', song.channel || '', durSec);
+      if (fallback && fallback.success) {
+        state.lyrics = fallback;
+        if (fallback.syncedLyrics) state.syncedLyrics = parseLrc(fallback.syncedLyrics);
+      }
+    } catch (e2) {
+      state.lyrics = null;
+      state.syncedLyrics = [];
+    }
   }
 
+  updateLyricOffsetUI();
   if (state.isLyricsOpen) {
     renderLyricsForCurrentSong();
   }
@@ -4548,9 +5038,13 @@ function renderLyricsForCurrentSong() {
   elements.lyricsTitle.textContent = state.currentSong.title;
   elements.lyricsArtist.textContent = state.currentSong.channel;
   elements.lyricsLoading.style.display = 'none';
+  updateLyricOffsetUI();
+
+  const syncCtrlBox = document.getElementById('lyrics-sync-controls');
 
   if (!state.lyrics) {
     elements.lyricsBadge.textContent = 'Şarkı Sözü';
+    if (syncCtrlBox) syncCtrlBox.style.display = 'none';
     elements.lyricsLines.innerHTML = '';
     elements.lyricsEmpty.style.display = 'flex';
     return;
@@ -4560,6 +5054,7 @@ function renderLyricsForCurrentSong() {
 
   if (state.syncedLyrics && state.syncedLyrics.length > 0) {
     elements.lyricsBadge.textContent = 'Canlı Senkronize';
+    if (syncCtrlBox) syncCtrlBox.style.display = 'inline-flex';
     elements.lyricsLines.innerHTML = state.syncedLyrics.map((l, i) => `
       <div class="lyric-line" data-index="${i}" data-time="${l.time}">
         ${escapeHtml(l.text)}
@@ -4568,14 +5063,16 @@ function renderLyricsForCurrentSong() {
 
     elements.lyricsLines.querySelectorAll('.lyric-line').forEach(el => {
       el.addEventListener('click', () => {
-        const time = parseFloat(el.dataset.time);
-        if (!isNaN(time)) {
+        const lineTime = parseFloat(el.dataset.time);
+        const offsetSec = getEffectiveLyricOffset(state.currentSong);
+        const targetPlaybackTime = Math.max(0, lineTime + offsetSec);
+        if (!isNaN(targetPlaybackTime)) {
           if (state.isOfflinePlaying) {
-            localAudio.currentTime = time;
+            localAudio.currentTime = targetPlaybackTime;
           } else if (ytReady && ytPlayer && ytPlayer.seekTo) {
-            ytPlayer.seekTo(time, true);
+            ytPlayer.seekTo(targetPlaybackTime, true);
           }
-          syncLyricsWithTime(time, true);
+          syncLyricsWithTime(targetPlaybackTime, true);
         }
       });
     });
@@ -4586,12 +5083,14 @@ function renderLyricsForCurrentSong() {
     syncLyricsWithTime(currentTime, true);
   } else if (state.lyrics.plainLyrics) {
     elements.lyricsBadge.textContent = 'Şarkı Sözleri';
+    if (syncCtrlBox) syncCtrlBox.style.display = 'none';
     const lines = state.lyrics.plainLyrics.split('\n');
     elements.lyricsLines.innerHTML = lines.map(line => {
       const trimmed = line.trim();
       return trimmed ? `<div class="lyric-line past">${escapeHtml(trimmed)}</div>` : '<br/>';
     }).join('');
   } else {
+    if (syncCtrlBox) syncCtrlBox.style.display = 'none';
     elements.lyricsEmpty.style.display = 'flex';
   }
 }
@@ -4599,9 +5098,13 @@ function renderLyricsForCurrentSong() {
 function syncLyricsWithTime(currentTime, forceScroll = false) {
   if (!state.isLyricsOpen || !state.syncedLyrics || state.syncedLyrics.length === 0) return;
 
+  const offsetSec = getEffectiveLyricOffset(state.currentSong);
+  // Positive offsetSec means music video has an intro before lyrics start, so lyric time is compared against (currentTime - offsetSec)
+  const adjustedTime = currentTime - offsetSec + 0.18;
+
   let activeIdx = -1;
   for (let i = 0; i < state.syncedLyrics.length; i++) {
-    if (state.syncedLyrics[i].time <= currentTime + 0.25) {
+    if (state.syncedLyrics[i].time <= adjustedTime) {
       activeIdx = i;
     } else {
       break;
@@ -4630,7 +5133,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.5.0';
+let CURRENT_APP_VERSION = '1.5.1';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -4706,7 +5209,7 @@ async function checkForAppUpdates(isManual = false) {
         `;
       }
       if (manualLink) {
-        manualLink.href = release.html_url || 'https://github.com/KaranlikPasa/M-zikal/releases/latest';
+        manualLink.href = isAndroid ? downloadUrl : (release.html_url || 'https://github.com/KaranlikPasa/M-zikal/releases/latest');
       }
       if (progressContainer) progressContainer.style.display = 'none';
       if (btnDismiss) btnDismiss.style.display = 'inline-block';
@@ -5544,6 +6047,432 @@ function initGoogleAuth() {
   }
 }
 
+// --- SETTINGS VIEW, THEME ACCENTS & YEAR-END WRAPPED ---
+const THEME_ACCENTS = {
+  green: { primary: '#1db954', secondary: '#1ed760', rgb: '29, 185, 84' },
+  purple: { primary: '#8b5cf6', secondary: '#a78bfa', rgb: '139, 92, 246' },
+  cyan: { primary: '#06b6d4', secondary: '#22d3ee', rgb: '6, 182, 212' },
+  rose: { primary: '#f43f5e', secondary: '#fb7185', rgb: '244, 63, 94' },
+  amber: { primary: '#f59e0b', secondary: '#fbbf24', rgb: '245, 158, 11' }
+};
+
+function applyThemeAccent(themeKey) {
+  const key = THEME_ACCENTS[themeKey] ? themeKey : 'green';
+  const t = THEME_ACCENTS[key];
+  document.documentElement.style.setProperty('--accent-primary', t.primary);
+  document.documentElement.style.setProperty('--accent-secondary', t.secondary);
+  localStorage.setItem('muzikal_theme_accent', key);
+  document.querySelectorAll('#theme-color-picker .theme-swatch').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.theme === key);
+  });
+}
+
+function refreshSettingsViewUI() {
+  const savedTheme = localStorage.getItem('muzikal_theme_accent') || 'green';
+  document.querySelectorAll('#theme-color-picker .theme-swatch').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.theme === savedTheme);
+  });
+
+  const viewGridBtn = document.getElementById('settings-view-grid');
+  const viewListBtn = document.getElementById('settings-view-list');
+  if (viewGridBtn) viewGridBtn.classList.toggle('active', state.viewMode === 'grid');
+  if (viewListBtn) viewListBtn.classList.toggle('active', state.viewMode === 'list');
+
+  const hideQueueCheckbox = document.getElementById('settings-hide-queue-toggle');
+  if (hideQueueCheckbox) hideQueueCheckbox.checked = !!state.hideUpcomingQueue;
+
+  const cutoffGuardCheckbox = document.getElementById('settings-mobile-cutoff-guard');
+  if (cutoffGuardCheckbox) {
+    cutoffGuardCheckbox.checked = localStorage.getItem('muzikal_cutoff_guard') !== 'false';
+  }
+
+  const offsetLabel = document.getElementById('settings-lyric-offset-val');
+  if (offsetLabel) {
+    const off = getEffectiveLyricOffset(state.currentSong);
+    offsetLabel.textContent = `${off > 0 ? '+' : ''}${off.toFixed(1)} sn`;
+  }
+
+  const verBadge = document.getElementById('settings-version-badge');
+  if (verBadge) verBadge.textContent = `v${CURRENT_APP_VERSION}`;
+}
+
+function initSettingsView() {
+  const savedTheme = localStorage.getItem('muzikal_theme_accent') || 'green';
+  applyThemeAccent(savedTheme);
+
+  document.querySelectorAll('#theme-color-picker .theme-swatch').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyThemeAccent(btn.dataset.theme);
+      showToast('🎨 Uygulama vurgu rengi güncellendi!');
+    });
+  });
+
+  const viewGridBtn = document.getElementById('settings-view-grid');
+  const viewListBtn = document.getElementById('settings-view-list');
+  if (viewGridBtn) {
+    viewGridBtn.addEventListener('click', () => {
+      setViewMode('grid');
+      refreshSettingsViewUI();
+    });
+  }
+  if (viewListBtn) {
+    viewListBtn.addEventListener('click', () => {
+      setViewMode('list');
+      refreshSettingsViewUI();
+    });
+  }
+
+  const hideQueueCheckbox = document.getElementById('settings-hide-queue-toggle');
+  if (hideQueueCheckbox) {
+    hideQueueCheckbox.addEventListener('change', () => {
+      state.hideUpcomingQueue = hideQueueCheckbox.checked;
+      localStorage.setItem('muzikal_hide_upcoming_queue', state.hideUpcomingQueue ? 'true' : 'false');
+      localStorage.setItem('muzikal_hide_queue', state.hideUpcomingQueue ? '1' : '0');
+      updateQueueDrawer();
+    });
+  }
+
+  const cutoffGuardCheckbox = document.getElementById('settings-mobile-cutoff-guard');
+  if (cutoffGuardCheckbox) {
+    cutoffGuardCheckbox.addEventListener('change', () => {
+      localStorage.setItem('muzikal_cutoff_guard', cutoffGuardCheckbox.checked ? 'true' : 'false');
+      showToast(cutoffGuardCheckbox.checked ? '🛡️ Kesintisiz Mobil Akış Koruması aktif' : 'Kesintisiz Mobil Akış Koruması kapatıldı');
+    });
+  }
+
+  const btnOpenStudioFromSettings = document.getElementById('btn-settings-open-audio-studio');
+  if (btnOpenStudioFromSettings) {
+    btnOpenStudioFromSettings.addEventListener('click', () => {
+      const modal = document.getElementById('audio-studio-modal');
+      if (modal) modal.style.display = 'flex';
+    });
+  }
+
+  const adjustOffset = (delta, reset = false) => {
+    const cur = getEffectiveLyricOffset(state.currentSong);
+    const next = reset ? 0 : (cur + delta);
+    setSongLyricOffset(state.currentSong, next);
+    refreshSettingsViewUI();
+    showToast(`🎤 Söz senkronizasyonu: ${next > 0 ? '+' : ''}${next.toFixed(1)} sn`);
+  };
+
+  const sMinus = document.getElementById('btn-settings-lyric-minus');
+  const sReset = document.getElementById('btn-settings-lyric-reset');
+  const sPlus = document.getElementById('btn-settings-lyric-plus');
+  if (sMinus) sMinus.addEventListener('click', () => adjustOffset(-0.5));
+  if (sReset) sReset.addEventListener('click', () => adjustOffset(0, true));
+  if (sPlus) sPlus.addEventListener('click', () => adjustOffset(0.5));
+
+  const lEarlier = document.getElementById('btn-lyric-sync-earlier');
+  const lReset = document.getElementById('btn-lyric-sync-reset');
+  const lLater = document.getElementById('btn-lyric-sync-later');
+  if (lEarlier) lEarlier.addEventListener('click', () => adjustOffset(-0.5));
+  if (lReset) lReset.addEventListener('click', () => adjustOffset(0, true));
+  if (lLater) lLater.addEventListener('click', () => adjustOffset(0.5));
+
+  const btnSettingsAccount = document.getElementById('btn-settings-open-account');
+  if (btnSettingsAccount) {
+    btnSettingsAccount.addEventListener('click', () => openUserAccountHub());
+  }
+  const btnSettingsExport = document.getElementById('btn-settings-export-json');
+  if (btnSettingsExport) {
+    btnSettingsExport.addEventListener('click', exportPlaylistsToJson);
+  }
+  const btnSettingsClearHist = document.getElementById('btn-settings-clear-history');
+  if (btnSettingsClearHist) {
+    btnSettingsClearHist.addEventListener('click', () => {
+      if (!confirm('Dinleme geçmişinizi temizlemek istediğinize emin misiniz?')) return;
+      state.library.history = [];
+      persistLibrary(state.library);
+      renderRecentTracksGrid();
+      showToast('🗑️ Dinleme geçmişi temizlendi.');
+    });
+  }
+  const btnSettingsCheckUpd = document.getElementById('btn-settings-check-update');
+  if (btnSettingsCheckUpd) {
+    btnSettingsCheckUpd.addEventListener('click', () => checkForAppUpdates(true));
+  }
+}
+
+// Strict Year-End Wrapped Visibility: ONLY visible at the end of the year (Dec 25 - Dec 31)
+function checkYearEndWrappedVisibility() {
+  const btnWrapped = document.getElementById('btn-sidebar-wrapped');
+  if (!btnWrapped) return;
+  const now = new Date();
+  const isYearEnd = (now.getMonth() === 11 && now.getDate() >= 25);
+  btnWrapped.style.display = isYearEnd ? 'flex' : 'none';
+}
+
+function renderYearEndWrappedView() {
+  const container = document.getElementById('wrapped-dynamic-content');
+  if (!container) return;
+  const history = state.library.history || [];
+  const favs = state.library.favorites || [];
+  const artistCounts = {};
+  history.forEach(s => {
+    const a = (s && s.channel) ? s.channel : 'Bilinmeyen Sanatçı';
+    artistCounts[a] = (artistCounts[a] || 0) + 1;
+  });
+  const topArtist = Object.entries(artistCounts).sort((a, b) => b[1] - a[1])[0];
+  container.innerHTML = `
+    <div class="settings-grid">
+      <div class="settings-card">
+        <div class="settings-card-header"><h3>🏆 En Çok Dinlenen Sanatçı</h3></div>
+        <div style="font-size: 22px; font-weight: 800; color: var(--accent-primary); margin-top: 8px;">
+          ${escapeHtml(topArtist ? topArtist[0] : 'Henüz veri yok')}
+        </div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-header"><h3>❤️ Toplam Favori & Geçmiş</h3></div>
+        <div style="font-size: 16px; color: var(--text-main); margin-top: 8px;">
+          ${favs.length} Beğenilen Şarkı • ${history.length} Son Dinlenen Parça
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- AUDIO STUDIO: PLAYBACK SPEED, 5-BAND WEB AUDIO EQ, SLEEP TIMER & SONG RADIO ---
+let currentPlaybackRate = 1.0;
+let sleepTimerInterval = null;
+let sleepTimerEndTimestamp = 0;
+let webAudioCtx = null;
+let webAudioSource = null;
+let webAudioFilters = [];
+const EQ_FREQUENCIES = [60, 230, 910, 3600, 14000];
+const EQ_PRESETS = {
+  flat: [0, 0, 0, 0, 0],
+  bass: [7, 5, 0, 1, 2],
+  vocal: [-2, 1, 5, 4, 1],
+  rock: [5, 3, -1, 3, 5],
+  electronic: [6, 4, 0, 3, 6],
+  acoustic: [3, 2, 1, 3, 4]
+};
+let currentEqGains = [0, 0, 0, 0, 0];
+
+function ensureWebAudioEqualizer() {
+  if (webAudioCtx) return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx || !localAudio) return;
+    webAudioCtx = new AudioCtx();
+    webAudioSource = webAudioCtx.createMediaElementSource(localAudio);
+    webAudioFilters = EQ_FREQUENCIES.map((freq, idx) => {
+      const f = webAudioCtx.createBiquadFilter();
+      f.type = idx === 0 ? 'lowshelf' : (idx === EQ_FREQUENCIES.length - 1 ? 'highshelf' : 'peaking');
+      f.frequency.value = freq;
+      f.gain.value = currentEqGains[idx] || 0;
+      return f;
+    });
+    let prevNode = webAudioSource;
+    webAudioFilters.forEach(filterNode => {
+      prevNode.connect(filterNode);
+      prevNode = filterNode;
+    });
+    prevNode.connect(webAudioCtx.destination);
+  } catch (e) {
+    // Ignore if already connected or restricted
+  }
+}
+
+function applyEqGains(gains, presetName = null) {
+  currentEqGains = gains.map(g => Number(g) || 0);
+  ensureWebAudioEqualizer();
+  if (webAudioCtx && webAudioCtx.state === 'suspended') {
+    webAudioCtx.resume().catch(() => {});
+  }
+  webAudioFilters.forEach((f, idx) => {
+    if (f && f.gain) f.gain.value = currentEqGains[idx] || 0;
+  });
+
+  document.querySelectorAll('#eq-sliders-grid .eq-band').forEach((bandEl, idx) => {
+    const slider = bandEl.querySelector('.eq-slider');
+    const valSpan = bandEl.querySelector('.eq-db-val');
+    const g = currentEqGains[idx] || 0;
+    if (slider) slider.value = g;
+    if (valSpan) valSpan.textContent = `${g > 0 ? '+' : ''}${g}dB`;
+  });
+
+  if (presetName) {
+    document.querySelectorAll('#eq-preset-chips .studio-chip').forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.eq === presetName);
+    });
+  }
+}
+
+function applyPlaybackRate(rate) {
+  const numRate = Math.max(0.5, Math.min(2.0, Number(rate) || 1.0));
+  currentPlaybackRate = numRate;
+  if (localAudio) {
+    try { localAudio.playbackRate = numRate; } catch (e) {}
+  }
+  if (ytReady && ytPlayer && typeof ytPlayer.setPlaybackRate === 'function') {
+    try { ytPlayer.setPlaybackRate(numRate); } catch (e) {}
+  }
+  const badge = document.getElementById('playback-speed-badge');
+  if (badge) badge.textContent = `${numRate.toFixed(2).replace(/\.00$/, '.0')}x`;
+  document.querySelectorAll('#speed-preset-chips .studio-chip').forEach(chip => {
+    chip.classList.toggle('active', Math.abs(parseFloat(chip.dataset.speed) - numRate) < 0.02);
+  });
+}
+
+function startSleepTimer(minutes) {
+  clearInterval(sleepTimerInterval);
+  const badge = document.getElementById('sleep-timer-badge');
+  const countdownEl = document.getElementById('sleep-timer-countdown');
+  const btnAudioStudio = document.getElementById('btn-audio-studio');
+
+  document.querySelectorAll('#sleep-timer-chips .studio-chip').forEach(chip => {
+    chip.classList.toggle('active', parseInt(chip.dataset.min, 10) === minutes);
+  });
+
+  if (!minutes || minutes <= 0) {
+    sleepTimerEndTimestamp = 0;
+    if (badge) badge.style.display = 'none';
+    if (countdownEl) countdownEl.textContent = 'Kapalı';
+    if (btnAudioStudio) btnAudioStudio.classList.remove('active-accent');
+    showToast('🌙 Uyku zamanlayıcısı kapatıldı.');
+    return;
+  }
+
+  sleepTimerEndTimestamp = Date.now() + minutes * 60 * 1000;
+  if (btnAudioStudio) btnAudioStudio.classList.add('active-accent');
+  showToast(`🌙 Uyku zamanlayıcısı ${minutes} dakikaya kuruldu.`);
+
+  const tick = () => {
+    const remainingMs = sleepTimerEndTimestamp - Date.now();
+    if (remainingMs <= 0) {
+      clearInterval(sleepTimerInterval);
+      sleepTimerEndTimestamp = 0;
+      if (badge) badge.style.display = 'none';
+      if (countdownEl) countdownEl.textContent = 'Kapalı';
+      if (btnAudioStudio) btnAudioStudio.classList.remove('active-accent');
+      if (state.isPlaying) {
+        togglePlayPause();
+      }
+      showToast('🌙 Uyku zamanlayıcısı süresi doldu, müzik duraklatıldı. İyi geceler!');
+      return;
+    }
+    const totalSec = Math.ceil(remainingMs / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    const text = `${m}:${s < 10 ? '0' : ''}${s}`;
+    if (badge) {
+      badge.style.display = 'inline-block';
+      badge.textContent = `${m}dk`;
+    }
+    if (countdownEl) countdownEl.textContent = `⏳ ${text}`;
+  };
+
+  tick();
+  sleepTimerInterval = setInterval(tick, 1000);
+}
+
+async function startSongRadioFromCurrent() {
+  if (!state.currentSong) {
+    showToast('📻 Şarkı Radyosu için önce bir şarkı açın.');
+    return;
+  }
+  const song = state.currentSong;
+  showToast(`📻 "${song.title}" için kesintisiz radyo sırası hazırlanıyor...`);
+  try {
+    const artist = (song.channel || '').replace(/(-?\s*Topic|VEVO|Official)/gi, '').trim();
+    const q = `${artist} ${song.title} mix`;
+    const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const results = (data && data.results) ? data.results : (Array.isArray(data) ? data : []);
+    let added = 0;
+    for (const item of results) {
+      if (!item || !item.id || item.id === song.id) continue;
+      if (!state.queue.some(qItem => qItem.id === item.id)) {
+        state.queue.push(item);
+        added++;
+        if (added >= 10) break;
+      }
+    }
+    if (elements.queueBadge) elements.queueBadge.textContent = state.queue.length;
+    updateQueueDrawer();
+    if (added > 0) {
+      showToast(`📻 Şarkı Radyosu aktif! ${added} benzer parça sıraya eklendi.`);
+    } else {
+      showToast('📻 Benzer parçalar Akıllı Mix sırasına eklendi.');
+    }
+  } catch (e) {
+    showToast('📻 Radyo oluşturulurken hata oluştu.');
+  }
+}
+
+function initAudioStudio() {
+  const modal = document.getElementById('audio-studio-modal');
+  const btnOpen = document.getElementById('btn-audio-studio');
+  const mfpBtnOpen = document.getElementById('mfp-btn-audio-studio');
+  const btnClose = document.getElementById('btn-close-audio-studio');
+  const btnRadio = document.getElementById('btn-song-radio');
+  const btnStartRadioModal = document.getElementById('btn-start-song-radio-modal');
+
+  const openModal = () => {
+    if (modal) modal.style.display = 'flex';
+  };
+  if (btnOpen) btnOpen.addEventListener('click', openModal);
+  if (mfpBtnOpen) mfpBtnOpen.addEventListener('click', openModal);
+  if (btnClose) {
+    btnClose.addEventListener('click', () => {
+      if (modal) modal.style.display = 'none';
+    });
+  }
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.style.display = 'none';
+    });
+  }
+
+  if (btnRadio) btnRadio.addEventListener('click', startSongRadioFromCurrent);
+  if (btnStartRadioModal) {
+    btnStartRadioModal.addEventListener('click', () => {
+      if (modal) modal.style.display = 'none';
+      startSongRadioFromCurrent();
+    });
+  }
+
+  // Sleep Timer Chips
+  document.querySelectorAll('#sleep-timer-chips .studio-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const mins = parseInt(chip.dataset.min, 10) || 0;
+      startSleepTimer(mins);
+    });
+  });
+
+  // Playback Speed Chips
+  document.querySelectorAll('#speed-preset-chips .studio-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const spd = parseFloat(chip.dataset.speed) || 1.0;
+      applyPlaybackRate(spd);
+      showToast(`⚡ Çalma hızı: ${spd}x`);
+    });
+  });
+
+  // EQ Preset Chips
+  document.querySelectorAll('#eq-preset-chips .studio-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const presetKey = chip.dataset.eq || 'flat';
+      const gains = EQ_PRESETS[presetKey] || EQ_PRESETS.flat;
+      applyEqGains(gains, presetKey);
+      showToast(`🎚️ Ekolayzer: ${chip.textContent}`);
+    });
+  });
+
+  // EQ Individual Sliders
+  document.querySelectorAll('#eq-sliders-grid .eq-band').forEach((bandEl, idx) => {
+    const slider = bandEl.querySelector('.eq-slider');
+    if (slider) {
+      slider.addEventListener('input', () => {
+        const nextGains = [...currentEqGains];
+        nextGains[idx] = parseFloat(slider.value) || 0;
+        applyEqGains(nextGains, null);
+      });
+    }
+  });
+}
+
 // --- BOOTSTRAP APP ---
 window.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -5559,7 +6488,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   const sidebarVer = document.getElementById('sidebar-app-ver');
   if (sidebarVer) sidebarVer.textContent = 'v' + CURRENT_APP_VERSION;
 
+  checkYearEndWrappedVisibility();
   setupEventListeners();
+  initSettingsView();
+  initAudioStudio();
   initGoogleAuth();
   setVolume(state.volume);
   updateRepeatUI();

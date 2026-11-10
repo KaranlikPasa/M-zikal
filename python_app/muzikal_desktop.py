@@ -43,12 +43,16 @@ def find_app_root():
     if local_appdata:
         candidates.append(os.path.join(local_appdata, "Programs", "Muzikal"))
 
-    # Linux standard directories
+    # Linux standard directories (prefer user-updated ~/.local/share/muzikal over root /opt/muzikal)
+    user_share = os.path.expanduser("~/.local/share/muzikal")
+    if os.path.isfile(os.path.join(user_share, "server.js")):
+        candidates.insert(0, user_share)
+
     candidates.extend([
+        user_share,
         "/opt/muzikal",
         "/usr/lib/muzikal",
         "/usr/share/muzikal",
-        os.path.expanduser("~/.local/share/muzikal"),
     ])
 
     for path in candidates:
@@ -267,7 +271,7 @@ def run_pywebview(app_root, server_proc):
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Muzikal.Desktop.1.5.0")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Muzikal.Desktop.1.5.1")
         except Exception:
             pass
 
