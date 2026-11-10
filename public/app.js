@@ -2877,21 +2877,21 @@ function renderSongs(songs, isSearching = false) {
 // --- DATA FETCHING & UI VISIBILITY ---
 
 const RECOMMENDED_ARTISTS = [
-  { name: 'Semicenk', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/92d79c731144ebfc8b8b154261cf8eb0/250x250-000000-80-0-0.jpg' },
-  { name: 'Sezen Aksu', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/46ceaa75ba3efde019fbda9c9ff49732/250x250-000000-80-0-0.jpg' },
-  { name: 'Duman', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/09fc4fc5a31932e8a037444b7ba7f95c/250x250-000000-80-0-0.jpg' },
-  { name: 'Lvbel C5', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/f8a1b1615fd2c118f40b50d60eb6088b/250x250-000000-80-0-0.jpg' },
-  { name: 'Manga', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/79923d4ac9b76cf9ef44cdacff211386/250x250-000000-80-0-0.jpg' },
-  { name: 'Mor ve Ötesi', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/3ce1dc67ba8eb5814ff4e6a95cb00d24/250x250-000000-80-0-0.jpg' },
-  { name: 'Gülşen', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/ec2aa3be325a5d4776c9df8dc05dfbe0/250x250-000000-80-0-0.jpg' },
-  { name: 'Teoman', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/423c37f43a59c03966d85a98ed61c85d/250x250-000000-80-0-0.jpg' },
-  { name: 'Tarkan', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/459cd1646be1663ebad2e8fa4a72f5f6/250x250-000000-80-0-0.jpg' },
-  { name: 'Simge', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/053d2807a889eb4a87e4bf12085687a5/250x250-000000-80-0-0.jpg' },
-  { name: 'Melike Şahin', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/f0591c6306332f7f1fd5cf0bc2359337/250x250-000000-80-0-0.jpg' },
-  { name: 'Dedublüman', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/d0c9543997ff5f577d646735ab0852a5/250x250-000000-80-0-0.jpg' },
-  { name: 'Coldplay', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/e65d62ecd00b8bf1ba89073943ac62a1/250x250-000000-80-0-0.jpg' },
-  { name: 'The Weeknd', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/033d460f704896c9c489a1d753a13776/250x250-000000-80-0-0.jpg' },
-  { name: 'Billie Eilish', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/37abe67c1fd9bbcd0ce0ac9e761e6809/250x250-000000-80-0-0.jpg' }
+  { name: 'Semicenk', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/f213929354a3ce3aaf7e8657507f0e34/250x250-000000-80-0-0.jpg' },
+  { name: 'Sezen Aksu', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/9c62f746db8e41bb49eb13a3c254f597/250x250-000000-80-0-0.jpg' },
+  { name: 'Duman', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/420bd789cacec4d562f981f6eae6c76e/250x250-000000-80-0-0.jpg' },
+  { name: 'Lvbel C5', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/55eba79b292dbef8e65d5b7b6873b9e8/250x250-000000-80-0-0.jpg' },
+  { name: 'Manga', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/2d34c47105a1f42e865e4f14403e1fae/250x250-000000-80-0-0.jpg' },
+  { name: 'Mor ve Ötesi', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/aee2502f3565318f12a5b90e9fb3d67c/250x250-000000-80-0-0.jpg' },
+  { name: 'Gülşen', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/b9794826785692d4d53b3a305733a0f0/250x250-000000-80-0-0.jpg' },
+  { name: 'Teoman', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/658ca2fe2c26477e897ff4e3a0c6f9ed/250x250-000000-80-0-0.jpg' },
+  { name: 'Tarkan', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/28634a4ad808e5b6bbb6714f06bd5fe8/250x250-000000-80-0-0.jpg' },
+  { name: 'Simge', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/908d0545255bdaa93da39e59631fa9aa/250x250-000000-80-0-0.jpg' },
+  { name: 'Melike Şahin', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/f54fb6a9276c943722a6dcb8c36852f4/250x250-000000-80-0-0.jpg' },
+  { name: 'Dedublüman', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/770829c037424b371faca8e33ef5e084/250x250-000000-80-0-0.jpg' },
+  { name: 'Coldplay', role: 'Grup', img: 'https://cdn-images.dzcdn.net/images/artist/3087954bca22f306324912e5ac8375c3/250x250-000000-80-0-0.jpg' },
+  { name: 'The Weeknd', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/581693b4724a7fcfa754455101e13a44/250x250-000000-80-0-0.jpg' },
+  { name: 'Billie Eilish', role: 'Sanatçı', img: 'https://cdn-images.dzcdn.net/images/artist/8eab1a9a644889aabaca1e193e05f984/250x250-000000-80-0-0.jpg' }
 ];
 
 const ARTIST_GRADIENTS = [
@@ -3811,27 +3811,13 @@ function setupEventListeners() {
   }
 
   // Desktop Sidebar Navigation (including Settings & Year-End Wrapped)
-  document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
+  document.querySelectorAll('.nav-menu .nav-item, .sidebar .nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.dataset.view) {
         navigateTo(btn.dataset.view);
       }
     });
   });
-
-  // Topbar & Mobile Header Settings Buttons
-  const btnTopbarSettings = document.getElementById('btn-topbar-settings');
-  if (btnTopbarSettings) {
-    btnTopbarSettings.addEventListener('click', () => {
-      navigateTo(state.currentView === 'settings' ? 'home' : 'settings');
-    });
-  }
-  const btnMobileSettingsTop = document.getElementById('btn-mobile-settings-top');
-  if (btnMobileSettingsTop) {
-    btnMobileSettingsTop.addEventListener('click', () => {
-      navigateTo(state.currentView === 'settings' ? 'home' : 'settings');
-    });
-  }
 
   // Mobile Bottom Navigation
   if (elements.mobileNavBtns) {
@@ -5133,7 +5119,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.5.1';
+let CURRENT_APP_VERSION = '1.5.2';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -6048,40 +6034,51 @@ function initGoogleAuth() {
 }
 
 // --- SETTINGS VIEW, THEME ACCENTS & YEAR-END WRAPPED ---
-const THEME_ACCENTS = {
-  green: { primary: '#1db954', secondary: '#1ed760', rgb: '29, 185, 84' },
-  purple: { primary: '#8b5cf6', secondary: '#a78bfa', rgb: '139, 92, 246' },
-  cyan: { primary: '#06b6d4', secondary: '#22d3ee', rgb: '6, 182, 212' },
-  rose: { primary: '#f43f5e', secondary: '#fb7185', rgb: '244, 63, 94' },
-  amber: { primary: '#f59e0b', secondary: '#fbbf24', rgb: '245, 158, 11' }
+const THEME_PALETTES = {
+  '#1db954': { accent: '#1ed760', hover: '#22e668', glow: 'rgba(30, 215, 96, 0.35)', soft: 'rgba(30, 215, 96, 0.14)' },
+  '#8b5cf6': { accent: '#8b5cf6', hover: '#a78bfa', glow: 'rgba(139, 92, 246, 0.38)', soft: 'rgba(139, 92, 246, 0.15)' },
+  '#06b6d4': { accent: '#06b6d4', hover: '#22d3ee', glow: 'rgba(6, 182, 212, 0.38)', soft: 'rgba(6, 182, 212, 0.15)' },
+  '#f43f5e': { accent: '#f43f5e', hover: '#fb7185', glow: 'rgba(244, 63, 94, 0.38)', soft: 'rgba(244, 63, 94, 0.15)' },
+  '#f59e0b': { accent: '#f59e0b', hover: '#fbbf24', glow: 'rgba(245, 158, 11, 0.38)', soft: 'rgba(245, 158, 11, 0.15)' },
+  '#3b82f6': { accent: '#3b82f6', hover: '#60a5fa', glow: 'rgba(59, 130, 246, 0.38)', soft: 'rgba(59, 130, 246, 0.15)' },
+  'green':   { accent: '#1ed760', hover: '#22e668', glow: 'rgba(30, 215, 96, 0.35)', soft: 'rgba(30, 215, 96, 0.14)', swatch: '#1db954' },
+  'purple':  { accent: '#8b5cf6', hover: '#a78bfa', glow: 'rgba(139, 92, 246, 0.38)', soft: 'rgba(139, 92, 246, 0.15)', swatch: '#8b5cf6' },
+  'cyan':    { accent: '#06b6d4', hover: '#22d3ee', glow: 'rgba(6, 182, 212, 0.38)', soft: 'rgba(6, 182, 212, 0.15)', swatch: '#06b6d4' },
+  'rose':    { accent: '#f43f5e', hover: '#fb7185', glow: 'rgba(244, 63, 94, 0.38)', soft: 'rgba(244, 63, 94, 0.15)', swatch: '#f43f5e' },
+  'amber':   { accent: '#f59e0b', hover: '#fbbf24', glow: 'rgba(245, 158, 11, 0.38)', soft: 'rgba(245, 158, 11, 0.15)', swatch: '#f59e0b' },
+  'blue':    { accent: '#3b82f6', hover: '#60a5fa', glow: 'rgba(59, 130, 246, 0.38)', soft: 'rgba(59, 130, 246, 0.15)', swatch: '#3b82f6' }
 };
 
-function applyThemeAccent(themeKey) {
-  const key = THEME_ACCENTS[themeKey] ? themeKey : 'green';
-  const t = THEME_ACCENTS[key];
-  document.documentElement.style.setProperty('--accent-primary', t.primary);
-  document.documentElement.style.setProperty('--accent-secondary', t.secondary);
-  localStorage.setItem('muzikal_theme_accent', key);
-  document.querySelectorAll('#theme-color-picker .theme-swatch').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.theme === key);
+function applyThemeAccent(rawKey) {
+  const p = THEME_PALETTES[rawKey] || THEME_PALETTES['#1db954'];
+  const canonicalSwatch = p.swatch || (THEME_PALETTES[rawKey] ? rawKey : '#1db954');
+
+  const root = document.documentElement;
+  root.style.setProperty('--accent', p.accent);
+  root.style.setProperty('--accent-hover', p.hover);
+  root.style.setProperty('--accent-glow', p.glow);
+  root.style.setProperty('--accent-soft', p.soft);
+  root.style.setProperty('--accent-primary', p.accent);
+  root.style.setProperty('--accent-secondary', p.hover);
+
+  localStorage.setItem('muzikal_theme_accent', canonicalSwatch);
+
+  document.querySelectorAll('#settings-theme-swatches .theme-swatch, #theme-color-picker .theme-swatch').forEach(btn => {
+    const val = btn.dataset.accent || btn.dataset.theme;
+    btn.classList.toggle('active', val === canonicalSwatch || val === rawKey);
   });
 }
 
 function refreshSettingsViewUI() {
-  const savedTheme = localStorage.getItem('muzikal_theme_accent') || 'green';
-  document.querySelectorAll('#theme-color-picker .theme-swatch').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.theme === savedTheme);
-  });
+  const savedTheme = localStorage.getItem('muzikal_theme_accent') || '#1db954';
+  applyThemeAccent(savedTheme);
 
   const viewGridBtn = document.getElementById('settings-view-grid');
   const viewListBtn = document.getElementById('settings-view-list');
   if (viewGridBtn) viewGridBtn.classList.toggle('active', state.viewMode === 'grid');
   if (viewListBtn) viewListBtn.classList.toggle('active', state.viewMode === 'list');
 
-  const hideQueueCheckbox = document.getElementById('settings-hide-queue-toggle');
-  if (hideQueueCheckbox) hideQueueCheckbox.checked = !!state.hideUpcomingQueue;
-
-  const cutoffGuardCheckbox = document.getElementById('settings-mobile-cutoff-guard');
+  const cutoffGuardCheckbox = document.getElementById('settings-cutoff-guard') || document.getElementById('settings-mobile-cutoff-guard');
   if (cutoffGuardCheckbox) {
     cutoffGuardCheckbox.checked = localStorage.getItem('muzikal_cutoff_guard') !== 'false';
   }
@@ -6089,21 +6086,29 @@ function refreshSettingsViewUI() {
   const offsetLabel = document.getElementById('settings-lyric-offset-val');
   if (offsetLabel) {
     const off = getEffectiveLyricOffset(state.currentSong);
-    offsetLabel.textContent = `${off > 0 ? '+' : ''}${off.toFixed(1)} sn`;
+    offsetLabel.textContent = `${off > 0 ? '+' : ''}${off.toFixed(1)}sn`;
   }
 
-  const verBadge = document.getElementById('settings-version-badge');
+  const accStatus = document.getElementById('settings-account-status');
+  if (accStatus) {
+    accStatus.textContent = (state.user && state.user.email)
+      ? `☁️ Bağlı Hesap: ${state.user.name || state.user.email}`
+      : 'Listelerinizi bulutta güvenle saklayın';
+  }
+
+  const verBadge = document.getElementById('settings-version-label') || document.getElementById('settings-version-badge');
   if (verBadge) verBadge.textContent = `v${CURRENT_APP_VERSION}`;
 }
 
 function initSettingsView() {
-  const savedTheme = localStorage.getItem('muzikal_theme_accent') || 'green';
+  const savedTheme = localStorage.getItem('muzikal_theme_accent') || '#1db954';
   applyThemeAccent(savedTheme);
 
-  document.querySelectorAll('#theme-color-picker .theme-swatch').forEach(btn => {
+  document.querySelectorAll('#settings-theme-swatches .theme-swatch, #theme-color-picker .theme-swatch').forEach(btn => {
     btn.addEventListener('click', () => {
-      applyThemeAccent(btn.dataset.theme);
-      showToast('🎨 Uygulama vurgu rengi güncellendi!');
+      const chosen = btn.dataset.accent || btn.dataset.theme || '#1db954';
+      applyThemeAccent(chosen);
+      showToast(`🎨 Vurgu rengi değiştirildi: ${btn.title || chosen}`);
     });
   });
 
@@ -6113,34 +6118,27 @@ function initSettingsView() {
     viewGridBtn.addEventListener('click', () => {
       setViewMode('grid');
       refreshSettingsViewUI();
+      showToast('📋 Varsayılan görünüm: Izgara');
     });
   }
   if (viewListBtn) {
     viewListBtn.addEventListener('click', () => {
       setViewMode('list');
       refreshSettingsViewUI();
+      showToast('📋 Varsayılan görünüm: Liste');
     });
   }
 
-  const hideQueueCheckbox = document.getElementById('settings-hide-queue-toggle');
-  if (hideQueueCheckbox) {
-    hideQueueCheckbox.addEventListener('change', () => {
-      state.hideUpcomingQueue = hideQueueCheckbox.checked;
-      localStorage.setItem('muzikal_hide_upcoming_queue', state.hideUpcomingQueue ? 'true' : 'false');
-      localStorage.setItem('muzikal_hide_queue', state.hideUpcomingQueue ? '1' : '0');
-      updateQueueDrawer();
-    });
-  }
-
-  const cutoffGuardCheckbox = document.getElementById('settings-mobile-cutoff-guard');
+  const cutoffGuardCheckbox = document.getElementById('settings-cutoff-guard') || document.getElementById('settings-mobile-cutoff-guard');
   if (cutoffGuardCheckbox) {
     cutoffGuardCheckbox.addEventListener('change', () => {
+      cutoffGuardEnabled = cutoffGuardCheckbox.checked;
       localStorage.setItem('muzikal_cutoff_guard', cutoffGuardCheckbox.checked ? 'true' : 'false');
-      showToast(cutoffGuardCheckbox.checked ? '🛡️ Kesintisiz Mobil Akış Koruması aktif' : 'Kesintisiz Mobil Akış Koruması kapatıldı');
+      showToast(cutoffGuardCheckbox.checked ? '🛡️ Akıllı Kesinti Koruması aktif' : 'Akıllı Kesinti Koruması kapatıldı');
     });
   }
 
-  const btnOpenStudioFromSettings = document.getElementById('btn-settings-open-audio-studio');
+  const btnOpenStudioFromSettings = document.getElementById('settings-open-audio-studio') || document.getElementById('btn-settings-open-audio-studio');
   if (btnOpenStudioFromSettings) {
     btnOpenStudioFromSettings.addEventListener('click', () => {
       const modal = document.getElementById('audio-studio-modal');
@@ -6156,9 +6154,9 @@ function initSettingsView() {
     showToast(`🎤 Söz senkronizasyonu: ${next > 0 ? '+' : ''}${next.toFixed(1)} sn`);
   };
 
-  const sMinus = document.getElementById('btn-settings-lyric-minus');
-  const sReset = document.getElementById('btn-settings-lyric-reset');
-  const sPlus = document.getElementById('btn-settings-lyric-plus');
+  const sMinus = document.getElementById('settings-lyric-offset-minus') || document.getElementById('btn-settings-lyric-minus');
+  const sReset = document.getElementById('settings-lyric-offset-val') || document.getElementById('btn-settings-lyric-reset');
+  const sPlus = document.getElementById('settings-lyric-offset-plus') || document.getElementById('btn-settings-lyric-plus');
   if (sMinus) sMinus.addEventListener('click', () => adjustOffset(-0.5));
   if (sReset) sReset.addEventListener('click', () => adjustOffset(0, true));
   if (sPlus) sPlus.addEventListener('click', () => adjustOffset(0.5));
@@ -6170,15 +6168,29 @@ function initSettingsView() {
   if (lReset) lReset.addEventListener('click', () => adjustOffset(0, true));
   if (lLater) lLater.addEventListener('click', () => adjustOffset(0.5));
 
-  const btnSettingsAccount = document.getElementById('btn-settings-open-account');
+  const btnSettingsAccount = document.getElementById('settings-btn-account') || document.getElementById('btn-settings-open-account');
   if (btnSettingsAccount) {
     btnSettingsAccount.addEventListener('click', () => openUserAccountHub());
   }
-  const btnSettingsExport = document.getElementById('btn-settings-export-json');
+
+  const btnSettingsDiscord = document.getElementById('settings-btn-discord');
+  if (btnSettingsDiscord) {
+    btnSettingsDiscord.addEventListener('click', () => {
+      if (elements.btnOpenDiscordModal) elements.btnOpenDiscordModal.click();
+    });
+  }
+
+  const btnSettingsExport = document.getElementById('settings-btn-export') || document.getElementById('btn-settings-export-json');
   if (btnSettingsExport) {
     btnSettingsExport.addEventListener('click', exportPlaylistsToJson);
   }
-  const btnSettingsClearHist = document.getElementById('btn-settings-clear-history');
+
+  const btnSettingsImport = document.getElementById('settings-btn-import');
+  if (btnSettingsImport && elements.fileImportPlaylists) {
+    btnSettingsImport.addEventListener('click', () => elements.fileImportPlaylists.click());
+  }
+
+  const btnSettingsClearHist = document.getElementById('settings-btn-clear-history') || document.getElementById('btn-settings-clear-history');
   if (btnSettingsClearHist) {
     btnSettingsClearHist.addEventListener('click', () => {
       if (!confirm('Dinleme geçmişinizi temizlemek istediğinize emin misiniz?')) return;
@@ -6188,7 +6200,20 @@ function initSettingsView() {
       showToast('🗑️ Dinleme geçmişi temizlendi.');
     });
   }
-  const btnSettingsCheckUpd = document.getElementById('btn-settings-check-update');
+
+  const btnSettingsClearCache = document.getElementById('settings-btn-clear-cache');
+  if (btnSettingsClearCache) {
+    btnSettingsClearCache.addEventListener('click', () => {
+      songLyricOffsets = {};
+      globalLyricOffsetSec = 0;
+      localStorage.removeItem('muzikal_lyric_offsets');
+      localStorage.removeItem('muzikal_global_lyric_offset');
+      refreshSettingsViewUI();
+      showToast('✨ Şarkı sözü ve arama önbelleği sıfırlandı.');
+    });
+  }
+
+  const btnSettingsCheckUpd = document.getElementById('settings-btn-check-update') || document.getElementById('btn-settings-check-update');
   if (btnSettingsCheckUpd) {
     btnSettingsCheckUpd.addEventListener('click', () => checkForAppUpdates(true));
   }
@@ -6204,7 +6229,7 @@ function checkYearEndWrappedVisibility() {
 }
 
 function renderYearEndWrappedView() {
-  const container = document.getElementById('wrapped-dynamic-content');
+  const container = document.getElementById('wrapped-content-box') || document.getElementById('wrapped-dynamic-content');
   if (!container) return;
   const history = state.library.history || [];
   const favs = state.library.favorites || [];
@@ -6218,7 +6243,7 @@ function renderYearEndWrappedView() {
     <div class="settings-grid">
       <div class="settings-card">
         <div class="settings-card-header"><h3>🏆 En Çok Dinlenen Sanatçı</h3></div>
-        <div style="font-size: 22px; font-weight: 800; color: var(--accent-primary); margin-top: 8px;">
+        <div style="font-size: 22px; font-weight: 800; color: var(--accent); margin-top: 8px;">
           ${escapeHtml(topArtist ? topArtist[0] : 'Henüz veri yok')}
         </div>
       </div>
@@ -6244,6 +6269,7 @@ const EQ_PRESETS = {
   flat: [0, 0, 0, 0, 0],
   bass: [7, 5, 0, 1, 2],
   vocal: [-2, 1, 5, 4, 1],
+  pop: [3, 2, 0, 3, 4],
   rock: [5, 3, -1, 3, 5],
   electronic: [6, 4, 0, 3, 6],
   acoustic: [3, 2, 1, 3, 4]
@@ -6287,7 +6313,7 @@ function applyEqGains(gains, presetName = null) {
 
   document.querySelectorAll('#eq-sliders-grid .eq-band').forEach((bandEl, idx) => {
     const slider = bandEl.querySelector('.eq-slider');
-    const valSpan = bandEl.querySelector('.eq-db-val');
+    const valSpan = bandEl.querySelector('.eq-val') || bandEl.querySelector('.eq-db-val');
     const g = currentEqGains[idx] || 0;
     if (slider) slider.value = g;
     if (valSpan) valSpan.textContent = `${g > 0 ? '+' : ''}${g}dB`;
@@ -6295,7 +6321,8 @@ function applyEqGains(gains, presetName = null) {
 
   if (presetName) {
     document.querySelectorAll('#eq-preset-chips .studio-chip').forEach(chip => {
-      chip.classList.toggle('active', chip.dataset.eq === presetName);
+      const key = chip.dataset.preset || chip.dataset.eq;
+      chip.classList.toggle('active', key === presetName);
     });
   }
 }
@@ -6309,34 +6336,51 @@ function applyPlaybackRate(rate) {
   if (ytReady && ytPlayer && typeof ytPlayer.setPlaybackRate === 'function') {
     try { ytPlayer.setPlaybackRate(numRate); } catch (e) {}
   }
-  const badge = document.getElementById('playback-speed-badge');
+  const badge = document.getElementById('playback-speed-label') || document.getElementById('playback-speed-badge');
   if (badge) badge.textContent = `${numRate.toFixed(2).replace(/\.00$/, '.0')}x`;
-  document.querySelectorAll('#speed-preset-chips .studio-chip').forEach(chip => {
+  document.querySelectorAll('#playback-speed-chips .studio-chip, #speed-preset-chips .studio-chip').forEach(chip => {
     chip.classList.toggle('active', Math.abs(parseFloat(chip.dataset.speed) - numRate) < 0.02);
   });
 }
 
-function startSleepTimer(minutes) {
+function startSleepTimer(rawVal) {
   clearInterval(sleepTimerInterval);
   const badge = document.getElementById('sleep-timer-badge');
-  const countdownEl = document.getElementById('sleep-timer-countdown');
+  const countdownEl = document.getElementById('sleep-timer-status-text') || document.getElementById('sleep-timer-countdown');
   const btnAudioStudio = document.getElementById('btn-audio-studio');
 
   document.querySelectorAll('#sleep-timer-chips .studio-chip').forEach(chip => {
-    chip.classList.toggle('active', parseInt(chip.dataset.min, 10) === minutes);
+    const cVal = chip.dataset.sleep !== undefined ? chip.dataset.sleep : chip.dataset.min;
+    chip.classList.toggle('active', String(cVal) === String(rawVal));
   });
 
-  if (!minutes || minutes <= 0) {
+  if (rawVal === 'end') {
+    sleepTimerEndTimestamp = 0;
+    state.sleepStopAtEndOfSong = true;
+    if (badge) {
+      badge.style.display = 'inline-block';
+      badge.textContent = '1Ş';
+    }
+    if (countdownEl) countdownEl.textContent = 'Şarkı Bitince';
+    if (btnAudioStudio) btnAudioStudio.classList.add('active');
+    showToast('🌙 Müzik bu şarkı bittiğinde otomatik duracak.');
+    return;
+  }
+
+  state.sleepStopAtEndOfSong = false;
+  const minutes = parseInt(rawVal, 10) || 0;
+
+  if (minutes <= 0) {
     sleepTimerEndTimestamp = 0;
     if (badge) badge.style.display = 'none';
     if (countdownEl) countdownEl.textContent = 'Kapalı';
-    if (btnAudioStudio) btnAudioStudio.classList.remove('active-accent');
+    if (btnAudioStudio) btnAudioStudio.classList.remove('active');
     showToast('🌙 Uyku zamanlayıcısı kapatıldı.');
     return;
   }
 
   sleepTimerEndTimestamp = Date.now() + minutes * 60 * 1000;
-  if (btnAudioStudio) btnAudioStudio.classList.add('active-accent');
+  if (btnAudioStudio) btnAudioStudio.classList.add('active');
   showToast(`🌙 Uyku zamanlayıcısı ${minutes} dakikaya kuruldu.`);
 
   const tick = () => {
@@ -6346,7 +6390,7 @@ function startSleepTimer(minutes) {
       sleepTimerEndTimestamp = 0;
       if (badge) badge.style.display = 'none';
       if (countdownEl) countdownEl.textContent = 'Kapalı';
-      if (btnAudioStudio) btnAudioStudio.classList.remove('active-accent');
+      if (btnAudioStudio) btnAudioStudio.classList.remove('active');
       if (state.isPlaying) {
         togglePlayPause();
       }
@@ -6407,7 +6451,8 @@ function initAudioStudio() {
   const mfpBtnOpen = document.getElementById('mfp-btn-audio-studio');
   const btnClose = document.getElementById('btn-close-audio-studio');
   const btnRadio = document.getElementById('btn-song-radio');
-  const btnStartRadioModal = document.getElementById('btn-start-song-radio-modal');
+  const btnStartRadioModal = document.getElementById('btn-studio-start-radio') || document.getElementById('btn-start-song-radio-modal');
+  const btnResetEq = document.getElementById('btn-reset-eq');
 
   const openModal = () => {
     if (modal) modal.style.display = 'flex';
@@ -6432,17 +6477,23 @@ function initAudioStudio() {
       startSongRadioFromCurrent();
     });
   }
+  if (btnResetEq) {
+    btnResetEq.addEventListener('click', () => {
+      applyEqGains(EQ_PRESETS.flat, 'flat');
+      showToast('🎚️ Ekolayzır sıfırlandı (Dengeli)');
+    });
+  }
 
   // Sleep Timer Chips
   document.querySelectorAll('#sleep-timer-chips .studio-chip').forEach(chip => {
     chip.addEventListener('click', () => {
-      const mins = parseInt(chip.dataset.min, 10) || 0;
-      startSleepTimer(mins);
+      const val = chip.dataset.sleep !== undefined ? chip.dataset.sleep : (chip.dataset.min || '0');
+      startSleepTimer(val);
     });
   });
 
   // Playback Speed Chips
-  document.querySelectorAll('#speed-preset-chips .studio-chip').forEach(chip => {
+  document.querySelectorAll('#playback-speed-chips .studio-chip, #speed-preset-chips .studio-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const spd = parseFloat(chip.dataset.speed) || 1.0;
       applyPlaybackRate(spd);
@@ -6453,10 +6504,10 @@ function initAudioStudio() {
   // EQ Preset Chips
   document.querySelectorAll('#eq-preset-chips .studio-chip').forEach(chip => {
     chip.addEventListener('click', () => {
-      const presetKey = chip.dataset.eq || 'flat';
+      const presetKey = chip.dataset.preset || chip.dataset.eq || 'flat';
       const gains = EQ_PRESETS[presetKey] || EQ_PRESETS.flat;
       applyEqGains(gains, presetKey);
-      showToast(`🎚️ Ekolayzer: ${chip.textContent}`);
+      showToast(`🎚️ Ekolayzır: ${chip.textContent}`);
     });
   });
 

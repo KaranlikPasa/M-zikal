@@ -7,14 +7,14 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Android-1ed760?style=for-the-badge&logo=linux)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.1-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.2-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
-- 🎛️ **Ses Stüdyosu (5-Bant Ekolayzer, Hız/Slowed/Nightcore, Uyku Zamanlayıcısı, Şarkı Radyosu) & Kapsamlı v1.5.1 İyileştirmesi:** Mobilde şarkıların yarıda kesilip atlamasını önleyen kesintisiz akış koruyucusu, Çalma Sırası (Queue) çekmecesi düzeltmesi, yeni bağımsız Ayarlar sayfası (Yıl Sonu Özeti yalnızca yıl sonunda görünür), gelişmiş Klip Modu (Küçük Pencere & Tam Ekran), süre eşleştirmeli + milisaniye ofset ayarlı canlı şarkı sözü senkronizasyonu ve Deezer API destekli sanatçı portreleri.
+- 🎛️ **Ses Stüdyosu (5-Bant Ekolayzer, Hız/Slowed/Nightcore, Uyku Zamanlayıcısı, Şarkı Radyosu) & Kapsamlı v1.5.2 İyileştirmesi:** Önerilen Sanatçılar için doğrulanmış canlı Deezer portreleri, sol yan menüye entegre bağımsız Ayarlar paneli (üst çubuktaki gereksiz ayarlar ikonu kaldırıldı), aktif çalışan 6 dinamik vurgu rengi (Accent) teması, mobilde şarkıların yarıda kesilip atlamasını önleyen kesintisiz akış koruyucusu, Çalma Sırası (Queue) çekmecesi düzeltmesi, gelişmiş Klip Modu ve milisaniye ofset ayarlı canlı şarkı sözü senkronizasyonu.
 - 🪟 **Windows Bağımsız Masaüstü Penceresi & Localhost Sekmesi Düzeltmesi (v1.5.0):** Windows sürümünde uygulamanın tarayıcıda `localhost:3456` sekmesi olarak açılmasına neden olan 127.0.0.1 yönlendirme çakışması ve profil izolasyonu eksikliği kökten çözüldü. Artık Windows'ta (Launcher, Bat ve Python) ayrı `--user-data-dir` profili ile çalışan, adres çubuğu ve sekmeleri olmayan tam bağımsız yerel masaüstü penceresi açılır.
 - 🎙️ **Linux PipeWire Link Preserver & Discord Ses Köprüsü (v1.4.9):** Linux'ta qpwgraph, Helvum veya PipeWire patchbay üzerinden Discord (`WEBRTC VoiceEngine`), OBS veya harici kanallara yapılan ses bağlantılarının şarkı değiştiğinde kopması sorunu kökten çözüldü. Yerleşik Link Preserver motoru sayesinde şarkı geçişlerinde (< 25ms içinde) bağlantılar otomatik olarak geri bağlanır. Ayrıca uygulama içinden tek tıkla Discord ses kanalına aktarma ve PulseAudio UTF-8 adlandırma düzeltmesi (`M??zikal` -> `Muzikal`) eklendi.
 - 📱 **Android Kurulum Hatası Giderildi & Resmi APK İmzası (v1.4.8):** Android sistemlerinde yaşanan "Uygulama yüklenemedi" paket hatası kökten çözüldü; yerel kütüphaneler (`.so`) 4096-byte bellek sayfasına ve `resources.arsc` 4-byte standardına göre tam hizalandı (ZipAlign), v1, v2 ve v3 resmi geliştirici imzalarıyla paketlendi.

@@ -4953,6 +4953,47 @@ html, body {
   color: var(--accent);
 }
 
+/* Dynamic Accent Color Overrides */
+.nav-item.active {
+  color: var(--accent) !important;
+  background: var(--accent-soft, rgba(30, 215, 96, 0.12)) !important;
+  border-color: var(--accent-glow) !important;
+}
+
+.btn-primary,
+.btn-play-main,
+.mfp-btn-play-pause,
+.chip.active,
+.seg-btn.active,
+.studio-chip.active,
+.artist-hover-play,
+.recent-track-play,
+.play-overlay-btn {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+
+.progress-bar-fill,
+.volume-slider-fill {
+  background: var(--accent) !important;
+}
+
+.artist-circle-card:hover .artist-avatar-wrap {
+  border-color: var(--accent) !important;
+  box-shadow: 0 8px 24px var(--accent-glow) !important;
+}
+
+.song-card.playing {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 20px var(--accent-glow) !important;
+}
+
+.song-card.playing .song-card-title,
+.queue-np-item .queue-item-title,
+.mobile-nav-btn.active {
+  color: var(--accent) !important;
+}
+
 @media (max-width: 768px) {
   .settings-grid {
     grid-template-columns: 1fr;
