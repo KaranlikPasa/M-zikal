@@ -331,8 +331,15 @@ let lastValidDuration = 0;
 let songStartTimestamp = 0;
 let cutoffRecoveryCount = 0;
 let bufferingStartTimestamp = 0;
-let cutoffGuardEnabled = localStorage.getItem('muzikal_cutoff_guard') !== '0';
+let lastProgressAdvanceTime = 0;
+let lastObservedPlayerTime = 0;
+let stallNudgeTimestamp = 0;
+let cutoffGuardEnabled = localStorage.getItem('muzikal_cutoff_guard') !== '0' && localStorage.getItem('muzikal_cutoff_guard') !== 'false';
 let mobileKeepAliveCtx = null;
+
+function isNativeAndroidApp() {
+  return !!(window.MuzikalNative && typeof window.MuzikalNative.isNative === 'function');
+}
 
 function parseSongDurationSecs(durStr) {
   if (!durStr) return 0;
@@ -344,25 +351,9 @@ function parseSongDurationSecs(durStr) {
 }
 
 function ensureMobileKeepAliveAudio() {
-  try {
-    const isMob = (window.MuzikalNative && typeof window.MuzikalNative.isNative === 'function') ||
-                  /android|iphone|ipad|mobile/i.test(navigator.userAgent);
-    if (!isMob) return;
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    if (!mobileKeepAliveCtx) {
-      mobileKeepAliveCtx = new AudioCtx();
-      const osc = mobileKeepAliveCtx.createOscillator();
-      const gain = mobileKeepAliveCtx.createGain();
-      gain.gain.value = 0.00001; // Inaudible keep-alive prevents Android WebView renderer suspension
-      osc.connect(gain);
-      gain.connect(mobileKeepAliveCtx.destination);
-      osc.start();
-    }
-    if (mobileKeepAliveCtx.state === 'suspended') {
-      mobileKeepAliveCtx.resume().catch(() => {});
-    }
-  } catch (e) {}
+  // Foreground service (MusicPlaybackService) + WakeLock + WifiLock + MediaWebView visibility spoofing
+  // already keep WebView alive in the background. Avoid creating a competing WebAudio Oscillator stream
+  // on Android, which causes AudioTrack contention and false-positive audio interrupt pauses.
 }
 
 function ensureYouTubeApiScript() {
@@ -391,16 +382,21 @@ if (window.YT && window.YT.Player) {
 function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
   if (!song || !song.id) return;
 
+  userRequestedPause = false;
+  songStartTimestamp = Date.now();
+  lastProgressAdvanceTime = Date.now();
+  lastObservedPlayerTime = Math.max(0, resumeAtSec);
+  stallNudgeTimestamp = 0;
+
   if (resumeAtSec <= 0) {
     lastValidPlaybackTime = 0;
     lastValidDuration = parseSongDurationSecs(song.duration);
-    songStartTimestamp = Date.now();
     cutoffRecoveryCount = 0;
     bufferingStartTimestamp = 0;
     song._midSongRetryCount = 0;
+  } else {
+    bufferingStartTimestamp = Date.now();
   }
-
-  ensureMobileKeepAliveAudio();
 
   if (!window.YT || !window.YT.Player) {
     pendingSongToPlay = song;
@@ -412,18 +408,17 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
   if (ytPlayer && ytReady && typeof ytPlayer.loadVideoById === 'function') {
     try {
       ytPlayer.loadVideoById({ videoId: song.id, startSeconds: Math.max(0, resumeAtSec) });
-      if (typeof ytPlayer.setPlaybackQuality === 'function') {
-        try { ytPlayer.setPlaybackQuality(state.isVideoVisible ? 'large' : 'small'); } catch (qErr) {}
-      }
       if (state.isOfflinePlaying) {
         try { ytPlayer.mute(); } catch (e) {}
       } else if (!state.isMuted && typeof ytPlayer.unMute === 'function') {
         try { ytPlayer.unMute(); } catch (e) {}
       }
-      if (state.playbackSpeed && typeof ytPlayer.setPlaybackRate === 'function') {
-        try { ytPlayer.setPlaybackRate(state.playbackSpeed); } catch (e) {}
+      const rateToApply = currentPlaybackRate || state.playbackSpeed || 1.0;
+      if (Math.abs(rateToApply - 1.0) > 0.01 && typeof ytPlayer.setPlaybackRate === 'function') {
+        try { ytPlayer.setPlaybackRate(rateToApply); } catch (e) {}
       }
       ytPlayer.playVideo();
+      startProgressTracker();
       return;
     } catch (e) {
       console.warn('loadVideoById failed, re-creating player:', e);
@@ -486,13 +481,12 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
             try { event.target.unMute(); } catch (e) {}
           }
           try { event.target.setVolume(state.volume); } catch (e) {}
-          if (typeof event.target.setPlaybackQuality === 'function') {
-            try { event.target.setPlaybackQuality(state.isVideoVisible ? 'large' : 'small'); } catch (qErr) {}
-          }
-          if (state.playbackSpeed && typeof event.target.setPlaybackRate === 'function') {
-            try { event.target.setPlaybackRate(state.playbackSpeed); } catch (e) {}
+          const rateToApply = currentPlaybackRate || state.playbackSpeed || 1.0;
+          if (Math.abs(rateToApply - 1.0) > 0.01 && typeof event.target.setPlaybackRate === 'function') {
+            try { event.target.setPlaybackRate(rateToApply); } catch (e) {}
           }
           try { event.target.playVideo(); } catch (e) {}
+          startProgressTracker();
         },
         'onStateChange': onPlayerStateChange,
         'onError': onPlayerError
@@ -521,10 +515,48 @@ const BUNDLED_EXPLORE_SONGS = [
   { id: 'nfWlot6h_JM', title: 'Taylor Swift - Shake It Off', channel: 'Taylor Swift', duration: '4:02', thumbnail: 'https://i.ytimg.com/vi/nfWlot6h_JM/hqdefault.jpg' }
 ];
 
-// --- UNIFIED API ENGINE (NATIVE ANDROID BRIDGE + HTTP FALLBACK) ---
+// --- UNIFIED API ENGINE (ASYNC WEBVIEW IO INTERCEPTOR + HTTP + NATIVE FALLBACK) ---
 async function apiFetch(endpoint, options = {}) {
-  // 1. Android Native Bridge
-  if (window.MuzikalNative && typeof window.MuzikalNative.isNative === 'function') {
+  const isAndroid = isNativeAndroidApp();
+
+  // 1. Fast in-memory SharedPreferences read & skip PC-only endpoints on Android
+  if (isAndroid) {
+    try {
+      if (endpoint.startsWith('/api/library') && (!options.method || options.method === 'GET')) {
+        const resStr = window.MuzikalNative.getLibrary();
+        if (resStr) return JSON.parse(resStr);
+      }
+      if (endpoint.startsWith('/api/discord/') ||
+          endpoint.startsWith('/api/recommendations') ||
+          endpoint.startsWith('/api/downloads') ||
+          endpoint.startsWith('/api/download/') ||
+          endpoint.startsWith('/api/library/save') ||
+          endpoint.startsWith('/api/library/history') ||
+          endpoint.startsWith('/api/library/toggle-favorite')) {
+        return { results: [], recommendations: [] };
+      }
+    } catch (e) {}
+  }
+
+  // 2. Standard Async Fetch FIRST!
+  // On Android (https://appassets.androidplatform.net), MainActivity.shouldInterceptRequest
+  // runs /api/explore, /api/search, /api/lyrics on background WebView IO threads so the JS UI/Audio thread NEVER freezes!
+  try {
+    const res = await fetch(endpoint, options);
+    if (res.ok) {
+      const parsed = await res.json();
+      if (parsed) {
+        if (!endpoint.startsWith('/api/explore') || (Array.isArray(parsed.results) && parsed.results.length > 0)) {
+          return parsed;
+        }
+      }
+    }
+  } catch (err) {
+    // Relative fetch on file:/// may throw -> fallback to synchronous bridge below
+  }
+
+  // 3. Fallback to Android Native Bridge if fetch was unavailable (e.g. file:/// protocol)
+  if (isAndroid) {
     try {
       if (endpoint.startsWith('/api/explore')) {
         const dummy = new URL('http://local' + endpoint);
@@ -544,10 +576,6 @@ async function apiFetch(endpoint, options = {}) {
           if (parsed && Array.isArray(parsed.results) && parsed.results.length > 0) return parsed;
         }
       }
-      if (endpoint.startsWith('/api/library') && (!options.method || options.method === 'GET')) {
-        const resStr = window.MuzikalNative.getLibrary();
-        if (resStr) return JSON.parse(resStr);
-      }
       if (endpoint.startsWith('/api/lyrics') && typeof window.MuzikalNative.getLyrics === 'function') {
         const dummy = new URL('http://local' + endpoint);
         const title = dummy.searchParams.get('title') || '';
@@ -556,21 +584,11 @@ async function apiFetch(endpoint, options = {}) {
         if (resStr) return JSON.parse(resStr);
       }
     } catch (err) {
-      console.warn('Native bridge error, falling back to fetch:', err);
+      console.warn('Native bridge fallback error:', err);
     }
   }
 
-  // 2. Standard Fetch (works via shouldInterceptRequest or server.js)
-  try {
-    const res = await fetch(endpoint, options);
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (err) {
-    // Relative fetch on file:/// may throw
-  }
-
-  // 3. Guaranteed Fallback for explore
+  // 4. Guaranteed Fallback for explore
   if (endpoint.startsWith('/api/explore')) {
     return { results: BUNDLED_EXPLORE_SONGS };
   }
@@ -593,17 +611,21 @@ function persistLibrary(lib, skipCloudSync = false) {
     if (window.MuzikalNative && typeof window.MuzikalNative.saveLibrary === 'function') {
       window.MuzikalNative.saveLibrary(json);
     }
-    fetch('/api/library/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: json
-    }).catch(() => {});
-    if (state.user && state.user.email) {
-      fetch('/api/auth/sync', {
+    if (!isNativeAndroidApp()) {
+      fetch('/api/library/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: state.user.email, library: lib })
+        body: json
       }).catch(() => {});
+    }
+    if (state.user && state.user.email) {
+      if (!isNativeAndroidApp()) {
+        fetch('/api/auth/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: state.user.email, library: lib })
+        }).catch(() => {});
+      }
       if (!skipCloudSync && typeof scheduleFirebaseCloudSync === 'function') {
         scheduleFirebaseCloudSync(lib);
       }
@@ -662,10 +684,12 @@ let resumeDebounceTimer = null;
 let autoResumeAttempts = 0;
 let lastAutoResumeTime = 0;
 let lastExternalPauseTime = 0;
+let lastPauseReason = '';
 
 window.pauseOnly = function(reason = 'external') {
   userRequestedPause = true;
   lastExternalPauseTime = Date.now();
+  lastPauseReason = reason || 'external';
   if (resumeDebounceTimer) {
     clearTimeout(resumeDebounceTimer);
     resumeDebounceTimer = null;
@@ -688,6 +712,8 @@ window.pauseOnly = function(reason = 'external') {
 window.resumeOnly = function() {
   if (!state.currentSong) return;
   userRequestedPause = false;
+  lastPauseReason = '';
+  lastProgressAdvanceTime = Date.now();
   if (state.isOfflinePlaying && localAudio) {
     if (localAudio.paused) {
       try { localAudio.play(); } catch (e) {}
@@ -726,14 +752,15 @@ if ('mediaSession' in navigator) {
   } catch (e) {}
 }
 
-// Listen for headphone / audio output device disconnections in WebView & desktop browsers
-if (navigator.mediaDevices && typeof navigator.mediaDevices.addEventListener === 'function') {
+// Listen for headphone / audio output device disconnections on desktop browsers only
+// (Android headset unplug is handled natively via AudioManager in checkAudioInterrupt)
+if (!isNativeAndroidApp() && navigator.mediaDevices && typeof navigator.mediaDevices.addEventListener === 'function') {
   let knownOutputCount = -1;
   const updateOutputDeviceCount = async () => {
     try {
       if (typeof navigator.mediaDevices.enumerateDevices !== 'function') return;
       const devs = await navigator.mediaDevices.enumerateDevices();
-      const outputs = devs.filter(d => d.kind === 'audiooutput' || d.kind === 'audioinput');
+      const outputs = devs.filter(d => d.kind === 'audiooutput');
       if (knownOutputCount > 0 && outputs.length < knownOutputCount && state.isPlaying) {
         window.pauseOnly('headphone_disconnected');
       }
@@ -742,25 +769,23 @@ if (navigator.mediaDevices && typeof navigator.mediaDevices.addEventListener ===
   };
   updateOutputDeviceCount();
   navigator.mediaDevices.addEventListener('devicechange', () => {
-    if (state.isPlaying) {
-      window.pauseOnly('devicechange');
-    }
     updateOutputDeviceCount();
   });
 }
 
-// Poll Android Native Audio Interrupt Detector (Phone Calls, Headphone Unplug, Instagram/TikTok/X Audio)
+// Poll Android Native Audio Interrupt Detector (Phone Calls & Physical/BT Headphone Unplug ONLY)
+// Never pause on 'other_app' because Android AudioPlaybackConfiguration counts WebView's own audio streams!
 setInterval(() => {
   if (!state.isPlaying) return;
   if (window.MuzikalNative && typeof window.MuzikalNative.checkAudioInterrupt === 'function') {
     try {
       const interruptReason = window.MuzikalNative.checkAudioInterrupt();
-      if (interruptReason && interruptReason.length > 0) {
+      if (interruptReason === 'call' || interruptReason === 'headset') {
         window.pauseOnly(interruptReason);
       }
     } catch (e) {}
   }
-}, 300);
+}, 400);
 
 function onPlayerStateChange(event) {
   if (state.isOfflinePlaying) return; // Managed by localAudio
@@ -776,6 +801,8 @@ function onPlayerStateChange(event) {
 
   if (event.data === YT.PlayerState.PLAYING) {
     bufferingStartTimestamp = 0;
+    lastProgressAdvanceTime = Date.now();
+    stallNudgeTimestamp = 0;
     if (resumeDebounceTimer) {
       clearTimeout(resumeDebounceTimer);
       resumeDebounceTimer = null;
@@ -783,9 +810,9 @@ function onPlayerStateChange(event) {
     autoResumeAttempts = 0;
     userRequestedPause = false;
     state.isPlaying = true;
-    ensureMobileKeepAliveAudio();
-    if (state.playbackSpeed && ytPlayer && typeof ytPlayer.setPlaybackRate === 'function') {
-      try { ytPlayer.setPlaybackRate(state.playbackSpeed); } catch (e) {}
+    const rateToApply = currentPlaybackRate || state.playbackSpeed || 1.0;
+    if (Math.abs(rateToApply - 1.0) > 0.01 && ytPlayer && typeof ytPlayer.setPlaybackRate === 'function') {
+      try { ytPlayer.setPlaybackRate(rateToApply); } catch (e) {}
     }
     try {
       const d = ytPlayer && typeof ytPlayer.getDuration === 'function' ? ytPlayer.getDuration() : 0;
@@ -797,13 +824,28 @@ function onPlayerStateChange(event) {
     elements.playingIndicator.classList.add('active');
     updateNativePlaybackState(state.currentSong, true);
   } else if (event.data === YT.PlayerState.PAUSED) {
+    const wasBuffering = bufferingStartTimestamp > 0;
     bufferingStartTimestamp = 0;
-    // Honor pause immediately! When Android AudioFocus (Incoming/Outgoing Call, Instagram, TikTok, X)
-    // or Headphone Unplug (ACTION_AUDIO_BECOMING_NOISY) pauses the player, never force-resume it.
+
     if (resumeDebounceTimer) {
       clearTimeout(resumeDebounceTimer);
       resumeDebounceTimer = null;
     }
+
+    // Guard against spurious YouTube IFrame PAUSED events during initial track load/transition or right after BUFFERING
+    const sinceSongStart = Date.now() - songStartTimestamp;
+    const sinceExternalPause = Date.now() - lastExternalPauseTime;
+    if (!userRequestedPause && sinceExternalPause > 1500 && (sinceSongStart < 2500 || wasBuffering) && autoResumeAttempts < 4) {
+      autoResumeAttempts++;
+      lastAutoResumeTime = Date.now();
+      resumeDebounceTimer = setTimeout(() => {
+        if (!userRequestedPause && !state.isOfflinePlaying && ytReady && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+          try { ytPlayer.playVideo(); } catch (e) {}
+        }
+      }, 200);
+      return;
+    }
+
     userRequestedPause = true;
     lastExternalPauseTime = Date.now();
     state.isPlaying = false;
@@ -974,31 +1016,9 @@ async function playSong(song, playlist = null, index = -1) {
   if (!song) return;
 
   // 1. If this is an unresolved Spotify track, resolve it first
-  if (!song.spotifyResolved && song.spotifySearchQuery) {
+  if (!song.spotifyResolved && (song.spotifySearchQuery || String(song.id).startsWith('sp_'))) {
     showToast(`"${song.title}" hazırlanıyor...`);
-    try {
-      const res = await fetch(`/api/spotify/resolve?q=${encodeURIComponent(song.spotifySearchQuery)}`);
-      const data = await res.json();
-      if (data.result) {
-        song.id = data.result.id;
-        song.thumbnail = data.result.thumbnail || song.thumbnail;
-        song.duration = data.result.duration || song.duration;
-        song.spotifyResolved = true;
-      }
-    } catch (e) {
-      try {
-        const sRes = await apiFetch(`/api/search?q=${encodeURIComponent(song.spotifySearchQuery)}`);
-        const sData = await sRes.json();
-        if (sData && sData.results && sData.results.length > 0) {
-          song.id = sData.results[0].id;
-          song.thumbnail = sData.results[0].thumbnail || song.thumbnail;
-          song.duration = sData.results[0].duration || song.duration;
-          song.spotifyResolved = true;
-        }
-      } catch (e2) {
-        console.error('Track resolution error:', e2);
-      }
-    }
+    await resolveTrackIfNeeded(song);
   }
 
   const isDifferentSong = !state.currentSong || state.currentSong.id !== song.id;
@@ -1154,11 +1174,13 @@ async function playSong(song, playlist = null, index = -1) {
       renderRecentTracksGrid();
     }
 
-    fetch('/api/library/history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ song })
-    }).catch(() => {});
+    if (!isNativeAndroidApp()) {
+      fetch('/api/library/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ song })
+      }).catch(() => {});
+    }
 
     updateQueueDrawer();
     fetchLyricsForSong(song);
@@ -1166,9 +1188,9 @@ async function playSong(song, playlist = null, index = -1) {
 }
 
 function togglePlayPause(e) {
-  // If called without an event right after an external OS/WebView pause (e.g. phone call / headphone unplug),
-  // prevent MusicPlaybackService's legacy MediaSession.onPause("playPause") from toggling music back ON!
-  if (!e && !state.isPlaying && (Date.now() - lastExternalPauseTime < 1500)) {
+  // If called without an event right after a hardware/call interrupt (e.g. phone call / headphone unplug),
+  // prevent legacy MediaSession callbacks from toggling music back ON immediately.
+  if (!e && !state.isPlaying && (lastPauseReason === 'call' || lastPauseReason === 'headset') && (Date.now() - lastExternalPauseTime < 1200)) {
     return;
   }
 
@@ -1942,12 +1964,16 @@ function startProgressTracker() {
     if (state.isOfflinePlaying) return; // Handled by localAudio timeupdate
     if (!ytReady || !ytPlayer) return;
 
-    // Watchdog for stalled mobile buffering (> 9s mid-song)
-    if (cutoffGuardEnabled && bufferingStartTimestamp > 0 && lastValidPlaybackTime > 3 && (Date.now() - bufferingStartTimestamp) > 9000) {
-      bufferingStartTimestamp = Date.now();
+    const now = Date.now();
+
+    // Watchdog 1: Stalled mobile/web buffering (> 7.5s) while user has not paused
+    if (cutoffGuardEnabled && !userRequestedPause && bufferingStartTimestamp > 0 && (now - bufferingStartTimestamp) > 7500) {
+      bufferingStartTimestamp = now;
       if (state.currentSong && cutoffRecoveryCount < 4) {
         cutoffRecoveryCount++;
-        playOnlineYouTubeTrack(state.currentSong, Math.max(0, lastValidPlaybackTime - 0.5));
+        const resumeAt = lastValidPlaybackTime > 2 ? Math.max(0, lastValidPlaybackTime - 0.5) : 0;
+        console.warn(`[CutoffGuard] Buffering stall (>7.5s). Recovering at ${resumeAt.toFixed(1)}s (${cutoffRecoveryCount}/4)...`);
+        playOnlineYouTubeTrack(state.currentSong, resumeAt);
         return;
       }
     }
@@ -1958,8 +1984,35 @@ function startProgressTracker() {
       const current = ytPlayer.getCurrentTime() || 0;
       const duration = ytPlayer.getDuration() || 0;
 
-      if (current > 0) lastValidPlaybackTime = current;
+      if (current > 0) {
+        if (Math.abs(current - lastObservedPlayerTime) > 0.04) {
+          lastObservedPlayerTime = current;
+          lastProgressAdvanceTime = now;
+          stallNudgeTimestamp = 0;
+        }
+        lastValidPlaybackTime = current;
+      }
       if (duration > 0) lastValidDuration = duration;
+
+      // Watchdog 2: Frozen decoder (state.isPlaying is true, not buffering, but currentTime hasn't advanced)
+      if (cutoffGuardEnabled && !userRequestedPause && bufferingStartTimestamp === 0 && current > 0 &&
+          (duration <= 0 || (duration - current) > 5) && lastProgressAdvanceTime > 0) {
+        const freezeMs = now - lastProgressAdvanceTime;
+        if (freezeMs > 4000 && stallNudgeTimestamp === 0) {
+          stallNudgeTimestamp = now;
+          try {
+            ytPlayer.seekTo(Math.max(0, current), true);
+            ytPlayer.playVideo();
+          } catch (e) {}
+        } else if (freezeMs > 8000 && state.currentSong && cutoffRecoveryCount < 4) {
+          cutoffRecoveryCount++;
+          lastProgressAdvanceTime = now;
+          stallNudgeTimestamp = 0;
+          console.warn(`[CutoffGuard] Decoder freeze (>8s at ${current.toFixed(1)}s). Reloading track (${cutoffRecoveryCount}/4)...`);
+          playOnlineYouTubeTrack(state.currentSong, Math.max(0, current - 0.5));
+          return;
+        }
+      }
 
       elements.currentTime.textContent = formatTime(current);
       elements.totalDuration.textContent = formatTime(duration);
@@ -2394,51 +2447,56 @@ async function resolveTrackIfNeeded(song) {
   if (!song) return song;
   if (!song.spotifyResolved && (song.spotifySearchQuery || String(song.id).startsWith('sp_'))) {
     const query = song.spotifySearchQuery || `${song.title} ${song.channel || ''}`;
-    try {
-      const res = await fetch(`/api/spotify/resolve?q=${encodeURIComponent(query)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.result && data.result.id) {
-          song.id = data.result.id;
-          song.thumbnail = data.result.thumbnail || song.thumbnail;
-          song.duration = data.result.duration || song.duration;
-          song.spotifyResolved = true;
-          return song;
+    if (!isNativeAndroidApp()) {
+      try {
+        const res = await fetch(`/api/spotify/resolve?q=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.result && data.result.id) {
+            song.id = data.result.id;
+            song.thumbnail = data.result.thumbnail || song.thumbnail;
+            song.duration = data.result.duration || song.duration;
+            song.spotifyResolved = true;
+            return song;
+          }
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
     try {
       const sRes = await apiFetch(`/api/search?q=${encodeURIComponent(query)}`);
-      if (sRes && sRes.ok) {
-        const sData = await sRes.json();
-        if (sData && sData.results && sData.results.length > 0) {
-          song.id = sData.results[0].id;
-          song.thumbnail = sData.results[0].thumbnail || song.thumbnail;
-          song.duration = sData.results[0].duration || song.duration;
-          song.spotifyResolved = true;
-        }
+      const sData = (sRes && typeof sRes.json === 'function') ? await sRes.json() : sRes;
+      const list = (sData && Array.isArray(sData.results)) ? sData.results : (Array.isArray(sData) ? sData : []);
+      if (list.length > 0 && list[0] && list[0].id) {
+        song.id = list[0].id;
+        song.thumbnail = list[0].thumbnail || song.thumbnail;
+        song.duration = list[0].duration || song.duration;
+        song.spotifyResolved = true;
       }
-    } catch (e2) {}
+    } catch (e2) {
+      console.error('Track resolution error:', e2);
+    }
   }
   return song;
 }
 
 async function loadDownloads() {
   const localIds = getLocalDownloadedIds();
-  try {
-    const res = await fetch('/api/downloads');
-    if (res.ok) {
-      const data = await res.json();
-      const srvIds = data.downloadedIds || [];
-      state.serverDownloadedIds = new Set(srvIds);
-      const combined = new Set([...srvIds, ...localIds]);
-      state.downloadedIds = combined;
-      saveLocalDownloadedIds(Array.from(combined));
-      if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = state.downloadedIds.size;
-      return;
+  if (!isNativeAndroidApp()) {
+    try {
+      const res = await fetch('/api/downloads');
+      if (res.ok) {
+        const data = await res.json();
+        const srvIds = data.downloadedIds || [];
+        state.serverDownloadedIds = new Set(srvIds);
+        const combined = new Set([...srvIds, ...localIds]);
+        state.downloadedIds = combined;
+        saveLocalDownloadedIds(Array.from(combined));
+        if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = state.downloadedIds.size;
+        return;
+      }
+    } catch (e) {
+      // Normal in standalone mobile APK mode
     }
-  } catch (e) {
-    // Normal in standalone mobile APK mode
   }
   state.downloadedIds = new Set(localIds);
   if (elements.downloadsCountBadge) elements.downloadsCountBadge.textContent = state.downloadedIds.size;
@@ -3220,6 +3278,7 @@ let discordState = {
 };
 
 async function loadDiscordConfig() {
+  if (isNativeAndroidApp()) return;
   try {
     const data = await apiFetch('/api/discord/config');
     if (data) {
@@ -3268,6 +3327,7 @@ function updateDiscordUI() {
 
 let discordUpdateDebounce = null;
 function syncDiscordPresence() {
+  if (isNativeAndroidApp()) return;
   clearTimeout(discordUpdateDebounce);
   discordUpdateDebounce = setTimeout(async () => {
     if (!state.currentSong) {
@@ -5124,7 +5184,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.5.4';
+let CURRENT_APP_VERSION = '1.5.5';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -6291,7 +6351,15 @@ const EQ_PRESETS = {
 let currentEqGains = [0, 0, 0, 0, 0];
 
 function ensureWebAudioEqualizer() {
-  if (webAudioCtx) return;
+  if (webAudioCtx) {
+    if (webAudioCtx.state === 'suspended') {
+      webAudioCtx.resume().catch(() => {});
+    }
+    return;
+  }
+  if (!currentEqGains || currentEqGains.every(g => Math.abs(Number(g) || 0) < 0.01)) {
+    return;
+  }
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx || !localAudio) return;
@@ -6344,6 +6412,7 @@ function applyEqGains(gains, presetName = null) {
 function applyPlaybackRate(rate) {
   const numRate = Math.max(0.5, Math.min(2.0, Number(rate) || 1.0));
   currentPlaybackRate = numRate;
+  state.playbackSpeed = numRate;
   if (localAudio) {
     try { localAudio.playbackRate = numRate; } catch (e) {}
   }

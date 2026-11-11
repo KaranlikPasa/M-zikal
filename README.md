@@ -7,15 +7,20 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Android-1ed760?style=for-the-badge&logo=linux)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.3-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.5-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
+- 📱 **Android Donma / Duraksama Sorunları Kökten Çözüldü (v1.5.5):** Android sürümünde şarkı çalarken yaşanan aniden donma, kendi kendine duraklama ve arayüz kilitlenmesi sorunları tespit edilip giderildi:
+  - **Asenkron Yerel Köprü (`shouldInterceptRequest`):** Şarkı sözü ve akıllı öneri sorgularında ana WebView JS/UI iş parçacığını 5–20 saniye boyunca kilitleyen senkron `JavascriptInterface` çağrıları arka plan IO iş parçacıklarına (`fetch`) taşındı.
+  - **Sahte `other_app` Ses Kesintisi & Oscillator Çakışması Kaldırıldı:** Uygulama arka plana alındığında YouTube HTML5 akışı ve sessiz WebAudio osilatörünü başka bir uygulama sanarak müziği kendi kendine durduran `other_app` algılaması hem `classes5.dex` (`AndroidNativeBridge`) hem de ön yüzde devre dışı bırakıldı; yalnızca gerçek telefon aramaları (`call`) ve kulaklık çekilmesi (`headset`) dinlenir.
+  - **Çift Aşamalı Donma & Buffering Kurtarıcı (Watchdog):** Parça başlangıcındaki sahte `PAUSED` olaylarını, `setPlaybackQuality` tampon sıfırlamalarını ve 4–8 saniyeyi aşan çözücü (decoder) takılmalarını otomatik tespit edip kaldığı saniyeden kesintisiz devam ettiren kurtarma motoru eklendi.
+  - **Android Spotify Parça Çözümleme Düzeltmesi:** Android'de Spotify listelerinden açılan parçaların (`sp_...`) çözümlenmesini engelleyen yanıt ayrıştırma hatası giderildi.
+- 🪟 **Windows Bağımsız Masaüstü Penceresi & Localhost Sekmesi Düzeltmesi (v1.5.4):** Windows sürümünde uygulamanın tarayıcıda `localhost:3456` sekmesi olarak açılmasına neden olan yönlendirme çakışması, Edge `--app` tek örnek birleştirmesi ve güncellenmeyen kurulum ikili dosyaları kökten çözüldü.
 - 🎛️ **Ses Stüdyosu (5-Bant Ekolayzer, Hız/Slowed/Nightcore, Uyku Zamanlayıcısı, Şarkı Radyosu) & Kapsamlı v1.5.3 İyileştirmesi:** Android APK (`assets/www/*`, `classes5.dex` ve `AndroidManifest.xml`), Windows (`Muzikal-Setup.exe` & `Muzikal-Windows-x64.zip`) ve Linux (`Muzikal-Linux-x64.tar.gz` & Arch `pkg.tar.zst`) çapraz platform güncelleme motoru ve sürüm eşitlemesi, Önerilen Sanatçılar için doğrulanmış canlı Deezer portreleri, sol yan menüye entegre bağımsız Ayarlar paneli, aktif çalışan 6 dinamik vurgu rengi (Accent) teması, mobilde şarkıların yarıda kesilip atlamasını önleyen kesintisiz akış koruyucusu, Çalma Sırası (Queue) çekmecesi düzeltmesi, gelişmiş Klip Modu ve milisaniye ofset ayarlı canlı şarkı sözü senkronizasyonu.
-- 🪟 **Windows Bağımsız Masaüstü Penceresi & Localhost Sekmesi Düzeltmesi (v1.5.0):** Windows sürümünde uygulamanın tarayıcıda `localhost:3456` sekmesi olarak açılmasına neden olan 127.0.0.1 yönlendirme çakışması ve profil izolasyonu eksikliği kökten çözüldü. Artık Windows'ta (Launcher, Bat ve Python) ayrı `--user-data-dir` profili ile çalışan, adres çubuğu ve sekmeleri olmayan tam bağımsız yerel masaüstü penceresi açılır.
 - 🎙️ **Linux PipeWire Link Preserver & Discord Ses Köprüsü (v1.4.9):** Linux'ta qpwgraph, Helvum veya PipeWire patchbay üzerinden Discord (`WEBRTC VoiceEngine`), OBS veya harici kanallara yapılan ses bağlantılarının şarkı değiştiğinde kopması sorunu kökten çözüldü. Yerleşik Link Preserver motoru sayesinde şarkı geçişlerinde (< 25ms içinde) bağlantılar otomatik olarak geri bağlanır. Ayrıca uygulama içinden tek tıkla Discord ses kanalına aktarma ve PulseAudio UTF-8 adlandırma düzeltmesi (`M??zikal` -> `Muzikal`) eklendi.
 - 📱 **Android Kurulum Hatası Giderildi & Resmi APK İmzası (v1.4.8):** Android sistemlerinde yaşanan "Uygulama yüklenemedi" paket hatası kökten çözüldü; yerel kütüphaneler (`.so`) 4096-byte bellek sayfasına ve `resources.arsc` 4-byte standardına göre tam hizalandı (ZipAlign), v1, v2 ve v3 resmi geliştirici imzalarıyla paketlendi.
 - 🎵 **Spotify Tarzı Akıllı Geri Sarma & Önceki Şarkı Mantığı (v1.4.7):** Çalan şarkıda ilk geri tuşuna basışta şarkıyı baştan başlatma, 3 saniye içinde ikinci basışta ise önceki parçaya geçme mantığı (Spotify standardı) masaüstü, mobil tam ekran çalar, bildirim ve kilit ekranı kumandalarına uygulandı.
@@ -62,12 +67,12 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 
 | Platform | Dosya | Açıklama |
 | :--- | :--- | :--- |
-| **Arch Linux (Pacman Paketi)** | [🐧 **muzikal-1.5.0-1-any.pkg.tar.zst**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.4/muzikal-1.5.0-1-any.pkg.tar.zst) | **Arch Linux / Manjaro / EndeavourOS:** `sudo pacman -U` ile tek tıkla kurun. Menü kısayolu, simgeler ve `/usr/bin/muzikal` otomatik eklenir. |
-| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.4/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
-| **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.4/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
-| **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.4/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
-| **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.4/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.4/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
+| **Arch Linux (Pacman Paketi)** | [🐧 **muzikal-1.5.0-1-any.pkg.tar.zst**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/muzikal-1.5.0-1-any.pkg.tar.zst) | **Arch Linux / Manjaro / EndeavourOS:** `sudo pacman -U` ile tek tıkla kurun. Menü kısayolu, simgeler ve `/usr/bin/muzikal` otomatik eklenir. |
+| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
+| **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
+| **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
+| **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
 
 ---
 
