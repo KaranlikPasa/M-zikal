@@ -4766,6 +4766,16 @@ function setupEventListeners() {
         };
 
         window.MuzikalNative.startDirectUpdate(finalApkUrl);
+        setTimeout(() => {
+          if (btnStartInAppUpdate.disabled) {
+            if (progressFill) progressFill.style.width = '100%';
+            if (progressPercent) progressPercent.textContent = '100%';
+            if (progressStatus) progressStatus.textContent = 'İndirme başlatıldı, bildirim çubuğundan kurabilirsiniz.';
+            btnStartInAppUpdate.disabled = false;
+            btnStartInAppUpdate.innerHTML = '<span>Tekrar İndir</span>';
+            if (btnDismiss) btnDismiss.style.display = 'inline-block';
+          }
+        }, 3000);
         return;
       }
 
