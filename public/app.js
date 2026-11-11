@@ -334,8 +334,21 @@ let bufferingStartTimestamp = 0;
 let lastProgressAdvanceTime = 0;
 let lastObservedPlayerTime = 0;
 let stallNudgeTimestamp = 0;
+let lastSeekTimestamp = 0;
+let lastSeekTargetSec = 0;
+let isSeekingDragActive = false;
+let pendingDragSeekPct = null;
+let lastTouchSeekEndTime = 0;
+let postSeekTimers = [];
 let cutoffGuardEnabled = localStorage.getItem('muzikal_cutoff_guard') !== '0' && localStorage.getItem('muzikal_cutoff_guard') !== 'false';
 let mobileKeepAliveCtx = null;
+
+function clearPostSeekTimers() {
+  if (postSeekTimers && postSeekTimers.length > 0) {
+    postSeekTimers.forEach(t => clearTimeout(t));
+    postSeekTimers = [];
+  }
+}
 
 function isNativeAndroidApp() {
   return !!(window.MuzikalNative && typeof window.MuzikalNative.isNative === 'function');
@@ -832,17 +845,20 @@ function onPlayerStateChange(event) {
       resumeDebounceTimer = null;
     }
 
-    // Guard against spurious YouTube IFrame PAUSED events during initial track load/transition or right after BUFFERING
+    // Guard against spurious YouTube IFrame PAUSED events during initial track load, seeking, or right after BUFFERING
     const sinceSongStart = Date.now() - songStartTimestamp;
     const sinceExternalPause = Date.now() - lastExternalPauseTime;
-    if (!userRequestedPause && sinceExternalPause > 1500 && (sinceSongStart < 2500 || wasBuffering) && autoResumeAttempts < 4) {
+    const sinceLastSeek = Date.now() - lastSeekTimestamp;
+    if (!userRequestedPause && (sinceExternalPause > 1500 || sinceLastSeek < 6000) &&
+        (!state.isVideoVisible || sinceSongStart < 3500 || wasBuffering || sinceLastSeek < 6000) &&
+        autoResumeAttempts < 6) {
       autoResumeAttempts++;
       lastAutoResumeTime = Date.now();
       resumeDebounceTimer = setTimeout(() => {
         if (!userRequestedPause && !state.isOfflinePlaying && ytReady && ytPlayer && typeof ytPlayer.playVideo === 'function') {
           try { ytPlayer.playVideo(); } catch (e) {}
         }
-      }, 200);
+      }, 120);
       return;
     }
 
@@ -1728,33 +1744,122 @@ function getCurrentPlaybackTime() {
   return 0;
 }
 
-function restartCurrentSong() {
-  if (state.isOfflinePlaying && localAudio) {
+function getEffectiveSongDuration() {
+  if (state.isOfflinePlaying && localAudio && localAudio.duration > 0) {
+    return localAudio.duration;
+  }
+  if (ytReady && ytPlayer && typeof ytPlayer.getDuration === 'function') {
     try {
-      localAudio.currentTime = 0;
-      if (state.isPlaying && localAudio.paused) {
-        localAudio.play();
-      }
+      const d = ytPlayer.getDuration();
+      if (d && d > 0) return d;
     } catch (e) {}
-  } else if (ytReady && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+  }
+  if (lastValidDuration > 0) return lastValidDuration;
+  return parseSongDurationSecs(state.currentSong && state.currentSong.duration) || 0;
+}
+
+function updateProgressBarsUI(pct, currentSec, durationSec) {
+  const clampedPct = Math.max(0, Math.min(100, pct * 100));
+  if (elements.progressBarFill) elements.progressBarFill.style.width = `${clampedPct}%`;
+  if (elements.progressBarHandle) elements.progressBarHandle.style.left = `${clampedPct}%`;
+  if (elements.miniProgressLine) elements.miniProgressLine.style.width = `${clampedPct}%`;
+  if (elements.mfpProgressFill) elements.mfpProgressFill.style.width = `${clampedPct}%`;
+  if (elements.mfpProgressHandle) elements.mfpProgressHandle.style.left = `${clampedPct}%`;
+  if (typeof currentSec === 'number' && !isNaN(currentSec)) {
+    if (elements.currentTime) elements.currentTime.textContent = formatTime(currentSec);
+    if (elements.mfpCurrentTime) elements.mfpCurrentTime.textContent = formatTime(currentSec);
+  }
+  if (typeof durationSec === 'number' && durationSec > 0) {
+    if (elements.totalDuration) elements.totalDuration.textContent = formatTime(durationSec);
+    if (elements.mfpTotalDuration) elements.mfpTotalDuration.textContent = formatTime(durationSec);
+  }
+}
+
+function performSeekToSeconds(rawTargetSec) {
+  const duration = getEffectiveSongDuration();
+  let targetSec = Math.max(0, Number(rawTargetSec) || 0);
+  if (duration > 2) {
+    targetSec = Math.min(targetSec, Math.max(0, duration - 0.5));
+  }
+
+  const pct = duration > 0 ? Math.max(0, Math.min(1, targetSec / duration)) : 0;
+  updateProgressBarsUI(pct, targetSec, duration);
+  if (typeof syncLyricsWithTime === 'function') {
+    syncLyricsWithTime(targetSec, true);
+  }
+
+  if (state.isOfflinePlaying) {
+    if (localAudio) {
+      try {
+        localAudio.currentTime = targetSec;
+        if (!userRequestedPause && localAudio.paused) {
+          localAudio.play().catch(() => {});
+        }
+      } catch (e) {}
+    }
+    return;
+  }
+
+  if (!ytReady || !ytPlayer || typeof ytPlayer.seekTo !== 'function') return;
+
+  clearPostSeekTimers();
+  const now = Date.now();
+  lastSeekTimestamp = now;
+  lastSeekTargetSec = targetSec;
+  lastValidPlaybackTime = targetSec;
+  lastObservedPlayerTime = targetSec;
+  lastProgressAdvanceTime = now;
+  bufferingStartTimestamp = now;
+  stallNudgeTimestamp = 0;
+  autoResumeAttempts = 0;
+  userRequestedPause = false;
+  state.isPlaying = true;
+  updatePlayPauseButton();
+  if (elements.heroVinyl) elements.heroVinyl.classList.remove('paused');
+  if (elements.playingIndicator) elements.playingIndicator.classList.add('active');
+
+  try {
+    ytPlayer.seekTo(targetSec, true);
+    if (typeof ytPlayer.playVideo === 'function') {
+      ytPlayer.playVideo();
+    }
+  } catch (e) {}
+
+  // Post-seek active resume checks for Android WebView & desktop IFrame player
+  [160, 480, 1000].forEach(delayMs => {
+    const t = setTimeout(() => {
+      if (userRequestedPause || state.isOfflinePlaying || !ytReady || !ytPlayer) return;
+      try {
+        const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
+        if (pState !== YT.PlayerState.PLAYING && typeof ytPlayer.playVideo === 'function') {
+          ytPlayer.playVideo();
+        }
+      } catch (e) {}
+    }, delayMs);
+    postSeekTimers.push(t);
+  });
+
+  // Fallback: if Android WebView MSE ChunkDemuxer stalls on unbuffered seek after 2.4s, reload stream at targetSec
+  const fallbackTimer = setTimeout(() => {
+    if (userRequestedPause || state.isOfflinePlaying || !ytReady || !ytPlayer || !state.currentSong) return;
     try {
-      ytPlayer.seekTo(0, true);
-      if (state.isPlaying && typeof ytPlayer.playVideo === 'function') {
+      const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
+      const cur = (typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0) || 0;
+      const progressed = Math.abs(cur - targetSec) < 8 && pState === YT.PlayerState.PLAYING && (Date.now() - lastProgressAdvanceTime) < 1800;
+      if (!progressed && (pState !== YT.PlayerState.PLAYING || Math.abs(cur - targetSec) > 10)) {
+        console.warn(`[SeekGuard] Seek stalled at state=${pState}, cur=${cur.toFixed(1)}s (target=${targetSec.toFixed(1)}s). Reloading at targetSec...`);
+        lastProgressAdvanceTime = Date.now();
+        bufferingStartTimestamp = Date.now();
+        ytPlayer.loadVideoById({ videoId: state.currentSong.id, startSeconds: Math.max(0, Math.floor(targetSec)) });
         ytPlayer.playVideo();
       }
     } catch (e) {}
-  }
+  }, 2400);
+  postSeekTimers.push(fallbackTimer);
+}
 
-  // Immediately reflect reset on player UI bars and timers
-  if (elements.progressBar) elements.progressBar.value = 0;
-  if (elements.currentTime) elements.currentTime.textContent = '0:00';
-  if (elements.mfpProgressBar) elements.mfpProgressBar.value = 0;
-  if (elements.mfpCurrentTime) elements.mfpCurrentTime.textContent = '0:00';
-  if (elements.vinylProgressBar) elements.vinylProgressBar.value = 0;
-  if (elements.vinylCurrentTime) elements.vinylCurrentTime.textContent = '0:00';
-  if (typeof syncLyricsWithTime === 'function') {
-    syncLyricsWithTime(0, true);
-  }
+function restartCurrentSong() {
+  performSeekToSeconds(0);
 }
 
 function playPrev() {
@@ -1982,12 +2087,18 @@ function startProgressTracker() {
 
     try {
       const current = ytPlayer.getCurrentTime() || 0;
-      const duration = ytPlayer.getDuration() || 0;
+      const duration = getEffectiveSongDuration();
+      const sinceSeek = now - lastSeekTimestamp;
 
-      if (current > 0) {
+      // While a seek is in flight (<1.5s), ignore stale pre-seek getCurrentTime() values
+      const isSeekInFlight = sinceSeek < 1500 && Math.abs(current - lastSeekTargetSec) > 3;
+      const displayCurrent = isSeekInFlight ? lastSeekTargetSec : current;
+
+      if (!isSeekInFlight && current > 0) {
         if (Math.abs(current - lastObservedPlayerTime) > 0.04) {
           lastObservedPlayerTime = current;
           lastProgressAdvanceTime = now;
+          bufferingStartTimestamp = 0;
           stallNudgeTimestamp = 0;
         }
         lastValidPlaybackTime = current;
@@ -1995,14 +2106,13 @@ function startProgressTracker() {
       if (duration > 0) lastValidDuration = duration;
 
       // Watchdog 2: Frozen decoder (state.isPlaying is true, not buffering, but currentTime hasn't advanced)
-      if (cutoffGuardEnabled && !userRequestedPause && bufferingStartTimestamp === 0 && current > 0 &&
+      if (cutoffGuardEnabled && !userRequestedPause && bufferingStartTimestamp === 0 && sinceSeek > 2800 && current > 0 &&
           (duration <= 0 || (duration - current) > 5) && lastProgressAdvanceTime > 0) {
         const freezeMs = now - lastProgressAdvanceTime;
         if (freezeMs > 4000 && stallNudgeTimestamp === 0) {
           stallNudgeTimestamp = now;
           try {
-            ytPlayer.seekTo(Math.max(0, current), true);
-            ytPlayer.playVideo();
+            performSeekToSeconds(Math.max(0, current));
           } catch (e) {}
         } else if (freezeMs > 8000 && state.currentSong && cutoffRecoveryCount < 4) {
           cutoffRecoveryCount++;
@@ -2014,19 +2124,21 @@ function startProgressTracker() {
         }
       }
 
-      elements.currentTime.textContent = formatTime(current);
-      elements.totalDuration.textContent = formatTime(duration);
+      if (!isSeekingDragActive) {
+        elements.currentTime.textContent = formatTime(displayCurrent);
+        elements.totalDuration.textContent = formatTime(duration);
 
-      if (duration > 0) {
-        syncLyricsWithTime(current);
-        const pct = (current / duration) * 100;
-        elements.progressBarFill.style.width = `${pct}%`;
-        elements.progressBarHandle.style.left = `${pct}%`;
-        if (elements.miniProgressLine) elements.miniProgressLine.style.width = `${pct}%`;
-        if (elements.mfpProgressFill) elements.mfpProgressFill.style.width = `${pct}%`;
-        if (elements.mfpProgressHandle) elements.mfpProgressHandle.style.left = `${pct}%`;
-        if (elements.mfpCurrentTime) elements.mfpCurrentTime.textContent = formatTime(current);
-        if (elements.mfpTotalDuration) elements.mfpTotalDuration.textContent = formatTime(duration);
+        if (duration > 0) {
+          syncLyricsWithTime(displayCurrent);
+          const pct = Math.max(0, Math.min(100, (displayCurrent / duration) * 100));
+          elements.progressBarFill.style.width = `${pct}%`;
+          elements.progressBarHandle.style.left = `${pct}%`;
+          if (elements.miniProgressLine) elements.miniProgressLine.style.width = `${pct}%`;
+          if (elements.mfpProgressFill) elements.mfpProgressFill.style.width = `${pct}%`;
+          if (elements.mfpProgressHandle) elements.mfpProgressHandle.style.left = `${pct}%`;
+          if (elements.mfpCurrentTime) elements.mfpCurrentTime.textContent = formatTime(displayCurrent);
+          if (elements.mfpTotalDuration) elements.mfpTotalDuration.textContent = formatTime(duration);
+        }
       }
     } catch (e) {}
   }, 200);
@@ -2038,33 +2150,32 @@ function getEventClientX(event) {
   return event.clientX;
 }
 
-function seekToTrack(trackElem, event) {
-  if (!trackElem) return;
+function getTrackPctFromEvent(trackElem, event) {
+  if (!trackElem) return null;
   const rect = trackElem.getBoundingClientRect();
-  if (!rect.width) return;
+  if (!rect.width) return null;
   const clientX = getEventClientX(event);
-  if (typeof clientX !== 'number') return;
+  if (typeof clientX !== 'number' || isNaN(clientX)) return null;
   const clickX = clientX - rect.left;
-  const pct = Math.max(0, Math.min(1, clickX / rect.width));
+  return Math.max(0, Math.min(1, clickX / rect.width));
+}
 
-  if (state.isOfflinePlaying) {
-    const duration = localAudio.duration || 0;
-    if (duration > 0) {
-      localAudio.currentTime = duration * pct;
-    }
-  } else {
-    if (!ytReady || !ytPlayer) return;
-    const duration = ytPlayer.getDuration() || 0;
-    if (duration > 0) {
-      ytPlayer.seekTo(duration * pct, true);
-    }
+function previewSeekOnTrack(trackElem, event) {
+  const pct = getTrackPctFromEvent(trackElem, event);
+  if (pct === null) return null;
+  pendingDragSeekPct = pct;
+  const duration = getEffectiveSongDuration();
+  updateProgressBarsUI(pct, duration > 0 ? duration * pct : 0, duration);
+  return pct;
+}
+
+function seekToTrack(trackElem, event) {
+  const pct = getTrackPctFromEvent(trackElem, event);
+  if (pct === null) return;
+  const duration = getEffectiveSongDuration();
+  if (duration > 0) {
+    performSeekToSeconds(duration * pct);
   }
-
-  elements.progressBarFill.style.width = `${pct * 100}%`;
-  elements.progressBarHandle.style.left = `${pct * 100}%`;
-  if (elements.miniProgressLine) elements.miniProgressLine.style.width = `${pct * 100}%`;
-  if (elements.mfpProgressFill) elements.mfpProgressFill.style.width = `${pct * 100}%`;
-  if (elements.mfpProgressHandle) elements.mfpProgressHandle.style.left = `${pct * 100}%`;
 }
 
 function seekTo(event) {
@@ -4186,20 +4297,35 @@ function setupEventListeners() {
     });
   }
   if (elements.mfpProgressTrack) {
-    elements.mfpProgressTrack.addEventListener('click', (e) => {
-      seekToTrack(elements.mfpProgressTrack, e);
-    });
     let isDraggingMfpProgress = false;
     elements.mfpProgressTrack.addEventListener('touchstart', (e) => {
       isDraggingMfpProgress = true;
-      seekToTrack(elements.mfpProgressTrack, e);
+      isSeekingDragActive = true;
+      previewSeekOnTrack(elements.mfpProgressTrack, e);
     }, { passive: true });
     elements.mfpProgressTrack.addEventListener('touchmove', (e) => {
-      if (isDraggingMfpProgress) seekToTrack(elements.mfpProgressTrack, e);
+      if (isDraggingMfpProgress) {
+        previewSeekOnTrack(elements.mfpProgressTrack, e);
+      }
     }, { passive: true });
-    elements.mfpProgressTrack.addEventListener('touchend', () => {
+    const finishMfpTouchSeek = (e) => {
+      if (!isDraggingMfpProgress) return;
       isDraggingMfpProgress = false;
-    }, { passive: true });
+      isSeekingDragActive = false;
+      lastTouchSeekEndTime = Date.now();
+      const pct = previewSeekOnTrack(elements.mfpProgressTrack, e) ?? pendingDragSeekPct;
+      pendingDragSeekPct = null;
+      const duration = getEffectiveSongDuration();
+      if (pct !== null && duration > 0) {
+        performSeekToSeconds(duration * pct);
+      }
+    };
+    elements.mfpProgressTrack.addEventListener('touchend', finishMfpTouchSeek, { passive: true });
+    elements.mfpProgressTrack.addEventListener('touchcancel', finishMfpTouchSeek, { passive: true });
+    elements.mfpProgressTrack.addEventListener('click', (e) => {
+      if (Date.now() - lastTouchSeekEndTime < 500) return;
+      seekToTrack(elements.mfpProgressTrack, e);
+    });
   }
   if (elements.mfpBtnDownload) {
     elements.mfpBtnDownload.addEventListener('click', () => {
@@ -4296,17 +4422,57 @@ function setupEventListeners() {
 
   elements.btnRepeat.addEventListener('click', cycleRepeatMode);
 
-  elements.progressBarTrack.addEventListener('click', seekTo);
   let isDraggingProgress = false;
-  elements.progressBarTrack.addEventListener('mousedown', (e) => {
+  elements.progressBarTrack.addEventListener('touchstart', (e) => {
     isDraggingProgress = true;
-    seekTo(e);
+    isSeekingDragActive = true;
+    previewSeekOnTrack(elements.progressBarTrack, e);
+  }, { passive: true });
+  elements.progressBarTrack.addEventListener('touchmove', (e) => {
+    if (isDraggingProgress) {
+      previewSeekOnTrack(elements.progressBarTrack, e);
+    }
+  }, { passive: true });
+  const finishBarTouchSeek = (e) => {
+    if (!isDraggingProgress) return;
+    isDraggingProgress = false;
+    isSeekingDragActive = false;
+    lastTouchSeekEndTime = Date.now();
+    const pct = previewSeekOnTrack(elements.progressBarTrack, e) ?? pendingDragSeekPct;
+    pendingDragSeekPct = null;
+    const duration = getEffectiveSongDuration();
+    if (pct !== null && duration > 0) {
+      performSeekToSeconds(duration * pct);
+    }
+  };
+  elements.progressBarTrack.addEventListener('touchend', finishBarTouchSeek, { passive: true });
+  elements.progressBarTrack.addEventListener('touchcancel', finishBarTouchSeek, { passive: true });
+  elements.progressBarTrack.addEventListener('mousedown', (e) => {
+    if (Date.now() - lastTouchSeekEndTime < 500) return;
+    isDraggingProgress = true;
+    isSeekingDragActive = true;
+    previewSeekOnTrack(elements.progressBarTrack, e);
   });
   window.addEventListener('mousemove', (e) => {
-    if (isDraggingProgress) seekTo(e);
+    if (isDraggingProgress) {
+      previewSeekOnTrack(elements.progressBarTrack, e);
+    }
   });
-  window.addEventListener('mouseup', () => {
+  window.addEventListener('mouseup', (e) => {
+    if (!isDraggingProgress) return;
     isDraggingProgress = false;
+    isSeekingDragActive = false;
+    lastTouchSeekEndTime = Date.now();
+    const pct = previewSeekOnTrack(elements.progressBarTrack, e) ?? pendingDragSeekPct;
+    pendingDragSeekPct = null;
+    const duration = getEffectiveSongDuration();
+    if (pct !== null && duration > 0) {
+      performSeekToSeconds(duration * pct);
+    }
+  });
+  elements.progressBarTrack.addEventListener('click', (e) => {
+    if (Date.now() - lastTouchSeekEndTime < 500) return;
+    seekTo(e);
   });
 
   // Volume
@@ -4670,17 +4836,9 @@ function setupEventListeners() {
       e.preventDefault();
       togglePlayPause();
     } else if (e.code === 'ArrowRight') {
-      if (state.isOfflinePlaying) {
-        localAudio.currentTime += 5;
-      } else if (ytPlayer && ytPlayer.getCurrentTime) {
-        ytPlayer.seekTo(ytPlayer.getCurrentTime() + 5, true);
-      }
+      performSeekToSeconds(getCurrentPlaybackTime() + 5);
     } else if (e.code === 'ArrowLeft') {
-      if (state.isOfflinePlaying) {
-        localAudio.currentTime = Math.max(0, localAudio.currentTime - 5);
-      } else if (ytPlayer && ytPlayer.getCurrentTime) {
-        ytPlayer.seekTo(Math.max(0, ytPlayer.getCurrentTime() - 5), true);
-      }
+      performSeekToSeconds(Math.max(0, getCurrentPlaybackTime() - 5));
     } else if (e.code === 'ArrowUp') {
       e.preventDefault();
       setVolume(state.volume + 5);
@@ -5128,12 +5286,7 @@ function renderLyricsForCurrentSong() {
         const offsetSec = getEffectiveLyricOffset(state.currentSong);
         const targetPlaybackTime = Math.max(0, lineTime + offsetSec);
         if (!isNaN(targetPlaybackTime)) {
-          if (state.isOfflinePlaying) {
-            localAudio.currentTime = targetPlaybackTime;
-          } else if (ytReady && ytPlayer && ytPlayer.seekTo) {
-            ytPlayer.seekTo(targetPlaybackTime, true);
-          }
-          syncLyricsWithTime(targetPlaybackTime, true);
+          performSeekToSeconds(targetPlaybackTime);
         }
       });
     });
