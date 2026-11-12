@@ -7,13 +7,17 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Android-1ed760?style=for-the-badge&logo=linux)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.5-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.6-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
 
+- 📱 **Android Müzik Çalarken Donma ve Başa Sarma Sorunu Kökten Çözüldü (v1.5.6):** Android sürümünde müzik çalarken yaşanan ani donma, bir süre çalmayıp sessiz kalma ve ardından parçanın en baştan (0:00) başlaması sorunu kökten giderildi:
+  - **Agresif Watchdog & Yıkıcı Seek Geri Alındı:** 4 saniyelik olağan ağ tamponlaması ve arka plan WebView timer gecikmelerini sahte "çözücü donması" sanarak parçayı kesen ve 2.4 saniye sonra tüm akışı sıfırdan baştan başlatan (`loadVideoById`) yıkıcı mekanizma kaldırıldı; oynatıcı doğal tamponlamasına bırakıldı.
+  - **Sıfırlanmayan Konum Koruması (`pendingResumeSec`):** Olası akış yenilenmelerinde parçanın 0:00'a sıfırlanmasını engelleyen, `lastValidPlaybackTime` değerini 0 ile ezilmekten koruyan ve parça aktifleştiği anda kalınan saniyeye atlayan çift aşamalı konum koruyucusu eklendi.
+  - **Kusursuz Otomatik Devam (Auto-Resume):** Kullanıcı duraklatma tuşuna basmadığı sürece arka plan veya ekran kapanmalarında WebView kaynaklı sahte duraklatmalar kesintisiz olarak devam ettirildi.
 - 📱 **Android Donma / Duraksama Sorunları Kökten Çözüldü (v1.5.5):** Android sürümünde şarkı çalarken yaşanan aniden donma, kendi kendine duraklama ve arayüz kilitlenmesi sorunları tespit edilip giderildi:
   - **Asenkron Yerel Köprü (`shouldInterceptRequest`):** Şarkı sözü ve akıllı öneri sorgularında ana WebView JS/UI iş parçacığını 5–20 saniye boyunca kilitleyen senkron `JavascriptInterface` çağrıları arka plan IO iş parçacıklarına (`fetch`) taşındı.
   - **Sahte `other_app` Ses Kesintisi & Oscillator Çakışması Kaldırıldı:** Uygulama arka plana alındığında YouTube HTML5 akışı ve sessiz WebAudio osilatörünü başka bir uygulama sanarak müziği kendi kendine durduran `other_app` algılaması hem `classes5.dex` (`AndroidNativeBridge`) hem de ön yüzde devre dışı bırakıldı; yalnızca gerçek telefon aramaları (`call`) ve kulaklık çekilmesi (`headset`) dinlenir.
@@ -72,7 +76,7 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 | **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
 | **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
 | **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.6/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
 
 ---
 

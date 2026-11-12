@@ -340,6 +340,7 @@ let isSeekingDragActive = false;
 let pendingDragSeekPct = null;
 let lastTouchSeekEndTime = 0;
 let postSeekTimers = [];
+let pendingResumeSec = 0;
 let cutoffGuardEnabled = localStorage.getItem('muzikal_cutoff_guard') !== '0' && localStorage.getItem('muzikal_cutoff_guard') !== 'false';
 let mobileKeepAliveCtx = null;
 
@@ -407,8 +408,11 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
     cutoffRecoveryCount = 0;
     bufferingStartTimestamp = 0;
     song._midSongRetryCount = 0;
+    pendingResumeSec = 0;
   } else {
     bufferingStartTimestamp = Date.now();
+    pendingResumeSec = Math.max(0, resumeAtSec);
+    lastValidPlaybackTime = Math.max(0, resumeAtSec);
   }
 
   if (!window.YT || !window.YT.Player) {
@@ -420,7 +424,11 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
   // If a player is already instantiated and ready, load video into it
   if (ytPlayer && ytReady && typeof ytPlayer.loadVideoById === 'function') {
     try {
-      ytPlayer.loadVideoById({ videoId: song.id, startSeconds: Math.max(0, resumeAtSec) });
+      const startSec = Math.max(0, Math.floor(resumeAtSec));
+      ytPlayer.loadVideoById({ videoId: song.id, startSeconds: startSec });
+      if (startSec > 0 && typeof ytPlayer.seekTo === 'function') {
+        try { ytPlayer.seekTo(startSec, true); } catch (e) {}
+      }
       if (state.isOfflinePlaying) {
         try { ytPlayer.mute(); } catch (e) {}
       } else if (!state.isMuted && typeof ytPlayer.unMute === 'function') {
@@ -488,6 +496,11 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
               iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
             }
           } catch (e) {}
+          if (pendingResumeSec > 0) {
+            const target = pendingResumeSec;
+            pendingResumeSec = 0;
+            try { event.target.seekTo(target, true); } catch (e) {}
+          }
           if (state.isOfflinePlaying) {
             try { event.target.mute(); } catch (e) {}
           } else if (!state.isMuted && typeof event.target.unMute === 'function') {
@@ -823,6 +836,16 @@ function onPlayerStateChange(event) {
     autoResumeAttempts = 0;
     userRequestedPause = false;
     state.isPlaying = true;
+    if (pendingResumeSec > 0) {
+      const targetSec = pendingResumeSec;
+      pendingResumeSec = 0;
+      try {
+        const cur = ytPlayer && typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0;
+        if (Math.abs(cur - targetSec) > 3) {
+          ytPlayer.seekTo(targetSec, true);
+        }
+      } catch (e) {}
+    }
     const rateToApply = currentPlaybackRate || state.playbackSpeed || 1.0;
     if (Math.abs(rateToApply - 1.0) > 0.01 && ytPlayer && typeof ytPlayer.setPlaybackRate === 'function') {
       try { ytPlayer.setPlaybackRate(rateToApply); } catch (e) {}
@@ -845,13 +868,13 @@ function onPlayerStateChange(event) {
       resumeDebounceTimer = null;
     }
 
-    // Guard against spurious YouTube IFrame PAUSED events during initial track load, seeking, or right after BUFFERING
+    // Guard against spurious YouTube IFrame PAUSED events during initial track load, seeking, background sleep or right after BUFFERING
     const sinceSongStart = Date.now() - songStartTimestamp;
     const sinceExternalPause = Date.now() - lastExternalPauseTime;
     const sinceLastSeek = Date.now() - lastSeekTimestamp;
-    if (!userRequestedPause && (sinceExternalPause > 1500 || sinceLastSeek < 6000) &&
-        (!state.isVideoVisible || sinceSongStart < 3500 || wasBuffering || sinceLastSeek < 6000) &&
-        autoResumeAttempts < 6) {
+    if (!userRequestedPause && (sinceExternalPause > 1500 || sinceLastSeek < 8000) &&
+        (!state.isVideoVisible || sinceSongStart < 4000 || wasBuffering || sinceLastSeek < 8000) &&
+        autoResumeAttempts < 15) {
       autoResumeAttempts++;
       lastAutoResumeTime = Date.now();
       resumeDebounceTimer = setTimeout(() => {
@@ -862,8 +885,6 @@ function onPlayerStateChange(event) {
       return;
     }
 
-    userRequestedPause = true;
-    lastExternalPauseTime = Date.now();
     state.isPlaying = false;
     updatePlayPauseButton();
     elements.heroVinyl.classList.add('paused');
@@ -1826,36 +1847,19 @@ function performSeekToSeconds(rawTargetSec) {
   } catch (e) {}
 
   // Post-seek active resume checks for Android WebView & desktop IFrame player
-  [160, 480, 1000].forEach(delayMs => {
+  // Gently verify playback continues without ever destroying or reloading the media source!
+  [250, 750, 1500, 3000].forEach(delayMs => {
     const t = setTimeout(() => {
       if (userRequestedPause || state.isOfflinePlaying || !ytReady || !ytPlayer) return;
       try {
         const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
-        if (pState !== YT.PlayerState.PLAYING && typeof ytPlayer.playVideo === 'function') {
+        if (pState === YT.PlayerState.PAUSED && typeof ytPlayer.playVideo === 'function') {
           ytPlayer.playVideo();
         }
       } catch (e) {}
     }, delayMs);
     postSeekTimers.push(t);
   });
-
-  // Fallback: if Android WebView MSE ChunkDemuxer stalls on unbuffered seek after 2.4s, reload stream at targetSec
-  const fallbackTimer = setTimeout(() => {
-    if (userRequestedPause || state.isOfflinePlaying || !ytReady || !ytPlayer || !state.currentSong) return;
-    try {
-      const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
-      const cur = (typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0) || 0;
-      const progressed = Math.abs(cur - targetSec) < 8 && pState === YT.PlayerState.PLAYING && (Date.now() - lastProgressAdvanceTime) < 1800;
-      if (!progressed && (pState !== YT.PlayerState.PLAYING || Math.abs(cur - targetSec) > 10)) {
-        console.warn(`[SeekGuard] Seek stalled at state=${pState}, cur=${cur.toFixed(1)}s (target=${targetSec.toFixed(1)}s). Reloading at targetSec...`);
-        lastProgressAdvanceTime = Date.now();
-        bufferingStartTimestamp = Date.now();
-        ytPlayer.loadVideoById({ videoId: state.currentSong.id, startSeconds: Math.max(0, Math.floor(targetSec)) });
-        ytPlayer.playVideo();
-      }
-    } catch (e) {}
-  }, 2400);
-  postSeekTimers.push(fallbackTimer);
 }
 
 function restartCurrentSong() {
@@ -2071,14 +2075,15 @@ function startProgressTracker() {
 
     const now = Date.now();
 
-    // Watchdog 1: Stalled mobile/web buffering (> 7.5s) while user has not paused
-    if (cutoffGuardEnabled && !userRequestedPause && bufferingStartTimestamp > 0 && (now - bufferingStartTimestamp) > 7500) {
+    // Watchdog 1: Prolonged mobile/web buffering (> 20s) while user has not paused
+    if (cutoffGuardEnabled && !userRequestedPause && bufferingStartTimestamp > 0 && (now - bufferingStartTimestamp) > 20000) {
       bufferingStartTimestamp = now;
-      if (state.currentSong && cutoffRecoveryCount < 4) {
+      if (state.currentSong && cutoffRecoveryCount < 3) {
         cutoffRecoveryCount++;
-        const resumeAt = lastValidPlaybackTime > 2 ? Math.max(0, lastValidPlaybackTime - 0.5) : 0;
-        console.warn(`[CutoffGuard] Buffering stall (>7.5s). Recovering at ${resumeAt.toFixed(1)}s (${cutoffRecoveryCount}/4)...`);
-        playOnlineYouTubeTrack(state.currentSong, resumeAt);
+        console.warn(`[CutoffGuard] Prolonged buffering stall (>20s). Nudging player playback...`);
+        try {
+          if (typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
+        } catch (e) {}
         return;
       }
     }
@@ -2086,7 +2091,8 @@ function startProgressTracker() {
     if (!state.isPlaying) return;
 
     try {
-      const current = ytPlayer.getCurrentTime() || 0;
+      const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
+      const current = (typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0) || 0;
       const duration = getEffectiveSongDuration();
       const sinceSeek = now - lastSeekTimestamp;
 
@@ -2101,26 +2107,44 @@ function startProgressTracker() {
           bufferingStartTimestamp = 0;
           stallNudgeTimestamp = 0;
         }
-        lastValidPlaybackTime = current;
+        // Protect lastValidPlaybackTime from being overwritten by 0 or near-0 during initial track reload/seek
+        if (current >= 2 || lastValidPlaybackTime < 2) {
+          lastValidPlaybackTime = current;
+        }
       }
       if (duration > 0) lastValidDuration = duration;
 
-      // Watchdog 2: Frozen decoder (state.isPlaying is true, not buffering, but currentTime hasn't advanced)
-      if (cutoffGuardEnabled && !userRequestedPause && bufferingStartTimestamp === 0 && sinceSeek > 2800 && current > 0 &&
+      // Watchdog 2: Frozen decoder check
+      // ONLY check if player reports PLAYING (pState === 1), user hasn't paused, and not seeking
+      if (cutoffGuardEnabled && !userRequestedPause && sinceSeek > 4000 && current > 0 &&
           (duration <= 0 || (duration - current) > 5) && lastProgressAdvanceTime > 0) {
-        const freezeMs = now - lastProgressAdvanceTime;
-        if (freezeMs > 4000 && stallNudgeTimestamp === 0) {
-          stallNudgeTimestamp = now;
-          try {
-            performSeekToSeconds(Math.max(0, current));
-          } catch (e) {}
-        } else if (freezeMs > 8000 && state.currentSong && cutoffRecoveryCount < 4) {
-          cutoffRecoveryCount++;
+        if (pState === YT.PlayerState.BUFFERING) {
+          // Actively buffering: update timestamps so it's not treated as a frozen decoder
+          if (!bufferingStartTimestamp) bufferingStartTimestamp = now;
           lastProgressAdvanceTime = now;
-          stallNudgeTimestamp = 0;
-          console.warn(`[CutoffGuard] Decoder freeze (>8s at ${current.toFixed(1)}s). Reloading track (${cutoffRecoveryCount}/4)...`);
-          playOnlineYouTubeTrack(state.currentSong, Math.max(0, current - 0.5));
-          return;
+        } else if (pState === YT.PlayerState.PAUSED) {
+          // Spurious pause while state.isPlaying is true: gently resume!
+          try { ytPlayer.playVideo(); } catch (e) {}
+        } else if (pState === YT.PlayerState.PLAYING) {
+          const freezeMs = now - lastProgressAdvanceTime;
+          // Mobile background throttling can delay setInterval or postMessage up to 10-12s.
+          // Never perform unbuffered seeks or reload track unless stuck for a very long time!
+          if (freezeMs > 12000 && stallNudgeTimestamp === 0) {
+            stallNudgeTimestamp = now;
+            try {
+              ytPlayer.playVideo();
+            } catch (e) {}
+          } else if (freezeMs > 22000 && state.currentSong && cutoffRecoveryCount < 3) {
+            cutoffRecoveryCount++;
+            lastProgressAdvanceTime = now;
+            stallNudgeTimestamp = 0;
+            console.warn(`[CutoffGuard] Extended decoder stall (>22s at ${current.toFixed(1)}s). Nudging seek to current position...`);
+            try {
+              ytPlayer.seekTo(Math.max(0, current), true);
+              ytPlayer.playVideo();
+            } catch (e) {}
+            return;
+          }
         }
       }
 
@@ -5347,7 +5371,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.5.5';
+let CURRENT_APP_VERSION = '1.5.6';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
