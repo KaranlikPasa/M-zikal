@@ -7,12 +7,17 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Android-1ed760?style=for-the-badge&logo=linux)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.6-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.7-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
+
+- 🎧 **Android Bluetooth TWS Kulaklık (Ttec Airbeat Pro vb.) Donma & Başa Sarma Düzeltmesi (v1.5.7):** Bluetooth TWS kulaklıklarda ses yolu geçişi veya anlık A2DP/AVRCP duraksaması yaşandığında WebView ses motorunun kilitlenip şarkıyı 0:00'dan baştan başlatması sorunu giderildi:
+  - **`PAUSED` & 200ms `playVideo()` Döngüsü Kaldırıldı:** Parça ortasında dış/Bluetooth kaynaklı duraklamalarda `state.isVideoVisible` kontrolü yüzünden her durumda `playVideo()` basan otomatik devam ve 200ms takipçi döngüsü kaldırılarak AudioTrack kilitlenmesi önlendi.
+  - **Seek'siz AudioTrack Kurtarma:** Watchdog 2'de MSE tamponunu sıfırlayıp şarkıyı başa sarabilen `seekTo(current)` çağrısı kaldırıldı; bunun yerine `16` saniyeyi aşan çözücü takılmalarında tamponu bozmadan nazik `pauseVideo -> playVideo` yenilemesi eklendi.
+  - **Güvenilir Konum Doğrulaması (`pendingResumeSec`):** Akış yenilemelerinde `getCurrentTime()` gerçekten hedef saniyeye oturana kadar doğrulama korunarak 0:00'a düşme ihtimali engellendi.
 
 - 📱 **Android Müzik Çalarken Donma ve Başa Sarma Sorunu Kökten Çözüldü (v1.5.6):** Android sürümünde müzik çalarken yaşanan ani donma, bir süre çalmayıp sessiz kalma ve ardından parçanın en baştan (0:00) başlaması sorunu kökten giderildi:
   - **Agresif Watchdog & Yıkıcı Seek Geri Alındı:** 4 saniyelik olağan ağ tamponlaması ve arka plan WebView timer gecikmelerini sahte "çözücü donması" sanarak parçayı kesen ve 2.4 saniye sonra tüm akışı sıfırdan baştan başlatan (`loadVideoById`) yıkıcı mekanizma kaldırıldı; oynatıcı doğal tamponlamasına bırakıldı.
@@ -76,7 +81,7 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 | **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
 | **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
 | **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.6/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.7/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
 
 ---
 

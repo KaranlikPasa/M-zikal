@@ -330,6 +330,8 @@ let lastValidPlaybackTime = 0;
 let lastValidDuration = 0;
 let songStartTimestamp = 0;
 let cutoffRecoveryCount = 0;
+let stallRecoveryCount = 0;
+let bufferingRecoveryCount = 0;
 let bufferingStartTimestamp = 0;
 let lastProgressAdvanceTime = 0;
 let lastObservedPlayerTime = 0;
@@ -341,6 +343,7 @@ let pendingDragSeekPct = null;
 let lastTouchSeekEndTime = 0;
 let postSeekTimers = [];
 let pendingResumeSec = 0;
+let pendingResumeAttempts = 0;
 let cutoffGuardEnabled = localStorage.getItem('muzikal_cutoff_guard') !== '0' && localStorage.getItem('muzikal_cutoff_guard') !== 'false';
 let mobileKeepAliveCtx = null;
 
@@ -406,12 +409,16 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
     lastValidPlaybackTime = 0;
     lastValidDuration = parseSongDurationSecs(song.duration);
     cutoffRecoveryCount = 0;
+    stallRecoveryCount = 0;
+    bufferingRecoveryCount = 0;
     bufferingStartTimestamp = 0;
     song._midSongRetryCount = 0;
     pendingResumeSec = 0;
+    pendingResumeAttempts = 0;
   } else {
     bufferingStartTimestamp = Date.now();
     pendingResumeSec = Math.max(0, resumeAtSec);
+    pendingResumeAttempts = 0;
     lastValidPlaybackTime = Math.max(0, resumeAtSec);
   }
 
@@ -716,6 +723,7 @@ window.pauseOnly = function(reason = 'external') {
   userRequestedPause = true;
   lastExternalPauseTime = Date.now();
   lastPauseReason = reason || 'external';
+  clearPostSeekTimers();
   if (resumeDebounceTimer) {
     clearTimeout(resumeDebounceTimer);
     resumeDebounceTimer = null;
@@ -838,13 +846,28 @@ function onPlayerStateChange(event) {
     state.isPlaying = true;
     if (pendingResumeSec > 0) {
       const targetSec = pendingResumeSec;
-      pendingResumeSec = 0;
       try {
         const cur = ytPlayer && typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0;
-        if (Math.abs(cur - targetSec) > 3) {
+        if (Math.abs(cur - targetSec) > 3 && pendingResumeAttempts < 3) {
+          pendingResumeAttempts++;
           ytPlayer.seekTo(targetSec, true);
+          setTimeout(() => {
+            if (userRequestedPause || state.isOfflinePlaying || !ytReady || !ytPlayer || pendingResumeSec <= 0) return;
+            try {
+              const verifyCur = typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0;
+              if (Math.abs(verifyCur - targetSec) > 4) {
+                ytPlayer.seekTo(targetSec, true);
+              } else {
+                pendingResumeSec = 0;
+              }
+            } catch (e) {}
+          }, 450);
+        } else {
+          pendingResumeSec = 0;
         }
-      } catch (e) {}
+      } catch (e) {
+        pendingResumeSec = 0;
+      }
     }
     const rateToApply = currentPlaybackRate || state.playbackSpeed || 1.0;
     if (Math.abs(rateToApply - 1.0) > 0.01 && ytPlayer && typeof ytPlayer.setPlaybackRate === 'function') {
@@ -860,7 +883,14 @@ function onPlayerStateChange(event) {
     elements.playingIndicator.classList.add('active');
     updateNativePlaybackState(state.currentSong, true);
   } else if (event.data === YT.PlayerState.PAUSED) {
+    const now = Date.now();
+    // Ignore transient PAUSED emitted by our own AudioTrack stall re-kick
+    if (stallNudgeTimestamp > 0 && (now - stallNudgeTimestamp) < 1000) {
+      return;
+    }
+
     const wasBuffering = bufferingStartTimestamp > 0;
+    const bufferingAgeMs = wasBuffering ? (now - bufferingStartTimestamp) : 999999;
     bufferingStartTimestamp = 0;
 
     if (resumeDebounceTimer) {
@@ -868,20 +898,26 @@ function onPlayerStateChange(event) {
       resumeDebounceTimer = null;
     }
 
-    // Guard against spurious YouTube IFrame PAUSED events during initial track load, seeking, background sleep or right after BUFFERING
-    const sinceSongStart = Date.now() - songStartTimestamp;
-    const sinceExternalPause = Date.now() - lastExternalPauseTime;
-    const sinceLastSeek = Date.now() - lastSeekTimestamp;
-    if (!userRequestedPause && (sinceExternalPause > 1500 || sinceLastSeek < 8000) &&
-        (!state.isVideoVisible || sinceSongStart < 4000 || wasBuffering || sinceLastSeek < 8000) &&
-        autoResumeAttempts < 15) {
+    // Guard ONLY against genuine spurious YouTube IFrame PAUSED events during track init or seeking.
+    // Never fight mid-song OS/Bluetooth TWS pauses (fighting causes AudioTrack deadlock on Android WebView).
+    const sinceSongStart = now - songStartTimestamp;
+    const sinceExternalPause = now - lastExternalPauseTime;
+    const sinceLastSeek = now - lastSeekTimestamp;
+    const sinceLastAutoResume = now - lastAutoResumeTime;
+    const isRecentInitOrSeek = (sinceSongStart < 3500 || sinceLastSeek < 4500 || (wasBuffering && bufferingAgeMs < 2500));
+
+    if (!userRequestedPause &&
+        sinceExternalPause > 3000 &&
+        sinceLastAutoResume > 900 &&
+        isRecentInitOrSeek &&
+        autoResumeAttempts < 2) {
       autoResumeAttempts++;
-      lastAutoResumeTime = Date.now();
+      lastAutoResumeTime = now;
       resumeDebounceTimer = setTimeout(() => {
         if (!userRequestedPause && !state.isOfflinePlaying && ytReady && ytPlayer && typeof ytPlayer.playVideo === 'function') {
           try { ytPlayer.playVideo(); } catch (e) {}
         }
-      }, 120);
+      }, 250);
       return;
     }
 
@@ -2075,12 +2111,12 @@ function startProgressTracker() {
 
     const now = Date.now();
 
-    // Watchdog 1: Prolonged mobile/web buffering (> 20s) while user has not paused
-    if (cutoffGuardEnabled && !userRequestedPause && bufferingStartTimestamp > 0 && (now - bufferingStartTimestamp) > 20000) {
+    // Watchdog 1: Prolonged mobile/web buffering (> 22s) while user has not paused
+    if (cutoffGuardEnabled && !userRequestedPause && bufferingStartTimestamp > 0 && (now - bufferingStartTimestamp) > 22000) {
       bufferingStartTimestamp = now;
-      if (state.currentSong && cutoffRecoveryCount < 3) {
-        cutoffRecoveryCount++;
-        console.warn(`[CutoffGuard] Prolonged buffering stall (>20s). Nudging player playback...`);
+      if (state.currentSong && bufferingRecoveryCount < 3) {
+        bufferingRecoveryCount++;
+        console.warn(`[CutoffGuard] Prolonged buffering stall (>22s). Nudging player playback...`);
         try {
           if (typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
         } catch (e) {}
@@ -2114,34 +2150,41 @@ function startProgressTracker() {
       }
       if (duration > 0) lastValidDuration = duration;
 
-      // Watchdog 2: Frozen decoder check
-      // ONLY check if player reports PLAYING (pState === 1), user hasn't paused, and not seeking
-      if (cutoffGuardEnabled && !userRequestedPause && sinceSeek > 4000 && current > 0 &&
+      // Watchdog 2: Frozen decoder check (Bluetooth TWS A2DP / Android AudioTrack stall guard)
+      if (cutoffGuardEnabled && !userRequestedPause && sinceSeek > 4500 && current > 0 &&
           (duration <= 0 || (duration - current) > 5) && lastProgressAdvanceTime > 0) {
         if (pState === YT.PlayerState.BUFFERING) {
           // Actively buffering: update timestamps so it's not treated as a frozen decoder
           if (!bufferingStartTimestamp) bufferingStartTimestamp = now;
           lastProgressAdvanceTime = now;
         } else if (pState === YT.PlayerState.PAUSED) {
-          // Spurious pause while state.isPlaying is true: gently resume!
-          try { ytPlayer.playVideo(); } catch (e) {}
+          // Do NOT hammer playVideo() every 200ms (freezes Bluetooth TWS audio sinks).
+          // Sync UI to paused if past init/seek/re-kick windows.
+          if ((now - songStartTimestamp) > 4000 &&
+              (now - lastAutoResumeTime) > 1500 &&
+              (stallNudgeTimestamp === 0 || (now - stallNudgeTimestamp) > 1500)) {
+            state.isPlaying = false;
+            updatePlayPauseButton();
+            if (elements.heroVinyl) elements.heroVinyl.classList.add('paused');
+            if (elements.playingIndicator) elements.playingIndicator.classList.remove('active');
+            updateNativePlaybackState(state.currentSong, false);
+          }
         } else if (pState === YT.PlayerState.PLAYING) {
           const freezeMs = now - lastProgressAdvanceTime;
-          // Mobile background throttling can delay setInterval or postMessage up to 10-12s.
-          // Never perform unbuffered seeks or reload track unless stuck for a very long time!
-          if (freezeMs > 12000 && stallNudgeTimestamp === 0) {
+          // Never call seekTo(current) on a stalled BT AudioTrack (it flushes MSE buffers and resets to 0:00).
+          // Instead, perform a gentle pause -> 220ms -> play AudioTrack re-kick at most once per 30s.
+          if (freezeMs > 16000 && stallRecoveryCount < 3 && (stallNudgeTimestamp === 0 || (now - stallNudgeTimestamp) > 30000)) {
             stallNudgeTimestamp = now;
-            try {
-              ytPlayer.playVideo();
-            } catch (e) {}
-          } else if (freezeMs > 22000 && state.currentSong && cutoffRecoveryCount < 3) {
-            cutoffRecoveryCount++;
+            stallRecoveryCount++;
             lastProgressAdvanceTime = now;
-            stallNudgeTimestamp = 0;
-            console.warn(`[CutoffGuard] Extended decoder stall (>22s at ${current.toFixed(1)}s). Nudging seek to current position...`);
+            console.warn(`[CutoffGuard] Audio stall detected (>16s at ${current.toFixed(1)}s). Re-kicking AudioTrack without seek (${stallRecoveryCount}/3)...`);
             try {
-              ytPlayer.seekTo(Math.max(0, current), true);
-              ytPlayer.playVideo();
+              if (typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
+              setTimeout(() => {
+                if (!userRequestedPause && !state.isOfflinePlaying && ytReady && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+                  try { ytPlayer.playVideo(); } catch (e) {}
+                }
+              }, 220);
             } catch (e) {}
             return;
           }
@@ -5371,7 +5414,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.5.6';
+let CURRENT_APP_VERSION = '1.5.7';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
