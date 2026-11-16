@@ -7,12 +7,18 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Android-1ed760?style=for-the-badge&logo=linux)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.7-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.8-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
+
+- 🎧 **Android Bluetooth TWS (Ttec Airbeat Pro vb.) Kesintisiz Oynatma & Başa Sarma Kökten Düzeltildi (v1.5.8):** Dışarıda mobil veri ve TWS Bluetooth kulaklık kullanımında şarkının aniden donması veya `0:00`'dan başa sarması sorunlarına karşı oynatma motoru baştan aşağı kararlı hale getirildi:
+  - **Sakin `500ms` Takipçi & Sıfır Watchdog Müdahalesi:** Bluetooth ses hattını/Android `AudioTrack`'i tıkayabilen `Watchdog 1/2` (`pauseVideo`/`playVideo`/`seekTo`) müdahaleleri kaldırıldı; `v1.4.8` tarzı sakin `500ms` takipçi yapısına dönüldü.
+  - **Sessiz `0:00` Sıfırlama Kalkanı (`SILENT_RESET_RESCUE`):** WebView/MSE veya YouTube oynatıcısı parça ortasında (`>12sn`) sessizce `0:00`'a veya `CUED` durumuna düşerse otomatik tespit edilip `lastValidPlaybackTime` korunarak anında kalınan saniyeden devam edilir.
+  - **Temiz Oynatıcı Kurtarması (`CutoffGuard`):** Parça ortası hata/erken bitiş kurtarmasında aynı bozuk `<iframe>`'e `loadVideoById` yapmak yerine taze `YT.Player` oluşturularak `pendingResumeSec` doğrulaması garanti altına alındı.
+  - **Bluetooth AVRCP / HFP Koruma & Tanı Kaydı:** Geçici HFP `'call'` sinyali (`800ms` debounce) ve kesinti sırasındaki hayalet `Previous` sinyalleri filtrelendi; `window.onPause`/`onPlay` düz fonksiyona çevrildi ve Ayarlar altına **Oynatma & Bluetooth Tanı Kaydı** eklendi.
 
 - 🎧 **Android Bluetooth TWS Kulaklık (Ttec Airbeat Pro vb.) Donma & Başa Sarma Düzeltmesi (v1.5.7):** Bluetooth TWS kulaklıklarda ses yolu geçişi veya anlık A2DP/AVRCP duraksaması yaşandığında WebView ses motorunun kilitlenip şarkıyı 0:00'dan baştan başlatması sorunu giderildi:
   - **`PAUSED` & 200ms `playVideo()` Döngüsü Kaldırıldı:** Parça ortasında dış/Bluetooth kaynaklı duraklamalarda `state.isVideoVisible` kontrolü yüzünden her durumda `playVideo()` basan otomatik devam ve 200ms takipçi döngüsü kaldırılarak AudioTrack kilitlenmesi önlendi.
@@ -81,7 +87,7 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 | **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
 | **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
 | **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.7/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.8/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
 
 ---
 

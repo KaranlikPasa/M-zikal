@@ -332,6 +332,8 @@ let songStartTimestamp = 0;
 let cutoffRecoveryCount = 0;
 let stallRecoveryCount = 0;
 let bufferingRecoveryCount = 0;
+let silentResetRecoveryCount = 0;
+let lastSilentResetTime = 0;
 let bufferingStartTimestamp = 0;
 let lastProgressAdvanceTime = 0;
 let lastObservedPlayerTime = 0;
@@ -344,8 +346,36 @@ let lastTouchSeekEndTime = 0;
 let postSeekTimers = [];
 let pendingResumeSec = 0;
 let pendingResumeAttempts = 0;
+let pendingResumeTimers = [];
 let cutoffGuardEnabled = localStorage.getItem('muzikal_cutoff_guard') !== '0' && localStorage.getItem('muzikal_cutoff_guard') !== 'false';
 let mobileKeepAliveCtx = null;
+
+function logPlaybackDiag(eventType, detail = '') {
+  try {
+    const t = new Date().toTimeString().slice(0, 8);
+    const cur = (typeof getCurrentPlaybackTime === 'function' ? getCurrentPlaybackTime() : 0) || 0;
+    const title = state && state.currentSong ? String(state.currentSong.title || '').slice(0, 26) : '-';
+    const entry = `${t} | ${eventType} | cur=${cur.toFixed(1)}s | valid=${lastValidPlaybackTime.toFixed(1)}s | ${detail} (${title})`;
+    let logs = [];
+    try {
+      const raw = localStorage.getItem('muzikal_playback_diag_log');
+      if (raw) logs = JSON.parse(raw);
+      if (!Array.isArray(logs)) logs = [];
+    } catch (e) { logs = []; }
+    logs.unshift(entry);
+    if (logs.length > 25) logs = logs.slice(0, 25);
+    localStorage.setItem('muzikal_playback_diag_log', JSON.stringify(logs));
+    const el = document.getElementById('settings-diag-preview');
+    if (el) el.textContent = logs.slice(0, 4).join('\n');
+  } catch (e) {}
+}
+
+function clearPendingResumeTimers() {
+  if (pendingResumeTimers && pendingResumeTimers.length > 0) {
+    pendingResumeTimers.forEach(t => clearTimeout(t));
+    pendingResumeTimers = [];
+  }
+}
 
 function clearPostSeekTimers() {
   if (postSeekTimers && postSeekTimers.length > 0) {
@@ -400,6 +430,8 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
   if (!song || !song.id) return;
 
   userRequestedPause = false;
+  clearPendingResumeTimers();
+  clearPostSeekTimers();
   songStartTimestamp = Date.now();
   lastProgressAdvanceTime = Date.now();
   lastObservedPlayerTime = Math.max(0, resumeAtSec);
@@ -411,6 +443,8 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
     cutoffRecoveryCount = 0;
     stallRecoveryCount = 0;
     bufferingRecoveryCount = 0;
+    silentResetRecoveryCount = 0;
+    lastSilentResetTime = 0;
     bufferingStartTimestamp = 0;
     song._midSongRetryCount = 0;
     pendingResumeSec = 0;
@@ -420,6 +454,7 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
     pendingResumeSec = Math.max(0, resumeAtSec);
     pendingResumeAttempts = 0;
     lastValidPlaybackTime = Math.max(0, resumeAtSec);
+    logPlaybackDiag('RECOVER_LOAD', `target=${resumeAtSec.toFixed(1)}s`);
   }
 
   if (!window.YT || !window.YT.Player) {
@@ -428,14 +463,13 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
     return;
   }
 
-  // If a player is already instantiated and ready, load video into it
-  if (ytPlayer && ytReady && typeof ytPlayer.loadVideoById === 'function') {
+  // Only reuse existing YT.Player via loadVideoById for fresh track starts (resumeAtSec <= 3).
+  // For mid-song error/cutoff recovery (resumeAtSec > 3), cleanly rebuild the YT.Player iframe
+  // so a wedged Bluetooth AudioTrack / WebView decoder is replaced and playerVars.start takes effect cleanly.
+  if (resumeAtSec <= 3 && ytPlayer && ytReady && typeof ytPlayer.loadVideoById === 'function') {
     try {
       const startSec = Math.max(0, Math.floor(resumeAtSec));
       ytPlayer.loadVideoById({ videoId: song.id, startSeconds: startSec });
-      if (startSec > 0 && typeof ytPlayer.seekTo === 'function') {
-        try { ytPlayer.seekTo(startSec, true); } catch (e) {}
-      }
       if (state.isOfflinePlaying) {
         try { ytPlayer.mute(); } catch (e) {}
       } else if (!state.isMuted && typeof ytPlayer.unMute === 'function') {
@@ -504,9 +538,8 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
             }
           } catch (e) {}
           if (pendingResumeSec > 0) {
-            const target = pendingResumeSec;
-            pendingResumeSec = 0;
-            try { event.target.seekTo(target, true); } catch (e) {}
+            // Keep pendingResumeSec active until PLAYING verifies getCurrentTime() reached the target
+            try { event.target.seekTo(pendingResumeSec, true); } catch (e) {}
           }
           if (state.isOfflinePlaying) {
             try { event.target.mute(); } catch (e) {}
@@ -724,6 +757,9 @@ window.pauseOnly = function(reason = 'external') {
   lastExternalPauseTime = Date.now();
   lastPauseReason = reason || 'external';
   clearPostSeekTimers();
+  if (reason && reason !== 'user_toggle') {
+    logPlaybackDiag('PAUSE_ONLY', reason);
+  }
   if (resumeDebounceTimer) {
     clearTimeout(resumeDebounceTimer);
     resumeDebounceTimer = null;
@@ -748,6 +784,7 @@ window.resumeOnly = function() {
   userRequestedPause = false;
   lastPauseReason = '';
   lastProgressAdvanceTime = Date.now();
+  logPlaybackDiag('RESUME_ONLY', 'external');
   if (state.isOfflinePlaying && localAudio) {
     if (localAudio.paused) {
       try { localAudio.play(); } catch (e) {}
@@ -759,29 +796,22 @@ window.resumeOnly = function() {
 
 window.pauseFromNativeInterrupt = window.pauseOnly;
 
-try {
-  Object.defineProperty(window, 'onPause', {
-    get: function() {
-      window.pauseOnly('native_onPause');
-      return true;
-    },
-    configurable: true
-  });
-  Object.defineProperty(window, 'onPlay', {
-    get: function() {
-      window.resumeOnly();
-      return true;
-    },
-    configurable: true
-  });
-} catch (e) {}
+// Expose plain callable functions instead of getter traps so property reflection/inspection never triggers pause/play
+window.onPause = function() {
+  window.pauseOnly('native_onPause');
+  return true;
+};
+window.onPlay = function() {
+  window.resumeOnly();
+  return true;
+};
 
 if ('mediaSession' in navigator) {
   try {
     navigator.mediaSession.setActionHandler('play', () => window.resumeOnly());
     navigator.mediaSession.setActionHandler('pause', () => window.pauseOnly('mediaSession_pause'));
     navigator.mediaSession.setActionHandler('stop', () => window.pauseOnly('mediaSession_stop'));
-    navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
+    navigator.mediaSession.setActionHandler('previoustrack', () => playPrev('mediaSession'));
     navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
   } catch (e) {}
 }
@@ -809,13 +839,26 @@ if (!isNativeAndroidApp() && navigator.mediaDevices && typeof navigator.mediaDev
 
 // Poll Android Native Audio Interrupt Detector (Phone Calls & Physical/BT Headphone Unplug ONLY)
 // Never pause on 'other_app' because Android AudioPlaybackConfiguration counts WebView's own audio streams!
+let consecutiveCallInterruptCount = 0;
 setInterval(() => {
-  if (!state.isPlaying) return;
+  if (!state.isPlaying) {
+    consecutiveCallInterruptCount = 0;
+    return;
+  }
   if (window.MuzikalNative && typeof window.MuzikalNative.checkAudioInterrupt === 'function') {
     try {
       const interruptReason = window.MuzikalNative.checkAudioInterrupt();
-      if (interruptReason === 'call' || interruptReason === 'headset') {
-        window.pauseOnly(interruptReason);
+      if (interruptReason === 'call') {
+        consecutiveCallInterruptCount++;
+        if (consecutiveCallInterruptCount >= 2) {
+          consecutiveCallInterruptCount = 0;
+          window.pauseOnly('call');
+        }
+      } else {
+        consecutiveCallInterruptCount = 0;
+        if (interruptReason === 'headset') {
+          window.pauseOnly('headset');
+        }
       }
     } catch (e) {}
   }
@@ -833,6 +876,23 @@ function onPlayerStateChange(event) {
     return;
   }
 
+  if (event.data === YT.PlayerState.CUED) {
+    const now = Date.now();
+    if (!userRequestedPause && state.currentSong && lastValidPlaybackTime > 12 &&
+        (now - songStartTimestamp) > 6000 && (now - lastSeekTimestamp) > 5000 &&
+        (lastValidDuration <= 0 || lastValidPlaybackTime < lastValidDuration - 12)) {
+      const targetSec = Math.max(0, lastValidPlaybackTime - 1);
+      logPlaybackDiag('YT_CUED_RESCUE', `target=${targetSec.toFixed(1)}s`);
+      pendingResumeSec = targetSec;
+      pendingResumeAttempts = 0;
+      try {
+        if (ytPlayer && typeof ytPlayer.seekTo === 'function') ytPlayer.seekTo(targetSec, true);
+        if (ytPlayer && typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
+      } catch (e) {}
+    }
+    return;
+  }
+
   if (event.data === YT.PlayerState.PLAYING) {
     bufferingStartTimestamp = 0;
     lastProgressAdvanceTime = Date.now();
@@ -846,12 +906,21 @@ function onPlayerStateChange(event) {
     state.isPlaying = true;
     if (pendingResumeSec > 0) {
       const targetSec = pendingResumeSec;
+      const elapsedSinceLoad = Date.now() - songStartTimestamp;
+      clearPendingResumeTimers();
       try {
         const cur = ytPlayer && typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0;
-        if (Math.abs(cur - targetSec) > 3 && pendingResumeAttempts < 3) {
+        if (Math.abs(cur - targetSec) > 4 && pendingResumeAttempts < 3) {
           pendingResumeAttempts++;
           ytPlayer.seekTo(targetSec, true);
-          setTimeout(() => {
+        } else if (elapsedSinceLoad > 1200 && Math.abs(cur - targetSec) <= 4) {
+          pendingResumeSec = 0;
+        }
+      } catch (e) {}
+
+      if (pendingResumeSec > 0) {
+        [450, 1100, 2200].forEach(delayMs => {
+          const t = setTimeout(() => {
             if (userRequestedPause || state.isOfflinePlaying || !ytReady || !ytPlayer || pendingResumeSec <= 0) return;
             try {
               const verifyCur = typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0;
@@ -859,14 +928,12 @@ function onPlayerStateChange(event) {
                 ytPlayer.seekTo(targetSec, true);
               } else {
                 pendingResumeSec = 0;
+                clearPendingResumeTimers();
               }
             } catch (e) {}
-          }, 450);
-        } else {
-          pendingResumeSec = 0;
-        }
-      } catch (e) {
-        pendingResumeSec = 0;
+          }, delayMs);
+          pendingResumeTimers.push(t);
+        });
       }
     }
     const rateToApply = currentPlaybackRate || state.playbackSpeed || 1.0;
@@ -884,13 +951,6 @@ function onPlayerStateChange(event) {
     updateNativePlaybackState(state.currentSong, true);
   } else if (event.data === YT.PlayerState.PAUSED) {
     const now = Date.now();
-    // Ignore transient PAUSED emitted by our own AudioTrack stall re-kick
-    if (stallNudgeTimestamp > 0 && (now - stallNudgeTimestamp) < 1000) {
-      return;
-    }
-
-    const wasBuffering = bufferingStartTimestamp > 0;
-    const bufferingAgeMs = wasBuffering ? (now - bufferingStartTimestamp) : 999999;
     bufferingStartTimestamp = 0;
 
     if (resumeDebounceTimer) {
@@ -898,29 +958,31 @@ function onPlayerStateChange(event) {
       resumeDebounceTimer = null;
     }
 
-    // Guard ONLY against genuine spurious YouTube IFrame PAUSED events during track init or seeking.
-    // Never fight mid-song OS/Bluetooth TWS pauses (fighting causes AudioTrack deadlock on Android WebView).
-    const sinceSongStart = now - songStartTimestamp;
+    // Only auto-resume immediately after an explicit user forward seek (target > 0) that YouTube momentarily paused.
+    // Never fight mid-song Bluetooth/OS pauses (behaves calmly like v1.4.8 so Bluetooth AudioTrack never deadlocks).
     const sinceExternalPause = now - lastExternalPauseTime;
     const sinceLastSeek = now - lastSeekTimestamp;
     const sinceLastAutoResume = now - lastAutoResumeTime;
-    const isRecentInitOrSeek = (sinceSongStart < 3500 || sinceLastSeek < 4500 || (wasBuffering && bufferingAgeMs < 2500));
 
     if (!userRequestedPause &&
         sinceExternalPause > 3000 &&
         sinceLastAutoResume > 900 &&
-        isRecentInitOrSeek &&
-        autoResumeAttempts < 2) {
+        sinceLastSeek < 3500 &&
+        lastSeekTargetSec > 0 &&
+        autoResumeAttempts < 1) {
       autoResumeAttempts++;
       lastAutoResumeTime = now;
       resumeDebounceTimer = setTimeout(() => {
         if (!userRequestedPause && !state.isOfflinePlaying && ytReady && ytPlayer && typeof ytPlayer.playVideo === 'function') {
           try { ytPlayer.playVideo(); } catch (e) {}
         }
-      }, 250);
+      }, 220);
       return;
     }
 
+    if (!userRequestedPause) {
+      logPlaybackDiag('YT_PAUSED_HONORED', `sinceSeek=${sinceLastSeek}ms`);
+    }
     state.isPlaying = false;
     updatePlayPauseButton();
     elements.heroVinyl.classList.add('paused');
@@ -954,11 +1016,13 @@ function onPlayerStateChange(event) {
     if (cutoffGuardEnabled && state.currentSong && effectiveDur > 25 && effectiveCur > 3 && (effectiveDur - effectiveCur) > 12 && cutoffRecoveryCount < 4) {
       cutoffRecoveryCount++;
       const resumeSec = Math.max(0, effectiveCur - 1);
+      logPlaybackDiag('YT_ENDED_RECOVER', `cur=${effectiveCur.toFixed(1)}/${effectiveDur.toFixed(1)}`);
       console.warn(`[CutoffGuard] Premature ENDED detected at ${effectiveCur.toFixed(1)}s / ${effectiveDur.toFixed(1)}s. Recovering at ${resumeSec.toFixed(1)}s (attempt ${cutoffRecoveryCount}/4)...`);
       playOnlineYouTubeTrack(state.currentSong, resumeSec);
       return;
     }
 
+    logPlaybackDiag('YT_ENDED_DONE', `cur=${effectiveCur.toFixed(1)}/${effectiveDur.toFixed(1)}`);
     updateNativePlaybackState(state.currentSong, false);
     onSongEnded();
   }
@@ -979,6 +1043,7 @@ async function onPlayerError(event) {
   if (cutoffGuardEnabled && lastValidPlaybackTime > 5 && (song._midSongRetryCount || 0) < 3) {
     song._midSongRetryCount = (song._midSongRetryCount || 0) + 1;
     const resumeSec = Math.max(0, lastValidPlaybackTime - 1);
+    logPlaybackDiag('YT_ERR_RECOVER', `code=${event.data},resume=${resumeSec.toFixed(1)}`);
     console.warn(`[CutoffGuard] Mid-song error (${event.data}) at ${lastValidPlaybackTime.toFixed(1)}s. Retrying same track (${song._midSongRetryCount}/3)...`);
     setTimeout(() => {
       if (state.currentSong && state.currentSong.id === song.id) {
@@ -1882,35 +1947,53 @@ function performSeekToSeconds(rawTargetSec) {
     }
   } catch (e) {}
 
-  // Post-seek active resume checks for Android WebView & desktop IFrame player
-  // Gently verify playback continues without ever destroying or reloading the media source!
-  [250, 750, 1500, 3000].forEach(delayMs => {
-    const t = setTimeout(() => {
-      if (userRequestedPause || state.isOfflinePlaying || !ytReady || !ytPlayer) return;
-      try {
-        const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
-        if (pState === YT.PlayerState.PAUSED && typeof ytPlayer.playVideo === 'function') {
-          ytPlayer.playVideo();
-        }
-      } catch (e) {}
-    }, delayMs);
-    postSeekTimers.push(t);
-  });
+  // Post-seek active resume checks for user forward/backward seeks
+  if (targetSec > 0) {
+    [250, 750, 1500, 3000].forEach(delayMs => {
+      const t = setTimeout(() => {
+        if (userRequestedPause || state.isOfflinePlaying || !ytReady || !ytPlayer) return;
+        try {
+          const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
+          if (pState === YT.PlayerState.PAUSED && typeof ytPlayer.playVideo === 'function') {
+            ytPlayer.playVideo();
+          }
+        } catch (e) {}
+      }, delayMs);
+      postSeekTimers.push(t);
+    });
+  }
 }
 
 function restartCurrentSong() {
   performSeekToSeconds(0);
 }
 
-function playPrev() {
-  const curTime = getCurrentPlaybackTime();
+let lastPlayPrevCallTime = 0;
+
+function playPrev(triggerSource) {
   const now = Date.now();
+  const isUiClick = !!(triggerSource && typeof triggerSource === 'object' && triggerSource.type);
+  const srcLabel = isUiClick ? 'ui' : (typeof triggerSource === 'string' ? triggerSource : 'native');
+
+  // Deduplicate simultaneous MediaSession + MusicPlaybackService triggers within 450ms
+  if (!isUiClick && (now - lastPlayPrevCallTime < 450)) {
+    return;
+  }
+  // Ignore spurious AVRCP Previous glitch right during an audio interrupt pause
+  if (!isUiClick && !state.isPlaying && (lastPauseReason === 'headset' || lastPauseReason === 'call') && (now - lastExternalPauseTime < 1800)) {
+    logPlaybackDiag('PREV_BLOCKED_INT', `${srcLabel}:${lastPauseReason}`);
+    return;
+  }
+  lastPlayPrevCallTime = now;
+
+  const curTime = getCurrentPlaybackTime();
 
   // Spotify-standard rewind vs previous song logic:
   // 1. If currently playing song has progressed for more than 3 seconds and wasn't just restarted in the last 3 seconds:
   // First press rewinds the current track back to 0:00!
   if (curTime > 3 && (now - lastPrevRestartTime > 3000)) {
     lastPrevRestartTime = now;
+    logPlaybackDiag('PREV_REWIND', `src=${srcLabel}`);
     restartCurrentSong();
     return;
   }
@@ -1918,6 +2001,7 @@ function playPrev() {
   // 2. Second press within 3 seconds, or pressed while already in the first 3 seconds:
   // Go to previous track!
   lastPrevRestartTime = 0;
+  logPlaybackDiag('PREV_TRACK', `src=${srcLabel}`);
 
   // Check actual session navigation history (for Shuffle, Smart Shuffle, etc.)
   if (state.navHistory && state.navHistoryPos > 0) {
@@ -2107,24 +2191,9 @@ function startProgressTracker() {
 
   progressInterval = setInterval(() => {
     if (state.isOfflinePlaying) return; // Handled by localAudio timeupdate
-    if (!ytReady || !ytPlayer) return;
+    if (!ytReady || !ytPlayer || !state.isPlaying) return;
 
     const now = Date.now();
-
-    // Watchdog 1: Prolonged mobile/web buffering (> 22s) while user has not paused
-    if (cutoffGuardEnabled && !userRequestedPause && bufferingStartTimestamp > 0 && (now - bufferingStartTimestamp) > 22000) {
-      bufferingStartTimestamp = now;
-      if (state.currentSong && bufferingRecoveryCount < 3) {
-        bufferingRecoveryCount++;
-        console.warn(`[CutoffGuard] Prolonged buffering stall (>22s). Nudging player playback...`);
-        try {
-          if (typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
-        } catch (e) {}
-        return;
-      }
-    }
-
-    if (!state.isPlaying) return;
 
     try {
       const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
@@ -2132,16 +2201,59 @@ function startProgressTracker() {
       const duration = getEffectiveSongDuration();
       const sinceSeek = now - lastSeekTimestamp;
 
-      // While a seek is in flight (<1.5s), ignore stale pre-seek getCurrentTime() values
-      const isSeekInFlight = sinceSeek < 1500 && Math.abs(current - lastSeekTargetSec) > 3;
-      const displayCurrent = isSeekInFlight ? lastSeekTargetSec : current;
+      // Keep UI paused cleanly if player entered PAUSED past init/seek window (no 200ms playVideo loops)
+      if (pState === YT.PlayerState.PAUSED && !userRequestedPause &&
+          sinceSeek > 4000 && (now - songStartTimestamp) > 3500 && (now - lastAutoResumeTime) > 1500) {
+        state.isPlaying = false;
+        updatePlayPauseButton();
+        if (elements.heroVinyl) elements.heroVinyl.classList.add('paused');
+        if (elements.playingIndicator) elements.playingIndicator.classList.remove('active');
+        updateNativePlaybackState(state.currentSong, false);
+        return;
+      }
+
+      // Guard against silent WebView / MSE resets jumping back from mid-song (>12s) to 0:00 without user seek/prev
+      const isWaitingForResumeSeek = pendingResumeSec > 5 && current < (pendingResumeSec - 5);
+      const isUnexpectedRewindToStart =
+        cutoffGuardEnabled &&
+        !userRequestedPause &&
+        pendingResumeSec <= 0 &&
+        lastValidPlaybackTime > 12 &&
+        (now - songStartTimestamp) > 8000 &&
+        sinceSeek > 6000 &&
+        (now - lastPrevRestartTime) > 6000 &&
+        (lastValidDuration <= 0 || lastValidPlaybackTime < lastValidDuration - 12) &&
+        current >= 0 &&
+        current < 4 &&
+        (pState === YT.PlayerState.PLAYING || pState === YT.PlayerState.BUFFERING || pState === YT.PlayerState.CUED);
+
+      if (isUnexpectedRewindToStart) {
+        if (silentResetRecoveryCount < 3 && (now - lastSilentResetTime) > 8000) {
+          silentResetRecoveryCount++;
+          lastSilentResetTime = now;
+          const rescueSec = Math.max(0, lastValidPlaybackTime - 1);
+          logPlaybackDiag('SILENT_RESET_RESCUE', `drop=${current.toFixed(1)}->${rescueSec.toFixed(1)}`);
+          pendingResumeSec = rescueSec;
+          pendingResumeAttempts = 0;
+          try {
+            if (typeof ytPlayer.seekTo === 'function') ytPlayer.seekTo(rescueSec, true);
+            if (typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
+          } catch (e) {}
+        }
+        return;
+      }
+
+      // While a seek is in flight (<1.5s) or waiting for recovery seek, ignore stale 0:00 / pre-seek values
+      const isSeekInFlight = (sinceSeek < 1500 && Math.abs(current - lastSeekTargetSec) > 3) || isWaitingForResumeSeek;
+      const displayCurrent = isWaitingForResumeSeek
+        ? pendingResumeSec
+        : (isSeekInFlight ? lastSeekTargetSec : current);
 
       if (!isSeekInFlight && current > 0) {
         if (Math.abs(current - lastObservedPlayerTime) > 0.04) {
           lastObservedPlayerTime = current;
           lastProgressAdvanceTime = now;
           bufferingStartTimestamp = 0;
-          stallNudgeTimestamp = 0;
         }
         // Protect lastValidPlaybackTime from being overwritten by 0 or near-0 during initial track reload/seek
         if (current >= 2 || lastValidPlaybackTime < 2) {
@@ -2149,47 +2261,6 @@ function startProgressTracker() {
         }
       }
       if (duration > 0) lastValidDuration = duration;
-
-      // Watchdog 2: Frozen decoder check (Bluetooth TWS A2DP / Android AudioTrack stall guard)
-      if (cutoffGuardEnabled && !userRequestedPause && sinceSeek > 4500 && current > 0 &&
-          (duration <= 0 || (duration - current) > 5) && lastProgressAdvanceTime > 0) {
-        if (pState === YT.PlayerState.BUFFERING) {
-          // Actively buffering: update timestamps so it's not treated as a frozen decoder
-          if (!bufferingStartTimestamp) bufferingStartTimestamp = now;
-          lastProgressAdvanceTime = now;
-        } else if (pState === YT.PlayerState.PAUSED) {
-          // Do NOT hammer playVideo() every 200ms (freezes Bluetooth TWS audio sinks).
-          // Sync UI to paused if past init/seek/re-kick windows.
-          if ((now - songStartTimestamp) > 4000 &&
-              (now - lastAutoResumeTime) > 1500 &&
-              (stallNudgeTimestamp === 0 || (now - stallNudgeTimestamp) > 1500)) {
-            state.isPlaying = false;
-            updatePlayPauseButton();
-            if (elements.heroVinyl) elements.heroVinyl.classList.add('paused');
-            if (elements.playingIndicator) elements.playingIndicator.classList.remove('active');
-            updateNativePlaybackState(state.currentSong, false);
-          }
-        } else if (pState === YT.PlayerState.PLAYING) {
-          const freezeMs = now - lastProgressAdvanceTime;
-          // Never call seekTo(current) on a stalled BT AudioTrack (it flushes MSE buffers and resets to 0:00).
-          // Instead, perform a gentle pause -> 220ms -> play AudioTrack re-kick at most once per 30s.
-          if (freezeMs > 16000 && stallRecoveryCount < 3 && (stallNudgeTimestamp === 0 || (now - stallNudgeTimestamp) > 30000)) {
-            stallNudgeTimestamp = now;
-            stallRecoveryCount++;
-            lastProgressAdvanceTime = now;
-            console.warn(`[CutoffGuard] Audio stall detected (>16s at ${current.toFixed(1)}s). Re-kicking AudioTrack without seek (${stallRecoveryCount}/3)...`);
-            try {
-              if (typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
-              setTimeout(() => {
-                if (!userRequestedPause && !state.isOfflinePlaying && ytReady && ytPlayer && typeof ytPlayer.playVideo === 'function') {
-                  try { ytPlayer.playVideo(); } catch (e) {}
-                }
-              }, 220);
-            } catch (e) {}
-            return;
-          }
-        }
-      }
 
       if (!isSeekingDragActive) {
         elements.currentTime.textContent = formatTime(displayCurrent);
@@ -2208,7 +2279,7 @@ function startProgressTracker() {
         }
       }
     } catch (e) {}
-  }, 200);
+  }, 500);
 }
 
 function getEventClientX(event) {
@@ -5414,7 +5485,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.5.7';
+let CURRENT_APP_VERSION = '1.5.8';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -6402,6 +6473,14 @@ function refreshSettingsViewUI() {
 
   const verBadge = document.getElementById('settings-version-label') || document.getElementById('settings-version-badge');
   if (verBadge) verBadge.textContent = `v${CURRENT_APP_VERSION}`;
+
+  const diagPreview = document.getElementById('settings-diag-preview');
+  if (diagPreview) {
+    try {
+      const logs = JSON.parse(localStorage.getItem('muzikal_playback_diag_log') || '[]');
+      diagPreview.textContent = Array.isArray(logs) && logs.length > 0 ? logs.slice(0, 4).join('\n') : 'Henüz olay kaydı yok';
+    } catch (e) {}
+  }
 }
 
 function initSettingsView() {
@@ -6439,6 +6518,24 @@ function initSettingsView() {
       cutoffGuardEnabled = cutoffGuardCheckbox.checked;
       localStorage.setItem('muzikal_cutoff_guard', cutoffGuardCheckbox.checked ? 'true' : 'false');
       showToast(cutoffGuardCheckbox.checked ? '🛡️ Akıllı Kesinti Koruması aktif' : 'Akıllı Kesinti Koruması kapatıldı');
+    });
+  }
+
+  const btnCopyDiag = document.getElementById('settings-btn-copy-diag');
+  if (btnCopyDiag) {
+    btnCopyDiag.addEventListener('click', async () => {
+      try {
+        const logs = JSON.parse(localStorage.getItem('muzikal_playback_diag_log') || '[]');
+        const text = Array.isArray(logs) && logs.length > 0 ? logs.join('\n') : 'Henüz olay kaydı yok';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          showToast('📋 Tanı kaydı panoya kopyalandı');
+        } else {
+          alert(text);
+        }
+      } catch (e) {
+        showToast('Tanı kaydı okunamadı');
+      }
     });
   }
 
