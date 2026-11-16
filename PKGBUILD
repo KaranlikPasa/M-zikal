@@ -1,6 +1,6 @@
 # Maintainer: KaranlikPasa <https://github.com/KaranlikPasa>
 pkgname=muzikal
-pkgver=1.5.5
+pkgver=1.5.9
 pkgrel=1
 pkgdesc="Spotify & YouTube Müzik Çalar, Akıllı Mix ve Çevrimdışı İndirici"
 arch=('any')

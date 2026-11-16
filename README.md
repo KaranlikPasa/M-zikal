@@ -7,12 +7,14 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Android-1ed760?style=for-the-badge&logo=linux)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.8-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.9-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
+
+- 🖥️ **Masaüstü Ses Çubuğu & Önbellek İyileştirmesi (v1.5.9):** Bilgisayar sürümünde alt oynatıcı çubuğundaki ses seviyesi kaydırıcısının (`#volume-slider-track`) yanındaki 4 kontrol simgesiyle sıkışıp çok küçük görünmesi sorunu giderildi (`132px × 6px` geniş/rahat kontrol + kolay tutma alanı); ayrıca Linux WebKit2 masaüstü penceresinde önbellek yenileme (`CacheModel.DOCUMENT_VIEWER`) ve `v1.5.9` güncelleme eşitlemesi yapıldı.
 
 - 🎧 **Android Bluetooth TWS (Ttec Airbeat Pro vb.) Kesintisiz Oynatma & Başa Sarma Kökten Düzeltildi (v1.5.8):** Dışarıda mobil veri ve TWS Bluetooth kulaklık kullanımında şarkının aniden donması veya `0:00`'dan başa sarması sorunlarına karşı oynatma motoru baştan aşağı kararlı hale getirildi:
   - **Sakin `500ms` Takipçi & Sıfır Watchdog Müdahalesi:** Bluetooth ses hattını/Android `AudioTrack`'i tıkayabilen `Watchdog 1/2` (`pauseVideo`/`playVideo`/`seekTo`) müdahaleleri kaldırıldı; `v1.4.8` tarzı sakin `500ms` takipçi yapısına dönüldü.
@@ -83,11 +85,11 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 | Platform | Dosya | Açıklama |
 | :--- | :--- | :--- |
 | **Arch Linux (Pacman Paketi)** | [🐧 **muzikal-1.5.0-1-any.pkg.tar.zst**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/muzikal-1.5.0-1-any.pkg.tar.zst) | **Arch Linux / Manjaro / EndeavourOS:** `sudo pacman -U` ile tek tıkla kurun. Menü kısayolu, simgeler ve `/usr/bin/muzikal` otomatik eklenir. |
-| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
+| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.9/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
 | **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
 | **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
 | **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.8/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.9/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
 
 ---
 
