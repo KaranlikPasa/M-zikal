@@ -1489,16 +1489,16 @@ body {
   justify-content: flex-end;
   gap: 12px;
   width: auto;
-  min-width: 316px;
+  min-width: 340px;
   flex-shrink: 0;
 }
 
 .volume-container {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 156px;
-  min-width: 148px;
+  gap: 10px;
+  width: 174px;
+  min-width: 156px;
   flex-shrink: 0;
 }
 
@@ -1510,7 +1510,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 5px;
+  padding: 6px;
   flex-shrink: 0;
   border-radius: 50%;
   transition: color 0.15s ease, transform 0.15s ease;
@@ -1523,7 +1523,7 @@ body {
 
 .volume-slider-track {
   flex: 1;
-  min-width: 112px;
+  min-width: 130px;
   height: 6px;
   background: rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-full);
@@ -1539,7 +1539,7 @@ body {
 }
 
 .volume-slider-track:hover {
-  height: 7px;
+  height: 8px;
 }
 
 .volume-slider-fill {

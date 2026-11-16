@@ -196,6 +196,13 @@ def run_gtk_webkit(app_root, server_proc):
     else:
         webview = WebKit2.WebView()
 
+    try:
+        ctx = webview.get_context() if hasattr(webview, "get_context") else WebKit2.WebContext.get_default()
+        if ctx and hasattr(WebKit2, "CacheModel") and hasattr(ctx, "set_cache_model"):
+            ctx.set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
+    except Exception:
+        pass
+
     settings = webview.get_settings()
     settings.set_enable_media_stream(True)
     settings.set_enable_mediasource(True)
