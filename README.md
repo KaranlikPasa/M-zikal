@@ -7,12 +7,17 @@
 > YouTube ve Spotify destekli, modern masaüstü ve Android müzik çalar uygulaması.
 
 ![Müzikal](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Android-1ed760?style=for-the-badge&logo=linux)
-![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.5.9-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/S%C3%BCr%C3%BCm-1.6.0-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/Lisans-MIT-green?style=for-the-badge)
 
 ---
 
 ## ✨ Özellikler
+
+- 📱 **Android Sahte Telif Hatası Döngüsü & Bluetooth TWS Kesintisi Düzeltmesi (v1.6.0):** Mobil sürümde şarkı ortasında aniden beliren sahte "telif/kısıtlama" uyarısı ve sonrasında hiçbir şarkının açılmaması sorunu giderildi; Ttec Airbeat Pro gibi Bluetooth TWS kulaklıklardaki kalan anlık ses kesintileri için sakin kurtarma eklendi:
+  - **Akıllı Hata Ayrımı (`onPlayerError`) & Orijinal ID Koruması:** Geçici oynatıcı/ağ hataları (`Error 2/5`, çevrimdışı durumlar) artık sahte telif hatası sanılıp şarkı atlamıyor; aynı parça üzerinde sakin yeniden deneme yapılıyor, ardışık otomatik atlamalar sınırlandırılıyor ve `playSong()` her açılışta `_originalId` / deneme sayaçlarını sıfırlıyor.
+  - **Güvenli `YT.Player` IFrame Kurulumu:** Sağlıklı oynatıcı tekrar kullanılıyor; yeniden oluşturma gerektiğinde `MutationObserver` ile `<iframe>` eklenir eklenmez `referrerpolicy="origin"` ve `allow` öznitelikleri atanarak WebView gömme hataları (`150/153`) önleniyor.
+  - **Bluetooth TWS Route Kurtarması:** Dış ses kesintisi (`headset`/`call`) veya kullanıcı duraklatması olmadan oluşan geçici Bluetooth TWS duraksamalarında `15s` içinde en fazla `1` kez `650ms` bekleme sonrası sakin devam denemesi yapılıyor.
 
 - 🖥️ **Masaüstü Ses Çubuğu & Önbellek İyileştirmesi (v1.5.9):** Bilgisayar sürümünde alt oynatıcı çubuğundaki ses seviyesi kaydırıcısının (`#volume-slider-track`) yanındaki 4 kontrol simgesiyle sıkışıp çok küçük görünmesi sorunu giderildi (`132px × 6px` geniş/rahat kontrol + kolay tutma alanı); ayrıca Linux WebKit2 masaüstü penceresinde önbellek yenileme (`CacheModel.DOCUMENT_VIEWER`) ve `v1.5.9` güncelleme eşitlemesi yapıldı.
 
@@ -85,11 +90,11 @@ En güncel sürümleri doğrudan [GitHub Releases](https://github.com/KaranlikPa
 | Platform | Dosya | Açıklama |
 | :--- | :--- | :--- |
 | **Arch Linux (Pacman Paketi)** | [🐧 **muzikal-1.5.0-1-any.pkg.tar.zst**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/muzikal-1.5.0-1-any.pkg.tar.zst) | **Arch Linux / Manjaro / EndeavourOS:** `sudo pacman -U` ile tek tıkla kurun. Menü kısayolu, simgeler ve `/usr/bin/muzikal` otomatik eklenir. |
-| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.9/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
+| **Linux (Evrensel Arşiv)** | [📦 **Muzikal-Linux-x64.tar.gz**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.6.0/Muzikal-Linux-x64.tar.gz) | **Tüm Linux Dağıtımları:** İster `./muzikal` ile taşınabilir çalıştırın, ister `sudo ./install.sh` ile sisteme kurun. |
 | **Windows (Kurulumlu)** | [💻 **Muzikal-Setup.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Setup.exe) | Masaüstü kısayolu, otomatik güncelleme ve kaldırma desteği olan Windows kurulum paketi. |
 | **Windows (Bağımsız Python)** | [🐍 **Muzikal-Python.exe**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Python.exe) | Node.js gerektirmeyen bağımsız PyWebView masaüstü istemcisi. |
 | **Windows (Taşınabilir)** | [💾 **Muzikal-Windows-x64.zip**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.5/Muzikal-Windows-x64.zip) | Kurulum gerektirmez (Portable). İndirip zip'ten çıkarın ve `Muzikal.bat` ile başlatın. |
-| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.5.9/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
+| **Android** | [📱 **Muzikal.apk**](https://github.com/KaranlikPasa/M-zikal/releases/download/v1.6.0/Muzikal.apk) | Arka planda çalma, kilit ekranı kumandası, kulaklık/arama ses kesintisi yönetimi ve Firebase bulut hesaplı mobil sürüm. |
 
 ---
 

@@ -347,8 +347,19 @@ let postSeekTimers = [];
 let pendingResumeSec = 0;
 let pendingResumeAttempts = 0;
 let pendingResumeTimers = [];
+let bluetoothResumeTimer = null;
+let lastBluetoothResumeAttempt = 0;
+let consecutiveErrorSkips = 0;
+let lastErrorSkipTime = 0;
 let cutoffGuardEnabled = localStorage.getItem('muzikal_cutoff_guard') !== '0' && localStorage.getItem('muzikal_cutoff_guard') !== 'false';
 let mobileKeepAliveCtx = null;
+
+function clearBluetoothResumeTimer() {
+  if (bluetoothResumeTimer) {
+    clearTimeout(bluetoothResumeTimer);
+    bluetoothResumeTimer = null;
+  }
+}
 
 function logPlaybackDiag(eventType, detail = '') {
   try {
@@ -426,12 +437,13 @@ if (window.YT && window.YT.Player) {
   ensureYouTubeApiScript();
 }
 
-function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
+function playOnlineYouTubeTrack(song, resumeAtSec = 0, forceRecreatePlayer = false) {
   if (!song || !song.id) return;
 
   userRequestedPause = false;
   clearPendingResumeTimers();
   clearPostSeekTimers();
+  clearBluetoothResumeTimer();
   songStartTimestamp = Date.now();
   lastProgressAdvanceTime = Date.now();
   lastObservedPlayerTime = Math.max(0, resumeAtSec);
@@ -454,7 +466,7 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
     pendingResumeSec = Math.max(0, resumeAtSec);
     pendingResumeAttempts = 0;
     lastValidPlaybackTime = Math.max(0, resumeAtSec);
-    logPlaybackDiag('RECOVER_LOAD', `target=${resumeAtSec.toFixed(1)}s`);
+    logPlaybackDiag('RECOVER_LOAD', `target=${resumeAtSec.toFixed(1)}s,recreate=${forceRecreatePlayer ? 1 : 0}`);
   }
 
   if (!window.YT || !window.YT.Player) {
@@ -463,10 +475,9 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
     return;
   }
 
-  // Only reuse existing YT.Player via loadVideoById for fresh track starts (resumeAtSec <= 3).
-  // For mid-song error/cutoff recovery (resumeAtSec > 3), cleanly rebuild the YT.Player iframe
-  // so a wedged Bluetooth AudioTrack / WebView decoder is replaced and playerVars.start takes effect cleanly.
-  if (resumeAtSec <= 3 && ytPlayer && ytReady && typeof ytPlayer.loadVideoById === 'function') {
+  // Reuse an already-healthy YT.Player via loadVideoById (avoids rapid iframe teardown/recreation
+  // which can trigger YouTube Error 150/153 on Android WebView). Only recreate when forced after an error.
+  if (!forceRecreatePlayer && ytPlayer && ytReady && typeof ytPlayer.loadVideoById === 'function') {
     try {
       const startSec = Math.max(0, Math.floor(resumeAtSec));
       ytPlayer.loadVideoById({ videoId: song.id, startSeconds: startSec });
@@ -495,8 +506,24 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
 
   // Reset the wrapper element to a pristine div so YT.Player can cleanly construct the iframe
   const wrapper = document.querySelector('.video-wrapper');
+  let iframeObserver = null;
   if (wrapper) {
     wrapper.innerHTML = '<div id="yt-player"></div>';
+    // Synchronously apply referrerpolicy="origin" the instant YouTube inserts the <iframe>
+    // BEFORE the initial embed HTTP request goes out (prevents Android WebView Error 153).
+    try {
+      iframeObserver = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          for (const node of m.addedNodes) {
+            if (node && node.tagName === 'IFRAME') {
+              node.setAttribute('referrerpolicy', 'origin');
+              node.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
+            }
+          }
+        }
+      });
+      iframeObserver.observe(wrapper, { childList: true, subtree: true });
+    } catch (obsErr) {}
   }
 
   ytReady = false;
@@ -530,6 +557,10 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
       events: {
         'onReady': (event) => {
           ytReady = true;
+          if (iframeObserver) {
+            try { iframeObserver.disconnect(); } catch (e) {}
+            iframeObserver = null;
+          }
           try {
             const iframe = typeof event.target.getIframe === 'function' ? event.target.getIframe() : null;
             if (iframe) {
@@ -558,7 +589,15 @@ function playOnlineYouTubeTrack(song, resumeAtSec = 0) {
         'onError': onPlayerError
       }
     });
+    if (iframeObserver) {
+      setTimeout(() => {
+        try { iframeObserver && iframeObserver.disconnect(); } catch (e) {}
+      }, 4000);
+    }
   } catch (err) {
+    if (iframeObserver) {
+      try { iframeObserver.disconnect(); } catch (e) {}
+    }
     console.error('Failed to construct YT.Player:', err);
   }
 }
@@ -757,6 +796,7 @@ window.pauseOnly = function(reason = 'external') {
   lastExternalPauseTime = Date.now();
   lastPauseReason = reason || 'external';
   clearPostSeekTimers();
+  clearBluetoothResumeTimer();
   if (reason && reason !== 'user_toggle') {
     logPlaybackDiag('PAUSE_ONLY', reason);
   }
@@ -895,6 +935,7 @@ function onPlayerStateChange(event) {
 
   if (event.data === YT.PlayerState.PLAYING) {
     bufferingStartTimestamp = 0;
+    clearBluetoothResumeTimer();
     lastProgressAdvanceTime = Date.now();
     stallNudgeTimestamp = 0;
     if (resumeDebounceTimer) {
@@ -980,6 +1021,32 @@ function onPlayerStateChange(event) {
       return;
     }
 
+    // Gentle single recovery for brief mid-song Bluetooth TWS route glitches (1 try per 15s, 650ms settle wait)
+    if (!userRequestedPause &&
+        cutoffGuardEnabled &&
+        sinceExternalPause > 3500 &&
+        (now - songStartTimestamp) > 4000 &&
+        (now - lastBluetoothResumeAttempt) > 15000 &&
+        state.currentSong) {
+      lastBluetoothResumeAttempt = now;
+      clearBluetoothResumeTimer();
+      logPlaybackDiag('BT_PAUSE_GENTLE_RETRY', `sinceExt=${sinceExternalPause}ms`);
+      bluetoothResumeTimer = setTimeout(() => {
+        bluetoothResumeTimer = null;
+        if (!userRequestedPause && !state.isOfflinePlaying && (Date.now() - lastExternalPauseTime) > 3500 &&
+            ytReady && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+          try {
+            const st = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
+            if (st === YT.PlayerState.PAUSED) {
+              lastAutoResumeTime = Date.now();
+              ytPlayer.playVideo();
+            }
+          } catch (e) {}
+        }
+      }, 650);
+      return;
+    }
+
     if (!userRequestedPause) {
       logPlaybackDiag('YT_PAUSED_HONORED', `sinceSeek=${sinceLastSeek}ms`);
     }
@@ -990,6 +1057,7 @@ function onPlayerStateChange(event) {
     updateNativePlaybackState(state.currentSong, false);
   } else if (event.data === YT.PlayerState.ENDED) {
     bufferingStartTimestamp = 0;
+    clearBluetoothResumeTimer();
     if (resumeDebounceTimer) {
       clearTimeout(resumeDebounceTimer);
       resumeDebounceTimer = null;
@@ -1018,7 +1086,7 @@ function onPlayerStateChange(event) {
       const resumeSec = Math.max(0, effectiveCur - 1);
       logPlaybackDiag('YT_ENDED_RECOVER', `cur=${effectiveCur.toFixed(1)}/${effectiveDur.toFixed(1)}`);
       console.warn(`[CutoffGuard] Premature ENDED detected at ${effectiveCur.toFixed(1)}s / ${effectiveDur.toFixed(1)}s. Recovering at ${resumeSec.toFixed(1)}s (attempt ${cutoffRecoveryCount}/4)...`);
-      playOnlineYouTubeTrack(state.currentSong, resumeSec);
+      playOnlineYouTubeTrack(state.currentSong, resumeSec, false);
       return;
     }
 
@@ -1030,69 +1098,116 @@ function onPlayerStateChange(event) {
 
 async function onPlayerError(event) {
   if (state.isOfflinePlaying) return;
-  console.warn('YouTube playback error:', event.data, state.currentSong);
+  const errCode = Number(event && event.data);
+  console.warn('YouTube playback error:', errCode, state.currentSong);
 
   const song = state.currentSong;
   if (!song) {
-    playNext();
     return;
   }
 
-  // If the song was already playing and hit a transient mid-song network blip on mobile,
-  // resume from the last valid position instead of abandoning the song!
-  if (cutoffGuardEnabled && lastValidPlaybackTime > 5 && (song._midSongRetryCount || 0) < 3) {
+  logPlaybackDiag('YT_ERROR', `code=${errCode},valid=${lastValidPlaybackTime.toFixed(1)}s`);
+
+  // Check offline state first so we don't trigger false copyright/restriction cascades without internet
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    showToast('İnternet bağlantısı kesildi. Bağlantı geldiğinde tekrar deneyin.');
+    state.isPlaying = false;
+    updatePlayPauseButton();
+    return;
+  }
+
+  // Error 2 (invalid param) and Error 5 (HTML5 media / WebView AudioTrack / network failure)
+  // are transient player/network issues, NOT copyright restrictions!
+  const isTransientPlayerError = (errCode === 2 || errCode === 5 || isNaN(errCode));
+  if (isTransientPlayerError) {
+    if ((song._midSongRetryCount || 0) < 2) {
+      song._midSongRetryCount = (song._midSongRetryCount || 0) + 1;
+      const resumeSec = lastValidPlaybackTime > 3 ? Math.max(0, lastValidPlaybackTime - 1) : 0;
+      const recreate = song._midSongRetryCount >= 2;
+      const delayMs = song._midSongRetryCount === 1 ? 1000 : 2500;
+      setTimeout(() => {
+        if (state.currentSong && state.currentSong.id === song.id && !userRequestedPause) {
+          playOnlineYouTubeTrack(song, resumeSec, recreate);
+        }
+      }, delayMs);
+      return;
+    }
+    showToast('Bağlantı veya oynatıcı geçici hata verdi. Tekrar başlatabilirsiniz.');
+    state.isPlaying = false;
+    updatePlayPauseButton();
+    if (elements.heroVinyl) elements.heroVinyl.classList.add('paused');
+    if (elements.playingIndicator) elements.playingIndicator.classList.remove('active');
+    updateNativePlaybackState(state.currentSong, false);
+    return;
+  }
+
+  // If the song was ALREADY playing (> 5s), an embed/stream error (100/101/150/153) is a mid-song session drop,
+  // not a copyright block — recover the same track cleanly before trying alternatives!
+  if (cutoffGuardEnabled && lastValidPlaybackTime > 5 && (song._midSongRetryCount || 0) < 2) {
     song._midSongRetryCount = (song._midSongRetryCount || 0) + 1;
     const resumeSec = Math.max(0, lastValidPlaybackTime - 1);
-    logPlaybackDiag('YT_ERR_RECOVER', `code=${event.data},resume=${resumeSec.toFixed(1)}`);
-    console.warn(`[CutoffGuard] Mid-song error (${event.data}) at ${lastValidPlaybackTime.toFixed(1)}s. Retrying same track (${song._midSongRetryCount}/3)...`);
+    const recreate = song._midSongRetryCount >= 2;
+    console.warn(`[CutoffGuard] Mid-song error (${errCode}) at ${lastValidPlaybackTime.toFixed(1)}s. Retrying same track (${song._midSongRetryCount}/2)...`);
     setTimeout(() => {
-      if (state.currentSong && state.currentSong.id === song.id) {
-        playOnlineYouTubeTrack(song, resumeSec);
+      if (state.currentSong && state.currentSong.id === song.id && !userRequestedPause) {
+        playOnlineYouTubeTrack(song, resumeSec, recreate);
       }
-    }, 700);
+    }, 900);
     return;
   }
 
+  song._originalId = song._originalId || song.id;
   song._attemptedIds = song._attemptedIds || new Set();
   song._attemptedIds.add(song.id);
   song._fallbackCount = (song._fallbackCount || 0) + 1;
 
-  if (song._fallbackCount > 3) {
-    showToast('Bu parça telif/kısıtlama nedeniyle oynatılamadı. Sonraki parçaya geçiliyor...');
-    setTimeout(() => playNext(), 1200);
+  if (song._fallbackCount <= 2) {
+    showToast('Bu video kısıtlı, alternatif kaynak aranıyor...');
+    try {
+      const rawTitle = song.title || '';
+      const cleanTitle = rawTitle
+        .replace(/\(.*?video.*?\)|\[.*?video.*?\]/gi, '')
+        .replace(/\(.*?klip.*?\)|\[.*?klip.*?\]/gi, '')
+        .replace(/\(.*?official.*?\)|\[.*?official.*?\]/gi, '')
+        .replace(/\(.*?remix.*?\)|\[.*?remix.*?\]/gi, '')
+        .trim();
+
+      const q = `${cleanTitle} audio`;
+      const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const candidate = data && data.results && data.results.find(r => r.id && !song._attemptedIds.has(r.id));
+
+      if (candidate && candidate.id) {
+        console.log('Found alternative audio for restricted track:', candidate);
+        showToast('🎵 Alternatif kaynaktan oynatılıyor...');
+        song.id = candidate.id;
+        if (candidate.duration) song.duration = candidate.duration;
+        playOnlineYouTubeTrack(song, 0, true);
+        return;
+      }
+    } catch (err) {
+      console.error('Fallback search error:', err);
+    }
+  }
+
+  const nowErr = Date.now();
+  if (nowErr - lastErrorSkipTime > 25000) {
+    consecutiveErrorSkips = 0;
+  }
+  lastErrorSkipTime = nowErr;
+  consecutiveErrorSkips++;
+
+  if (consecutiveErrorSkips >= 3) {
+    showToast('Şu anda şarkılar oynatılamıyor (YouTube oturumu/bağlantı engeli). Lütfen biraz sonra tekrar deneyin.');
+    state.isPlaying = false;
+    updatePlayPauseButton();
+    if (elements.heroVinyl) elements.heroVinyl.classList.add('paused');
+    if (elements.playingIndicator) elements.playingIndicator.classList.remove('active');
+    updateNativePlaybackState(state.currentSong, false);
     return;
   }
 
-  showToast('Bu video kısıtlı, alternatif kaynak aranıyor...');
-
-  try {
-    // Clean up title for high-accuracy alternative search
-    const rawTitle = song.title || '';
-    const cleanTitle = rawTitle
-      .replace(/\(.*?video.*?\)|\[.*?video.*?\]/gi, '')
-      .replace(/\(.*?klip.*?\)|\[.*?klip.*?\]/gi, '')
-      .replace(/\(.*?official.*?\)|\[.*?official.*?\]/gi, '')
-      .replace(/\(.*?remix.*?\)|\[.*?remix.*?\]/gi, '')
-      .trim();
-
-    const q = `${cleanTitle} audio`;
-    const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
-    const candidate = data && data.results && data.results.find(r => r.id && !song._attemptedIds.has(r.id));
-
-    if (candidate && candidate.id) {
-      console.log('Found alternative audio for restricted track:', candidate);
-      showToast('🎵 Alternatif kaynaktan oynatılıyor...');
-      song.id = candidate.id;
-      if (candidate.duration) song.duration = candidate.duration;
-      playOnlineYouTubeTrack(song);
-      return;
-    }
-  } catch (err) {
-    console.error('Fallback search error:', err);
-  }
-
-  showToast('Alternatif bulunamadı. Sonraki şarkıya geçiliyor...');
-  setTimeout(() => playNext(), 1500);
+  showToast('Bu parça telif/kısıtlama nedeniyle oynatılamadı. Sonraki parçaya geçiliyor...');
+  setTimeout(() => playNext(), 1400);
 }
 
 // --- LOCAL HTML5 AUDIO SETUP (OFFLINE MODE) ---
@@ -1152,6 +1267,15 @@ if (localAudio) {
 
 async function playSong(song, playlist = null, index = -1) {
   if (!song) return;
+
+  // Reset transient per-song fallback/retry flags whenever starting a track so past network errors
+  // never permanently poison playlist items.
+  if (song._originalId) {
+    song.id = song._originalId;
+  }
+  song._fallbackCount = 0;
+  song._midSongRetryCount = 0;
+  song._attemptedIds = new Set();
 
   // 1. If this is an unresolved Spotify track, resolve it first
   if (!song.spotifyResolved && (song.spotifySearchQuery || String(song.id).startsWith('sp_'))) {
@@ -2258,6 +2382,9 @@ function startProgressTracker() {
         // Protect lastValidPlaybackTime from being overwritten by 0 or near-0 during initial track reload/seek
         if (current >= 2 || lastValidPlaybackTime < 2) {
           lastValidPlaybackTime = current;
+        }
+        if (current > 4) {
+          consecutiveErrorSkips = 0;
         }
       }
       if (duration > 0) lastValidDuration = duration;
@@ -5485,7 +5612,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.5.9';
+let CURRENT_APP_VERSION = '1.6.0';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {

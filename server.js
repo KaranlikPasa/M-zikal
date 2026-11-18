@@ -12,8 +12,8 @@ const pipewirePreserver = require('./pipewire-preserver');
 dns.setDefaultResultOrder('ipv4first');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3456;
-const APP_VERSION = '1.5.9';
-const APP_VERSION_CODE = 59;
+const APP_VERSION = '1.6.0';
+const APP_VERSION_CODE = 60;
 const isLinux = process.platform === 'linux';
 const isWin = process.platform === 'win32';
 
