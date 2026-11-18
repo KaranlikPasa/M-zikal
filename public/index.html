@@ -11,7 +11,7 @@
   <title>Müzikal - Müzik Dinleme Uygulaması</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=1.6.0">
+  <link rel="stylesheet" href="style.css?v=1.7.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -119,7 +119,7 @@
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
           </svg>
           <span>Güncellemeleri Kontrol Et</span>
-          <span class="badge" id="sidebar-app-ver">v1.6.0</span>
+          <span class="badge" id="sidebar-app-ver">v1.7.0</span>
         </button>
         <button class="nav-item nav-discord-btn" id="btn-open-discord-modal" title="Discord'da 'Dinliyor' Durumunu Ayarla">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="#5865F2" class="discord-svg-icon">
@@ -194,6 +194,58 @@
 
     <!-- ANA İÇERİK ALANI (MAIN CONTENT) -->
     <main class="main-content">
+      <!-- MOBİL ONE UI (SAMSUNG MÜZİK × MÜZİKAL) ÜST BAR VE SEKMELER -->
+      <div class="m-oneui-top-chrome" id="m-oneui-top-chrome">
+        <div class="m-oneui-header" id="m-oneui-header">
+          <div class="m-oneui-header-left" id="m-oneui-header-left">
+            <div class="m-oneui-brand" id="m-oneui-brand">
+              <img src="logo.png" alt="Müzikal" class="m-oneui-brand-logo">
+              <span class="m-oneui-brand-title">Müzikal</span>
+            </div>
+            <button class="m-oneui-back-btn" id="m-oneui-back-btn" style="display: none;" title="Geri">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+              <span class="m-oneui-subpage-title" id="m-oneui-subpage-title">Detay</span>
+            </button>
+          </div>
+          <div class="m-oneui-header-actions">
+            <button class="m-oneui-icon-btn" id="m-oneui-btn-add" title="Liste Oluştur / İçe Aktar" style="display: none;">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
+            <button class="m-oneui-icon-btn" id="m-oneui-btn-search" title="Ara">
+              <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7.5"></circle>
+                <line x1="20.5" y1="20.5" x2="16.5" y2="16.5"></line>
+              </svg>
+            </button>
+            <button class="m-oneui-icon-btn m-oneui-more-btn" id="m-oneui-btn-more" title="Menü">
+              <svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor">
+                <circle cx="12" cy="5.5" r="1.8"></circle>
+                <circle cx="12" cy="12" r="1.8"></circle>
+                <circle cx="12" cy="18.5" r="1.8"></circle>
+              </svg>
+              <span class="m-oneui-update-dot" id="m-oneui-update-dot" style="display: none;"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="m-oneui-tabs-wrap" id="m-oneui-tabs-wrap">
+          <div class="m-oneui-tabs" id="m-oneui-tabs" role="tablist">
+            <button class="m-oneui-tab" data-mtab="discover" role="tab">Keşfet</button>
+            <button class="m-oneui-tab" data-mtab="favorites" role="tab">Favoriler</button>
+            <button class="m-oneui-tab" data-mtab="playlists" role="tab">Parça listeleri</button>
+            <button class="m-oneui-tab active" data-mtab="tracks" role="tab">Parçalar</button>
+            <button class="m-oneui-tab" data-mtab="albums" role="tab">Albümler</button>
+            <button class="m-oneui-tab" data-mtab="artists" role="tab">Sanatçılar</button>
+            <button class="m-oneui-tab" data-mtab="folders" role="tab">Klasörler</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ÜST BAŞLIK VE ARAMA ÇUBUĞU -->
       <header class="topbar">
         <!-- MOBİL ÜST SATIR (LOGO + MENÜ BUTONU) -->
@@ -222,6 +274,12 @@
             </button>
           </div>
         </div>
+
+        <button class="m-oneui-search-back" id="m-oneui-search-back" title="Aramayı Kapat">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
 
         <div class="search-box">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" class="search-icon">
@@ -414,6 +472,39 @@
           </div>
         </div>
 
+        <!-- MOBİL ONE UI ARAÇ ÇUBUĞU VE ÖZEL SEKME İÇERİĞİ -->
+        <div class="m-oneui-toolbar" id="m-oneui-toolbar">
+          <button class="m-oneui-sort-btn" id="m-oneui-sort-btn" title="Sıralamayı Değiştir">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="4" y1="6" x2="14" y2="6"></line>
+              <line x1="4" y1="12" x2="11" y2="12"></line>
+              <line x1="4" y1="18" x2="9" y2="18"></line>
+              <polyline points="15 15 18 18 21 15"></polyline>
+              <line x1="18" y1="6" x2="18" y2="18"></line>
+            </svg>
+            <span id="m-oneui-sort-label">İsim</span>
+          </button>
+          <div class="m-oneui-toolbar-right" id="m-oneui-toolbar-right">
+            <div class="m-oneui-detail-actions" id="m-oneui-detail-actions"></div>
+            <button class="m-oneui-circle-btn" id="m-oneui-btn-shuffle-play" title="Karışık Çal">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 3 21 3 21 8"></polyline>
+                <line x1="4" y1="20" x2="21" y2="3"></line>
+                <polyline points="21 16 21 21 16 21"></polyline>
+                <line x1="15" y1="15" x2="21" y2="21"></line>
+                <line x1="4" y1="4" x2="9" y2="9"></line>
+              </svg>
+            </button>
+            <button class="m-oneui-circle-btn" id="m-oneui-btn-play-all" title="Tümünü Çal">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <polygon points="6 4 20 12 6 20 6 4"></polygon>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="m-oneui-dynamic-body" id="m-oneui-dynamic-body" style="display: none;"></div>
+
         <!-- ŞARKI LİSTESİ / IZGARASI -->
         <div class="songs-grid" id="songs-grid">
           <!-- Dynamic Song Cards -->
@@ -579,7 +670,7 @@
               </div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-label">Uygulama Sürümü: <strong style="color:var(--accent);" id="settings-version-label">v1.6.0</strong></div>
+                  <div class="settings-label">Uygulama Sürümü: <strong style="color:var(--accent);" id="settings-version-label">v1.7.0</strong></div>
                   <div class="settings-sub">Mobil (Android APK), Windows ve Linux çapraz platform motoru</div>
                 </div>
                 <button class="btn-primary btn-sm-action" id="settings-btn-check-update">Güncellemeleri Denetle</button>
@@ -593,6 +684,10 @@
           <div class="wrapped-hero-card" id="wrapped-content-box"></div>
         </section>
       </div>
+
+      <!-- MOBİL ONE UI A-Z HIZLI KAYDIRMA ÇUBUĞU -->
+      <div class="m-oneui-az-rail" id="m-oneui-az-rail" style="display: none;"></div>
+      <div class="m-oneui-az-bubble" id="m-oneui-az-bubble" style="display: none;">A</div>
     </main>
 
     <!-- SAĞ YAN PANEL: ÇALMA SIRASI (QUEUE DRAWER) -->
@@ -781,13 +876,12 @@
         </svg>
       </button>
       <button class="btn-ctrl-sm" id="btn-queue-toggle" title="Çalma Sırası">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="8" y1="6" x2="21" y2="6"></line>
-          <line x1="8" y1="12" x2="21" y2="12"></line>
-          <line x1="8" y1="18" x2="21" y2="18"></line>
-          <line x1="3" y1="6" x2="3.01" y2="6"></line>
-          <line x1="3" y1="12" x2="3.01" y2="12"></line>
-          <line x1="3" y1="18" x2="3.01" y2="18"></line>
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="17" y2="6"></line>
+          <line x1="3" y1="12" x2="12" y2="12"></line>
+          <line x1="3" y1="18" x2="10" y2="18"></line>
+          <path d="M16 18V10l5-1.5V12"></path>
+          <circle cx="14" cy="18" r="2.2" fill="currentColor" stroke="none"></circle>
         </svg>
       </button>
       <div class="volume-container">
@@ -1009,7 +1103,7 @@
         <div class="update-icon-badge">🚀</div>
         <div>
           <h3 id="update-title">Yeni Güncelleme Mevcut!</h3>
-          <p id="update-version-text" style="color:var(--accent); font-weight:700;">Sürüm v1.6.0</p>
+          <p id="update-version-text" style="color:var(--accent); font-weight:700;">Sürüm v1.7.0</p>
         </div>
       </div>
       <p style="font-size:12px; margin-bottom:8px; color:var(--text-muted);">Yenilikler:</p>
@@ -1263,13 +1357,30 @@
         <span class="mfp-header-sub">ŞU ANDA ÇALINIYOR</span>
         <span class="mfp-header-album" id="mfp-header-album">Müzikal</span>
       </div>
-      <button class="btn-icon-subtle" id="mfp-btn-queue-toggle" title="Sıra">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="8" y1="6" x2="21" y2="6"></line>
-          <line x1="8" y1="12" x2="21" y2="12"></line>
-          <line x1="8" y1="18" x2="21" y2="18"></line>
-        </svg>
-      </button>
+      <div class="mfp-header-right">
+        <button class="btn-icon-subtle" id="mfp-btn-top-studio" title="Ses Stüdyosu & Ekolayzır">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="4" y1="21" x2="4" y2="14"></line>
+            <line x1="4" y1="10" x2="4" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12" y2="3"></line>
+            <line x1="20" y1="21" x2="20" y2="16"></line>
+            <line x1="20" y1="12" x2="20" y2="3"></line>
+            <line x1="1" y1="14" x2="7" y2="14"></line>
+            <line x1="9" y1="8" x2="15" y2="8"></line>
+            <line x1="17" y1="16" x2="23" y2="16"></line>
+          </svg>
+        </button>
+        <button class="btn-icon-subtle" id="mfp-btn-queue-toggle" title="Çalma Sırası">
+          <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="6" x2="17" y2="6"></line>
+            <line x1="3" y1="12" x2="12" y2="12"></line>
+            <line x1="3" y1="18" x2="10" y2="18"></line>
+            <path d="M16 18V10l5-1.5V12"></path>
+            <circle cx="14" cy="18" r="2.2" fill="currentColor" stroke="none"></circle>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div class="mfp-artwork-wrapper">
@@ -1340,22 +1451,22 @@
 
     <div class="mfp-bottom-bar">
       <button class="btn-pill" id="mfp-btn-add-pl">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19"></line>
           <line x1="5" y1="12" x2="19" y2="12"></line>
         </svg>
-        <span>Listeye Ekle</span>
+        <span>Liste</span>
       </button>
       <button class="btn-pill" id="mfp-btn-download">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="7 10 12 15 17 10"></polyline>
           <line x1="12" y1="15" x2="12" y2="3"></line>
         </svg>
-        <span id="mfp-download-label">Cihaza İndir</span>
+        <span id="mfp-download-label">İndir</span>
       </button>
       <button class="btn-pill" id="mfp-btn-audio-studio">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="4" y1="21" x2="4" y2="14"></line>
           <line x1="4" y1="10" x2="4" y2="3"></line>
           <line x1="12" y1="21" x2="12" y2="12"></line>
@@ -1363,17 +1474,17 @@
           <line x1="20" y1="21" x2="20" y2="16"></line>
           <line x1="20" y1="12" x2="20" y2="3"></line>
         </svg>
-        <span>Stüdyo & Uyku</span>
+        <span>Stüdyo</span>
       </button>
       <button class="btn-pill" id="mfp-btn-video">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="23 7 16 12 23 17 23 7"></polygon>
           <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
         </svg>
         <span>Klip</span>
       </button>
       <button class="btn-pill btn-pill-lyrics" id="mfp-btn-lyrics">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M9 18V5l12-2v13"></path>
           <circle cx="6" cy="18" r="3"></circle>
           <circle cx="18" cy="16" r="3"></circle>
@@ -1514,6 +1625,111 @@
     </div>
   </div>
 
+  <!-- MOBİL ONE UI ÜST SAĞ MENÜ (⋮ POPOVER) -->
+  <div class="m-oneui-popover-backdrop" id="m-oneui-more-backdrop" style="display: none;"></div>
+  <div class="m-oneui-more-menu" id="m-oneui-more-menu" style="display: none;">
+    <button class="m-oneui-menu-item" id="m-menu-account">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
+      <div class="m-oneui-menu-text">
+        <span id="m-menu-account-title">Bulut Hesabı</span>
+        <small id="m-menu-account-sub">Giriş yap ve listelerini eşitle</small>
+      </div>
+    </button>
+    <button class="m-oneui-menu-item" id="m-menu-studio">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></span>
+      <div class="m-oneui-menu-text">
+        <span>Ses Stüdyosu & Ekolayzır</span>
+        <small>5-Bant EQ, hız & uyku zamanlayıcı</small>
+      </div>
+    </button>
+    <button class="m-oneui-menu-item" id="m-menu-spotify">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="#1ed760"><path d="M12 2C6.477 2 2 6.477 2 12c0 5.524 4.477 10 10 10s10-4.476 10-10c0-5.523-4.477-10-10-10zm4.586 14.424a.625.625 0 0 1-.86.208c-2.355-1.439-5.32-1.764-8.812-.966a.626.626 0 1 1-.278-1.22c3.824-.875 7.1-.508 9.742 1.117a.626.626 0 0 1 .208.861zm1.226-2.723a.782.782 0 0 1-1.077.257c-2.695-1.657-6.805-2.138-9.993-1.17a.783.783 0 1 1-.453-1.498c3.642-1.106 8.19-.57 11.266 1.334a.783.783 0 0 1 .257 1.077zm.106-2.837C14.69 9.07 9.38 8.9 6.295 9.835a.939.939 0 1 1-.546-1.796c3.542-1.076 9.42-.876 13.14 1.334a.94.94 0 0 1-3.971 1.491z"/></svg></span>
+      <div class="m-oneui-menu-text">
+        <span>Spotify Listesi Aktar</span>
+      </div>
+    </button>
+    <button class="m-oneui-menu-item" id="m-menu-ytm">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="#ff3b30"><circle cx="12" cy="12" r="10"/><polygon points="10 8.5 16 12 10 15.5" fill="#fff"/></svg></span>
+      <div class="m-oneui-menu-text">
+        <span>YouTube Music Aktar</span>
+      </div>
+    </button>
+    <button class="m-oneui-menu-item" id="m-menu-queue">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="3" y1="6" x2="17" y2="6"/><line x1="3" y1="12" x2="12" y2="12"/><line x1="3" y1="18" x2="10" y2="18"/><path d="M16 18V10l5-1.5V12"/><circle cx="14" cy="18" r="2" fill="currentColor" stroke="none"/></svg></span>
+      <div class="m-oneui-menu-text">
+        <span>Çalma Sırası</span>
+      </div>
+    </button>
+    <button class="m-oneui-menu-item" id="m-menu-video">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></span>
+      <div class="m-oneui-menu-text">
+        <span>Klip / Video Modu</span>
+      </div>
+    </button>
+    <div class="m-oneui-menu-divider"></div>
+    <button class="m-oneui-menu-item" id="m-menu-settings">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+      <div class="m-oneui-menu-text">
+        <span>Ayarlar</span>
+      </div>
+    </button>
+    <button class="m-oneui-menu-item" id="m-menu-updates">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+      <div class="m-oneui-menu-text">
+        <span>Güncellemeleri Denetle</span>
+        <small id="m-menu-version-label">v1.7.0</small>
+      </div>
+      <span class="m-oneui-menu-dot" id="m-menu-update-dot" style="display: none;"></span>
+    </button>
+  </div>
+
+  <!-- MOBİL ONE UI ALT EYLEM SAYFALARI (BOTTOM SHEETS) -->
+  <div class="m-oneui-sheet-backdrop" id="m-oneui-sheet-backdrop" style="display: none;"></div>
+
+  <!-- 1. PARÇA SEÇENEKLERİ BOTTOM SHEET (⋮) -->
+  <div class="m-oneui-bottom-sheet" id="m-oneui-track-sheet" style="display: none;">
+    <div class="m-sheet-handle"></div>
+    <div class="m-sheet-track-head">
+      <img src="" id="m-sheet-track-thumb" alt="Kapak">
+      <div class="m-sheet-track-meta">
+        <div class="m-sheet-track-title" id="m-sheet-track-title">Şarkı Adı</div>
+        <div class="m-sheet-track-artist" id="m-sheet-track-artist">Sanatçı</div>
+      </div>
+    </div>
+    <div class="m-sheet-actions" id="m-sheet-track-actions"></div>
+  </div>
+
+  <!-- 2. LİSTE OLUŞTURMA / İÇE AKTARMA SHEET (+) -->
+  <div class="m-oneui-bottom-sheet" id="m-oneui-add-sheet" style="display: none;">
+    <div class="m-sheet-handle"></div>
+    <div class="m-sheet-title">Çalma Listesi İşlemleri</div>
+    <div class="m-sheet-actions">
+      <button class="m-sheet-action-btn" id="m-add-new-playlist">
+        <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+        <span>Yeni Çalma Listesi Oluştur</span>
+      </button>
+      <button class="m-sheet-action-btn" id="m-add-import-spotify">
+        <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="#1ed760"><path d="M12 2C6.477 2 2 6.477 2 12c0 5.524 4.477 10 10 10s10-4.476 10-10c0-5.523-4.477-10-10-10zm4.586 14.424a.625.625 0 0 1-.86.208c-2.355-1.439-5.32-1.764-8.812-.966a.626.626 0 1 1-.278-1.22c3.824-.875 7.1-.508 9.742 1.117a.626.626 0 0 1 .208.861zm1.226-2.723a.782.782 0 0 1-1.077.257c-2.695-1.657-6.805-2.138-9.993-1.17a.783.783 0 1 1-.453-1.498c3.642-1.106 8.19-.57 11.266 1.334a.783.783 0 0 1 .257 1.077zm.106-2.837C14.69 9.07 9.38 8.9 6.295 9.835a.939.939 0 1 1-.546-1.796c3.542-1.076 9.42-.876 13.14 1.334a.94.94 0 0 1-3.971 1.491z"/></svg></span>
+        <span>Spotify Çalma Listesi Aktar</span>
+      </button>
+      <button class="m-sheet-action-btn" id="m-add-import-ytm">
+        <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="#ff3b30"><circle cx="12" cy="12" r="10"/><polygon points="10 8.5 16 12 10 15.5" fill="#fff"/></svg></span>
+        <span>YouTube Music Listesi Aktar</span>
+      </button>
+      <button class="m-sheet-action-btn" id="m-add-import-json">
+        <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+        <span>Dosyadan İçe Aktar (.json)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 3. SIRALAMA SEÇENEKLERİ SHEET (⇵) -->
+  <div class="m-oneui-bottom-sheet" id="m-oneui-sort-sheet" style="display: none;">
+    <div class="m-sheet-handle"></div>
+    <div class="m-sheet-title">Sıralama Ölçütü</div>
+    <div class="m-sheet-actions" id="m-sheet-sort-options"></div>
+  </div>
+
   <!-- NATIVE HTML5 AUDIO ELEMENT FOR OFFLINE DOWNLOADED TRACKS -->
   <audio id="local-audio-player" preload="metadata"></audio>
 
@@ -1521,7 +1737,7 @@
   <div class="toast-notification" id="toast-notification"></div>
 
   <!-- APPLICATION SCRIPT & YOUTUBE API -->
-  <script src="app.js?v=1.6.0"></script>
+  <script src="app.js?v=1.7.0"></script>
   <script id="yt-iframe-api-tag" src="https://www.youtube.com/iframe_api"></script>
 </body>
 </html>

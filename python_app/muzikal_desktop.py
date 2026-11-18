@@ -278,7 +278,7 @@ def run_pywebview(app_root, server_proc):
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Muzikal.Desktop.1.6.0")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Muzikal.Desktop.1.7.0")
         except Exception:
             pass
 

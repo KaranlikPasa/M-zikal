@@ -1375,7 +1375,7 @@ async function playSong(song, playlist = null, index = -1) {
   const isOffline = state.downloadedIds.has(song.id);
   const hasServerFile = state.serverDownloadedIds && state.serverDownloadedIds.has(song.id);
   if (elements.mfpDownloadLabel) {
-    elements.mfpDownloadLabel.textContent = isOffline ? 'Cihazda Kayıtlı' : 'Cihaza İndir';
+    elements.mfpDownloadLabel.textContent = isOffline ? 'Kayıtlı' : 'İndir';
   }
 
   const videoTitleLabel = document.getElementById('video-clip-title-label');
@@ -1506,6 +1506,7 @@ function updatePlayPauseButton() {
     }
   }
   syncDiscordPresence();
+  document.body.classList.toggle('m-is-playing', !!state.isPlaying);
 }
 
 // --- ADVANCED SHUFFLE & SMART RECOMMENDATION ENGINE (v1.4.3 AI + SIMILARITY GRAPH) ---
@@ -2882,7 +2883,7 @@ function markSongCardDownloadedUI(songId) {
   if (!songId) return;
   const card = document.querySelector(`.song-card[data-id="${songId}"]`);
   if (card) {
-    const dlBtn = card.querySelector('.btn-dl-song');
+    const dlBtn = card.querySelector('.btn-card-download, .btn-dl-song');
     if (dlBtn) {
       dlBtn.classList.remove('downloading');
       dlBtn.classList.add('downloaded');
@@ -2898,7 +2899,7 @@ function markSongCardDownloadedUI(songId) {
     }
   }
   if (state.currentSong && state.currentSong.id === songId && elements.mfpDownloadLabel) {
-    elements.mfpDownloadLabel.textContent = 'Cihazda Kayıtlı';
+    elements.mfpDownloadLabel.textContent = 'Kayıtlı';
   }
 }
 
@@ -3179,6 +3180,8 @@ async function deleteDownloadedTrack(songId) {
   showToast('Şarkı indirilenlerden kaldırıldı.');
   if (state.currentView === 'downloads') {
     openDownloadsView();
+  } else if (isMobileOneUi()) {
+    refreshMobileOneUiIfNeeded();
   } else {
     renderSongs(state.currentPlaylist);
   }
@@ -3221,10 +3224,10 @@ function renderSongs(songs, isSearching = false) {
     const isDownloaded = state.downloadedIds.has(song.id);
 
     return `
-      <div class="song-card ${isPlaying ? 'playing' : ''}" data-id="${song.id}" data-index="${idx}">
+      <div class="song-card ${isPlaying ? 'playing' : ''}" data-id="${escapeHtml(song.id)}" data-index="${idx}" data-alpha="${getTrAlphaChar(song.title)}">
         <div class="song-card-thumb-wrap">
-          <img src="${song.thumbnail || 'https://via.placeholder.com/240x135'}" class="song-card-thumb" loading="lazy" decoding="async">
-          ${song.duration ? `<span class="song-card-duration">${song.duration}</span>` : ''}
+          <img src="${escapeHtml(song.thumbnail || 'https://via.placeholder.com/240x135')}" class="song-card-thumb" ${idx >= 10 ? 'loading="lazy"' : ''} decoding="async">
+          ${song.duration ? `<span class="song-card-duration">${escapeHtml(song.duration)}</span>` : ''}
           <div class="song-card-hover-play" title="Çal">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <polygon points="6 4 18 12 6 20 6 4"></polygon>
@@ -3232,12 +3235,20 @@ function renderSongs(songs, isSearching = false) {
           </div>
         </div>
         <div class="song-card-info">
-          <div class="song-card-title" title="${song.title}">${song.title}</div>
-          <div class="song-card-channel">${song.channel}</div>
+          <div class="song-card-title" title="${escapeHtml(song.title)}">${escapeHtml(song.title)}</div>
+          <div class="song-card-channel">${escapeHtml(song.channel || 'Müzikal')}</div>
         </div>
         <div class="song-card-right">
-          ${song.duration ? `<span class="song-card-time">${song.duration}</span>` : ''}
+          ${song.duration ? `<span class="song-card-time">${escapeHtml(song.duration)}</span>` : ''}
           <div class="song-card-actions">
+          ${isDownloaded ? '<span class="m-card-offline-dot" title="Cihazda Kayıtlı">✓</span>' : ''}
+          <button class="btn-icon-subtle btn-card-more" title="Seçenekler" aria-label="Seçenekler">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <circle cx="12" cy="5.5" r="1.7"></circle>
+              <circle cx="12" cy="12" r="1.7"></circle>
+              <circle cx="12" cy="18.5" r="1.7"></circle>
+            </svg>
+          </button>
           <button class="btn-icon-subtle btn-add-q" title="Sıraya Ekle">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="4" y1="6" x2="14" y2="6"></line>
@@ -3278,6 +3289,14 @@ function renderSongs(songs, isSearching = false) {
     card.addEventListener('click', () => {
       playSong(song, songs, idx);
     });
+
+    const moreBtn = card.querySelector('.btn-card-more');
+    if (moreBtn) {
+      moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openMobileTrackSheet(song);
+      });
+    }
 
     const addQBtn = card.querySelector('.btn-add-q');
     addQBtn.addEventListener('click', (e) => {
@@ -3496,10 +3515,32 @@ async function fetchExploreGenre(genreKey, forceRefresh = false) {
     if (!songs || songs.length === 0) {
       songs = BUNDLED_EXPLORE_SONGS;
     }
+    mobileUiState.genreCache[genreKey] = songs;
+    if (genreKey === 'trendler' || mobileUiState.discoverSongs.length === 0) {
+      mobileUiState.discoverSongs = songs;
+    }
+    if (isMobileOneUi()) {
+      elements.loadingState.style.display = 'none';
+      if (!mobileUiState.isSearching && !mobileUiState.detail) {
+        renderMobileTab();
+      }
+      return;
+    }
     state.currentPlaylist = songs;
     renderSongs(state.currentPlaylist);
   } catch (err) {
     console.warn('Explore fetch fallback to bundled:', err);
+    mobileUiState.genreCache[genreKey] = BUNDLED_EXPLORE_SONGS;
+    if (mobileUiState.discoverSongs.length === 0) {
+      mobileUiState.discoverSongs = BUNDLED_EXPLORE_SONGS;
+    }
+    if (isMobileOneUi()) {
+      elements.loadingState.style.display = 'none';
+      if (!mobileUiState.isSearching && !mobileUiState.detail) {
+        renderMobileTab();
+      }
+      return;
+    }
     state.currentPlaylist = BUNDLED_EXPLORE_SONGS;
     renderSongs(state.currentPlaylist);
   }
@@ -3512,7 +3553,10 @@ function showMainSongArea(visible = true) {
   if (settingsViewEl) settingsViewEl.style.display = 'none';
   if (wrappedViewEl) wrappedViewEl.style.display = 'none';
   if (sectionHeaderEl) sectionHeaderEl.style.display = visible ? 'flex' : 'none';
-  if (elements.songsGrid) elements.songsGrid.style.display = visible ? '' : 'none';
+  if (elements.songsGrid) {
+    elements.songsGrid.style.display = visible ? '' : 'none';
+    elements.songsGrid.classList.toggle('m-hidden', !visible);
+  }
   if (!visible) {
     if (elements.loadingState) elements.loadingState.style.display = 'none';
     if (elements.emptyState) elements.emptyState.style.display = 'none';
@@ -3521,12 +3565,24 @@ function showMainSongArea(visible = true) {
 
 async function performSearch(query) {
   if (!query || query.trim() === '') {
+    mobileUiState.isSearching = false;
+    if (isMobileOneUi()) {
+      renderMobileTab();
+      return;
+    }
     showMainSongArea(true);
     updateCategoryChipsVisibility();
     fetchExploreGenre(state.currentGenre);
     return;
   }
 
+  mobileUiState.isSearching = true;
+  if (isMobileOneUi()) {
+    const dynBody = document.getElementById('m-oneui-dynamic-body');
+    if (dynBody) dynBody.style.display = 'none';
+    setMobileAzVisible(false);
+    updateMobileToolbar('search', []);
+  }
   showMainSongArea(true);
   elements.heroBanner.style.display = 'none';
   if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
@@ -3542,6 +3598,9 @@ async function performSearch(query) {
   try {
     const data = await apiFetch(`/api/search?q=${encodeURIComponent(query)}`);
     state.currentPlaylist = data.results || (Array.isArray(data) ? data : []);
+    if (isMobileOneUi()) {
+      updateMobileToolbar('search', state.currentPlaylist);
+    }
     if (state.currentPlaylist.length === 0) {
       elements.loadingState.style.display = 'none';
       elements.emptyState.style.display = 'flex';
@@ -3644,6 +3703,7 @@ async function loadLibrary() {
 
   elements.favCountBadge.textContent = (state.library.favorites || []).length;
   renderSidebarPlaylists();
+  refreshMobileOneUiIfNeeded();
 }
 
 // --- DISCORD RICH PRESENCE CLIENT ---
@@ -3757,6 +3817,7 @@ async function toggleFavorite(song) {
       elements.favCountBadge.textContent = state.library.favorites.length;
       syncLikeState();
       showToast(data.isFavorite ? '❤️ Beğenilen Şarkılara eklendi' : 'Beğenilen Şarkılardan kaldırıldı');
+      refreshMobileOneUiIfNeeded();
       return;
     }
   } catch (e) {
@@ -3776,6 +3837,7 @@ async function toggleFavorite(song) {
   elements.favCountBadge.textContent = state.library.favorites.length;
   syncLikeState();
   showToast(isFav ? '❤️ Beğenilen Şarkılara eklendi' : 'Beğenilen Şarkılardan kaldırıldı');
+  refreshMobileOneUiIfNeeded();
 }
 
 function syncLikeState() {
@@ -3839,6 +3901,7 @@ async function createNewPlaylist(name, description = '') {
   }
   persistLibrary(state.library);
   renderSidebarPlaylists();
+  refreshMobileOneUiIfNeeded();
   return newPlaylist;
 }
 
@@ -3853,8 +3916,14 @@ async function deletePlaylist(plId) {
 
   renderSidebarPlaylists();
   showToast(`🗑️ "${pl.name}" çalma listesi silindi.`);
+  if (isMobileOneUi() && mobileUiState.detail && mobileUiState.detail.playlistId === plId) {
+    closeMobileDetail();
+    return;
+  }
   if (state.currentView === 'playlist' && state.currentPlaylistId === plId) {
     navigateTo('home');
+  } else {
+    refreshMobileOneUiIfNeeded();
   }
 }
 
@@ -3979,7 +4048,6 @@ function openPlaylistView(plId) {
 
   state.currentView = 'playlist';
   state.currentPlaylistId = plId;
-  showMainSongArea(true);
 
   // Close mobile sidebar drawer when selecting a playlist
   if (elements.sidebar) elements.sidebar.classList.remove('mobile-open');
@@ -3991,6 +4059,24 @@ function openPlaylistView(plId) {
 
   if (elements.searchInput) elements.searchInput.value = '';
   if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
+
+  if (isMobileOneUi()) {
+    mobileUiState.isSearching = false;
+    document.body.classList.remove('m-search-open');
+    openMobileDetail({
+      type: 'playlist',
+      playlistId: plId,
+      title: pl.name,
+      subtitle: pl.description || `${pl.songs.length} parça`,
+      cover: pl.cover || (pl.songs[0] && pl.songs[0].thumbnail) || '',
+      songs: pl.songs,
+      allowDelete: true,
+      showDownloadAll: true
+    });
+    return;
+  }
+
+  showMainSongArea(true);
   elements.heroBanner.style.display = 'none';
   if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
   updateCategoryChipsVisibility();
@@ -4003,23 +4089,12 @@ function openPlaylistView(plId) {
   renderSongs(pl.songs);
 }
 
-function openDownloadsView() {
-  state.currentView = 'downloads';
-  showMainSongArea(true);
-  if (elements.searchInput) elements.searchInput.value = '';
-  if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
-  elements.heroBanner.style.display = 'none';
-  if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
-  updateCategoryChipsVisibility();
-  elements.currentSectionTitle.textContent = 'İndirilenler & Çevrimdışı Parçalar';
-  elements.currentSectionDesc.textContent = `Cihazınızda kayıtlı ${state.downloadedIds.size} şarkı. İnternetsiz dinlenebilir.`;
-
-  // Filter songs across library or construct from downloaded metadata / IDs
+function getOfflineDownloadedSongsList() {
   const offlineSongs = [];
   const allKnownSongs = [
-    ...state.library.favorites,
-    ...state.library.history,
-    ...(state.library.playlists.flatMap(p => p.songs || []))
+    ...(state.library.favorites || []),
+    ...(state.library.history || []),
+    ...((state.library.playlists || []).flatMap(p => p.songs || []))
   ];
   const savedMeta = getLocalDownloadedMeta();
 
@@ -4041,6 +4116,37 @@ function openDownloadsView() {
       });
     }
   }
+  return offlineSongs;
+}
+
+function openDownloadsView() {
+  state.currentView = 'downloads';
+  if (elements.searchInput) elements.searchInput.value = '';
+  if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
+
+  const offlineSongs = getOfflineDownloadedSongsList();
+
+  if (isMobileOneUi()) {
+    mobileUiState.isSearching = false;
+    document.body.classList.remove('m-search-open');
+    openMobileDetail({
+      type: 'folder',
+      title: 'İndirilenler (Çevrimdışı)',
+      subtitle: `/Müzikal/Çevrimdışı • ${offlineSongs.length} parça`,
+      cover: (offlineSongs[0] && offlineSongs[0].thumbnail) || '',
+      songs: offlineSongs,
+      allowDelete: false,
+      showDownloadAll: false
+    });
+    return;
+  }
+
+  showMainSongArea(true);
+  elements.heroBanner.style.display = 'none';
+  if (elements.homeCustomSections) elements.homeCustomSections.style.display = 'none';
+  updateCategoryChipsVisibility();
+  elements.currentSectionTitle.textContent = 'İndirilenler & Çevrimdışı Parçalar';
+  elements.currentSectionDesc.textContent = `Cihazınızda kayıtlı ${state.downloadedIds.size} şarkı. İnternetsiz dinlenebilir.`;
 
   renderListActionButtons(offlineSongs, null, false, false);
   state.currentPlaylist = offlineSongs;
@@ -4153,6 +4259,45 @@ function navigateTo(view) {
   // Reset search input and clear button when navigating
   if (elements.searchInput) elements.searchInput.value = '';
   if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
+  mobileUiState.isSearching = false;
+  document.body.classList.remove('m-search-open');
+
+  if (isMobileOneUi()) {
+    if (elements.contentScroll) elements.contentScroll.scrollTop = 0;
+    if (view === 'settings') {
+      openMobileDetail({ type: 'settings', title: 'Ayarlar' });
+      return;
+    }
+    if (view === 'wrapped') {
+      openMobileDetail({ type: 'wrapped', title: 'Yıl Sonu Özeti' });
+      return;
+    }
+    if (view === 'home' || view === 'explore') {
+      setMobileTab('discover');
+      return;
+    }
+    if (view === 'favorites') {
+      setMobileTab('favorites');
+      return;
+    }
+    if (view === 'downloads') {
+      openDownloadsView();
+      return;
+    }
+    if (view === 'history') {
+      const hist = state.library.history || [];
+      openMobileDetail({
+        type: 'folder',
+        title: 'Dinleme Geçmişi',
+        subtitle: `/Müzikal/Geçmiş • ${hist.length} parça`,
+        cover: (hist[0] && hist[0].thumbnail) || '',
+        songs: hist,
+        allowDelete: false,
+        showDownloadAll: true
+      });
+      return;
+    }
+  }
 
   updateCategoryChipsVisibility();
   if (elements.contentScroll) elements.contentScroll.scrollTop = 0;
@@ -4659,6 +4804,11 @@ function setupEventListeners() {
   elements.btnClearSearch.addEventListener('click', () => {
     elements.searchInput.value = '';
     elements.btnClearSearch.style.display = 'none';
+    mobileUiState.isSearching = false;
+    if (isMobileOneUi()) {
+      renderMobileTab();
+      return;
+    }
     if (state.currentView === 'home') {
       elements.heroBanner.style.display = 'flex';
     }
@@ -5612,7 +5762,7 @@ function syncLyricsWithTime(currentTime, forceScroll = false) {
 }
 
 // --- AUTOMATIC & ON-DEMAND UPDATE CHECKER ---
-let CURRENT_APP_VERSION = '1.6.0';
+let CURRENT_APP_VERSION = '1.7.0';
 let lastAutoCheckTime = 0;
 
 async function checkForAppUpdates(isManual = false) {
@@ -5702,6 +5852,10 @@ async function checkForAppUpdates(isManual = false) {
       if (progressContainer) progressContainer.style.display = 'none';
       if (btnDismiss) btnDismiss.style.display = 'inline-block';
       if (modal) modal.style.display = 'flex';
+      const mDot = document.getElementById('m-oneui-update-dot');
+      const mMenuDot = document.getElementById('m-menu-update-dot');
+      if (mDot) mDot.style.display = 'block';
+      if (mMenuDot) mMenuDot.style.display = 'block';
       if (isManual) showToast(`🚀 Yeni sürüm (v${remoteTag}) bulundu!`);
     } else {
       if (isManual) {
@@ -5992,6 +6146,10 @@ function renderUserAccount() {
         elements.topbarUserName.textContent = (state.user.name || state.user.email.split('@')[0]);
       }
     }
+    const mTitle = document.getElementById('m-menu-account-title');
+    const mSub = document.getElementById('m-menu-account-sub');
+    if (mTitle) mTitle.textContent = state.user.name || 'Bulut Hesabı';
+    if (mSub) mSub.textContent = state.user.email || 'Eşitlendi';
   } else {
     if (elements.btnOpenGoogleLogin) elements.btnOpenGoogleLogin.style.display = 'flex';
     if (elements.userProfileCard) elements.userProfileCard.style.display = 'none';
@@ -6001,6 +6159,10 @@ function renderUserAccount() {
       if (elements.topbarUserAvatar) elements.topbarUserAvatar.style.display = 'none';
       if (elements.topbarUserName) elements.topbarUserName.textContent = 'Giriş Yap / Kayıt Ol';
     }
+    const mTitle = document.getElementById('m-menu-account-title');
+    const mSub = document.getElementById('m-menu-account-sub');
+    if (mTitle) mTitle.textContent = 'Bulut Hesabı';
+    if (mSub) mSub.textContent = 'Giriş yap ve listelerini eşitle';
   }
 }
 
@@ -7061,6 +7223,1525 @@ function initAudioStudio() {
   });
 }
 
+// --- SAMSUNG MUSIC × MÜZİKAL MOBILE ONE UI ENGINE ---
+const MOBILE_TAB_ORDER = ['discover', 'favorites', 'playlists', 'tracks', 'albums', 'artists', 'folders'];
+const TR_ALPHABET = ['A', 'B', 'C', 'Ç', 'D', 'E', 'F', 'G', 'Ğ', 'H', 'I', 'İ', 'J', 'K', 'L', 'M', 'N', 'O', 'Ö', 'P', 'R', 'S', 'Ş', 'T', 'U', 'Ü', 'V', 'Y', 'Z'];
+
+const mobileUiState = {
+  activeTab: 'tracks',
+  detail: null,
+  sortModes: {
+    tracks: 'name',
+    favorites: 'recent',
+    albums: 'date',
+    artists: 'name',
+    folders: 'name',
+    detail: 'default'
+  },
+  discoverSongs: [],
+  genreCache: {},
+  discoverGenre: 'trendler',
+  favHintDismissed: false,
+  isSearching: false,
+  activeSongs: [],
+  currentSheetSong: null
+};
+
+const M_FEATURED_COLLECTIONS = [
+  { genre: 'trendler', title: 'Top 50 Türkiye', tag: 'MÜZİKAL MIX', sub: 'Günün En Popüler Hitleri', gradient: 'linear-gradient(145deg, #059669 0%, #0f766e 55%, #064e3b 100%)' },
+  { genre: 'turkce-pop', title: 'Türkçe Pop', tag: 'HİT LİSTE', sub: 'Zirvedeki Pop Şarkıları', gradient: 'linear-gradient(145deg, #7c3aed 0%, #4c1d95 100%)' },
+  { genre: 'turkce-rap', title: 'Türkçe Rap', tag: 'SOKAK & TRAP', sub: 'En Sıcak Rap Parçaları', gradient: 'linear-gradient(145deg, #dc2626 0%, #991b1b 100%)' },
+  { genre: 'global', title: 'Top Şarkılar Global', tag: 'DÜNYA LİSTESİ', sub: 'Haftalık Global Müzikler', gradient: 'linear-gradient(145deg, #2563eb 0%, #1e3a8a 100%)' },
+  { genre: 'rock', title: 'Rock & Metal', tag: 'ALTERNATİF', sub: 'Efsanevi Gitar Riffleri', gradient: 'linear-gradient(145deg, #d97706 0%, #78350f 100%)' },
+  { genre: 'akustik', title: 'Akustik & Chill', tag: 'SAKİN MOD', sub: 'Yumuşak & Huzurlu Akşamlar', gradient: 'linear-gradient(145deg, #0891b2 0%, #164e63 100%)' },
+  { genre: 'lofi', title: 'Lofi Beats', tag: 'ODAKLANMA', sub: 'Çalışma & Gece Ritimleri', gradient: 'linear-gradient(145deg, #db2777 0%, #831843 100%)' }
+];
+
+const M_GENRE_LABELS = {
+  'trendler': '🔥 Trendler',
+  'turkce-pop': '🇹🇷 Türkçe Pop',
+  'turkce-rap': '🎤 Türkçe Rap',
+  'rock': '🎸 Rock & Metal',
+  'akustik': '☕ Akustik & Chill',
+  'lofi': '🎧 Lofi Beats',
+  'global': '🌍 Global Top 50'
+};
+
+function isMobileOneUi() {
+  return window.innerWidth <= 768;
+}
+
+function stripSortQuotes(str) {
+  return String(str || '')
+    .replace(/^[\s"'«»“”‘’(\[\{\-–—🔥🇹🇷🎤🎸☕🎧🌍🎵🟢🔴📁]+/, '')
+    .trim();
+}
+
+function getTrAlphaChar(str) {
+  const clean = stripSortQuotes(str);
+  if (!clean) return 'A';
+  const ch = clean.charAt(0).toLocaleUpperCase('tr-TR');
+  if (TR_ALPHABET.includes(ch)) return ch;
+  if (ch === 'W') return 'V';
+  if (ch === 'Q') return 'K';
+  if (ch === 'X') return 'Y';
+  return '#';
+}
+
+function compareTrStrings(a, b) {
+  return stripSortQuotes(a).localeCompare(stripSortQuotes(b), 'tr-TR', { sensitivity: 'base' });
+}
+
+function setMobileAzVisible(visible, selector = '') {
+  document.body.classList.toggle('m-az-visible', !!visible);
+  const rail = document.getElementById('m-oneui-az-rail');
+  if (!rail) return;
+  if (!visible) {
+    rail.style.display = 'none';
+    const bubble = document.getElementById('m-oneui-az-bubble');
+    if (bubble) bubble.style.display = 'none';
+    return;
+  }
+  rail.dataset.targetSelector = selector;
+  if (rail.children.length === 0) {
+    rail.innerHTML = TR_ALPHABET.map(l => `<span class="m-az-letter" data-letter="${l}">${l}</span>`).join('');
+  }
+  rail.style.display = 'flex';
+}
+
+function scrollToAlphaLetter(letter, clientY = null) {
+  const rail = document.getElementById('m-oneui-az-rail');
+  const bubble = document.getElementById('m-oneui-az-bubble');
+  const selector = (rail && rail.dataset.targetSelector) || '#songs-grid .song-card';
+  const items = Array.from(document.querySelectorAll(selector));
+
+  if (rail) {
+    rail.querySelectorAll('.m-az-letter').forEach(el => {
+      el.classList.toggle('active', el.dataset.letter === letter);
+    });
+  }
+  if (bubble) {
+    bubble.textContent = letter;
+    bubble.style.display = 'flex';
+    if (clientY !== null) {
+      const clampedY = Math.max(130, Math.min(window.innerHeight - 130, clientY - 24));
+      bubble.style.top = `${clampedY}px`;
+    }
+  }
+
+  if (items.length === 0) return;
+
+  let match = items.find(el => (el.dataset.alpha || '') === letter);
+  if (!match) {
+    const targetIdx = TR_ALPHABET.indexOf(letter);
+    match = items.find(el => {
+      const a = el.dataset.alpha || '';
+      const idx = TR_ALPHABET.indexOf(a);
+      return idx >= targetIdx && targetIdx >= 0;
+    });
+  }
+  if (!match) match = items[items.length - 1];
+  if (match) {
+    match.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }
+}
+
+function getMobileAllTracksCatalog() {
+  const map = new Map();
+  const addList = (arr) => {
+    if (!Array.isArray(arr)) return;
+    arr.forEach(s => {
+      if (s && s.id && !map.has(s.id)) {
+        map.set(s.id, s);
+      }
+    });
+  };
+  addList(state.library.favorites);
+  addList(state.library.history);
+  (state.library.playlists || []).forEach(p => addList(p.songs));
+  addList(mobileUiState.discoverSongs);
+  Object.values(mobileUiState.genreCache).forEach(arr => addList(arr));
+  if (map.size === 0) {
+    addList(BUNDLED_EXPLORE_SONGS);
+  }
+  return Array.from(map.values());
+}
+
+function getSortLabelText(mode) {
+  switch (mode) {
+    case 'name': return 'İsim';
+    case 'name-desc': return 'İsim (Z-A)';
+    case 'recent': return 'Son eklenen';
+    case 'count': return 'Parça sayısı';
+    case 'date': return 'Yayın tarihi';
+    default: return 'Varsayılan';
+  }
+}
+
+function sortSongsList(songs, mode) {
+  const list = [...(songs || [])];
+  if (mode === 'name') {
+    list.sort((a, b) => compareTrStrings(a.title, b.title));
+  } else if (mode === 'name-desc') {
+    list.sort((a, b) => compareTrStrings(b.title, a.title));
+  }
+  return list;
+}
+
+function updateMobileHeaderChrome() {
+  const brandEl = document.getElementById('m-oneui-brand');
+  const backBtn = document.getElementById('m-oneui-back-btn');
+  const subTitle = document.getElementById('m-oneui-subpage-title');
+  const tabsWrap = document.getElementById('m-oneui-tabs-wrap');
+  const addBtn = document.getElementById('m-oneui-btn-add');
+
+  if (mobileUiState.detail) {
+    if (brandEl) brandEl.style.display = 'none';
+    if (backBtn) backBtn.style.display = 'inline-flex';
+    if (subTitle) subTitle.textContent = mobileUiState.detail.title || 'Detay';
+    if (tabsWrap) tabsWrap.style.display = 'none';
+    if (addBtn) addBtn.style.display = 'none';
+  } else {
+    if (brandEl) brandEl.style.display = 'flex';
+    if (backBtn) backBtn.style.display = 'none';
+    if (tabsWrap) tabsWrap.style.display = 'block';
+    if (addBtn) addBtn.style.display = (mobileUiState.activeTab === 'playlists' && !mobileUiState.isSearching) ? 'inline-flex' : 'none';
+  }
+
+  const tabsContainer = document.getElementById('m-oneui-tabs');
+  if (tabsContainer) {
+    tabsContainer.querySelectorAll('.m-oneui-tab').forEach(btn => {
+      const active = btn.dataset.mtab === mobileUiState.activeTab;
+      btn.classList.toggle('active', active);
+      if (active) {
+        try {
+          btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        } catch (e) {}
+      }
+    });
+  }
+}
+
+function updateMobileToolbar(context, songs = [], extraConfig = null) {
+  const toolbar = document.getElementById('m-oneui-toolbar');
+  const sortBtn = document.getElementById('m-oneui-sort-btn');
+  const sortLabel = document.getElementById('m-oneui-sort-label');
+  const shuffleBtn = document.getElementById('m-oneui-btn-shuffle-play');
+  const playBtn = document.getElementById('m-oneui-btn-play-all');
+  const detailActions = document.getElementById('m-oneui-detail-actions');
+  if (!toolbar) return;
+
+  const hideAll = (context === 'discover' || context === 'playlists' || context === 'favorites-empty' || context === 'settings' || context === 'wrapped');
+  if (hideAll) {
+    toolbar.style.display = 'none';
+    return;
+  }
+
+  toolbar.style.display = 'flex';
+  const showPlayPills = (context === 'tracks' || context === 'favorites' || context === 'detail' || context === 'search');
+  if (shuffleBtn) {
+    shuffleBtn.style.display = showPlayPills ? 'inline-flex' : 'none';
+    shuffleBtn.classList.toggle('active', state.shuffleMode !== 'off');
+  }
+  if (playBtn) {
+    playBtn.style.display = showPlayPills ? 'inline-flex' : 'none';
+  }
+  if (sortBtn) {
+    sortBtn.style.display = context === 'search' ? 'none' : 'inline-flex';
+  }
+  if (sortLabel) {
+    const mode = mobileUiState.sortModes[context] || 'name';
+    sortLabel.textContent = context === 'search' ? `${songs.length} sonuç` : getSortLabelText(mode);
+  }
+  if (detailActions) {
+    detailActions.innerHTML = '';
+    if (extraConfig && extraConfig.showDownloadAll && songs.length > 0) {
+      const allDone = songs.every(s => s && state.downloadedIds.has(s.id) && !String(s.id).startsWith('sp_'));
+      const dlAllBtn = document.createElement('button');
+      dlAllBtn.className = `m-oneui-pill-mini ${allDone ? 'accent' : ''}`;
+      dlAllBtn.textContent = allDone ? '✓ İndirildi' : '⬇ İndir';
+      dlAllBtn.addEventListener('click', () => downloadAllSongsInList(songs, extraConfig.playlistId || null, dlAllBtn));
+      detailActions.appendChild(dlAllBtn);
+    }
+    if (extraConfig && extraConfig.allowDelete && extraConfig.playlistId) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'm-oneui-pill-mini danger';
+      delBtn.textContent = 'Sil';
+      delBtn.addEventListener('click', () => deletePlaylist(extraConfig.playlistId));
+      detailActions.appendChild(delBtn);
+    }
+  }
+  mobileUiState.activeSongs = songs;
+}
+
+function renderMobileDiscoverTab(dynBody) {
+  const exploreSongs = (mobileUiState.genreCache[mobileUiState.discoverGenre] || mobileUiState.discoverSongs || BUNDLED_EXPLORE_SONGS).slice(0, 14);
+  const recents = (state.library.history || []).slice(0, 10);
+
+  dynBody.innerHTML = `
+    <div class="m-discover-brand-banner">
+      <img src="logo.png" alt="Müzikal">
+      <span>Müzikal</span>
+    </div>
+
+    <div class="m-discover-chips-row">
+      ${Object.entries(M_GENRE_LABELS).map(([key, label]) => `
+        <button class="m-discover-chip ${mobileUiState.discoverGenre === key ? 'active' : ''}" data-mgenre="${key}">${label}</button>
+      `).join('')}
+    </div>
+
+    <div class="m-section-head">
+      <span class="m-section-head-title">Popüler Parçalar & Trendler</span>
+      <button class="m-section-head-btn" id="m-discover-refresh-btn">↻ Yenile</button>
+    </div>
+    <div class="m-hscroll-row" id="m-discover-tracks-row">
+      ${exploreSongs.map((s, idx) => `
+        <div class="m-square-card" data-didx="${idx}">
+          <div class="m-square-cover-wrap">
+            <img src="${escapeHtml(s.thumbnail || 'https://via.placeholder.com/240')}" class="m-square-cover" loading="lazy">
+            <span class="m-square-corner-badge">♪</span>
+          </div>
+          <div class="m-square-title">${escapeHtml(s.title)}</div>
+          <div class="m-square-sub">${escapeHtml(s.channel || 'Müzikal')}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="m-section-head">
+      <span class="m-section-head-title">Öne Çıkan Listeler</span>
+    </div>
+    <div class="m-hscroll-row">
+      ${M_FEATURED_COLLECTIONS.map(col => `
+        <div class="m-featured-card" data-fgenre="${col.genre}">
+          <div class="m-featured-poster" style="background:${col.gradient};">
+            <span class="m-featured-badge">${col.tag}</span>
+            <div>
+              <div class="m-featured-poster-title">${col.title}</div>
+              <div class="m-featured-poster-sub">${col.sub}</div>
+            </div>
+          </div>
+          <div class="m-square-title">${col.title}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    ${recents.length > 0 ? `
+      <div class="m-section-head">
+        <span class="m-section-head-title">Son Dinlenenler</span>
+        <button class="m-section-head-btn" id="m-discover-all-history">Tümü ›</button>
+      </div>
+      <div class="m-hscroll-row" id="m-discover-recents-row">
+        ${recents.map((s, idx) => `
+          <div class="m-square-card" data-ridx="${idx}">
+            <div class="m-square-cover-wrap">
+              <img src="${escapeHtml(s.thumbnail || 'https://via.placeholder.com/240')}" class="m-square-cover" loading="lazy">
+            </div>
+            <div class="m-square-title">${escapeHtml(s.title)}</div>
+            <div class="m-square-sub">${escapeHtml(s.channel || '')}</div>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    <div class="m-section-head">
+      <span class="m-section-head-title">Önerilen Sanatçılar</span>
+    </div>
+    <div class="artists-scroll-row" style="padding: 4px 16px 16px 16px;">
+      ${RECOMMENDED_ARTISTS.map((a, idx) => `
+        <div class="artist-circle-card" data-martist="${escapeHtml(a.name)}">
+          <div class="artist-avatar-wrap">
+            <img src="${a.img}" class="artist-avatar-img" alt="${escapeHtml(a.name)}" loading="lazy" onerror="window.handleArtistImgError(this, '${escapeHtml(a.name).replace(/'/g, "\\'")}', ${idx})">
+          </div>
+          <div class="artist-name">${escapeHtml(a.name)}</div>
+          <div class="artist-role">${a.role}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  dynBody.querySelectorAll('.m-discover-chip').forEach(chip => {
+    chip.addEventListener('click', async () => {
+      const g = chip.dataset.mgenre;
+      mobileUiState.discoverGenre = g;
+      if (mobileUiState.genreCache[g]) {
+        renderMobileTab();
+      } else {
+        showToast(`${M_GENRE_LABELS[g] || g} yükleniyor...`);
+        await fetchExploreGenre(g);
+      }
+    });
+  });
+
+  const refBtn = document.getElementById('m-discover-refresh-btn');
+  if (refBtn) {
+    refBtn.addEventListener('click', async () => {
+      showToast('🔥 Trendler yenileniyor...');
+      await fetchExploreGenre(mobileUiState.discoverGenre, true);
+      showToast('✨ Güncel trendler yüklendi!');
+    });
+  }
+
+  dynBody.querySelectorAll('#m-discover-tracks-row .m-square-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const idx = parseInt(card.dataset.didx, 10);
+      if (exploreSongs[idx]) playSong(exploreSongs[idx], exploreSongs, idx);
+    });
+  });
+
+  dynBody.querySelectorAll('#m-discover-recents-row .m-square-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const idx = parseInt(card.dataset.ridx, 10);
+      if (recents[idx]) playSong(recents[idx], recents, idx);
+    });
+  });
+
+  const histAll = document.getElementById('m-discover-all-history');
+  if (histAll) {
+    histAll.addEventListener('click', () => {
+      const hist = state.library.history || [];
+      openMobileDetail({
+        type: 'folder',
+        title: 'Dinleme Geçmişi',
+        subtitle: `/Müzikal/Geçmiş • ${hist.length} parça`,
+        cover: (hist[0] && hist[0].thumbnail) || '',
+        songs: hist,
+        allowDelete: false,
+        showDownloadAll: true
+      });
+    });
+  }
+
+  dynBody.querySelectorAll('.m-featured-card').forEach(card => {
+    card.addEventListener('click', async () => {
+      const g = card.dataset.fgenre;
+      const col = M_FEATURED_COLLECTIONS.find(c => c.genre === g);
+      if (!mobileUiState.genreCache[g]) {
+        showToast(`${col ? col.title : g} hazırlanıyor...`);
+        await fetchExploreGenre(g);
+      }
+      const songs = mobileUiState.genreCache[g] || BUNDLED_EXPLORE_SONGS;
+      openMobileDetail({
+        type: 'album',
+        title: col ? col.title : g,
+        subtitle: `${col ? col.sub : 'Müzikal'} • ${songs.length} parça`,
+        cover: (songs[0] && songs[0].thumbnail) || '',
+        songs,
+        allowDelete: false,
+        showDownloadAll: true
+      });
+    });
+  });
+
+  dynBody.querySelectorAll('.artist-circle-card[data-martist]').forEach(card => {
+    card.addEventListener('click', () => {
+      const name = card.dataset.martist;
+      const artistObj = RECOMMENDED_ARTISTS.find(a => a.name === name) || { name, img: '' };
+      openMobileArtistDetail(artistObj);
+    });
+  });
+}
+
+function renderMobilePlaylistsTab(dynBody) {
+  const history = state.library.history || [];
+  const favs = state.library.favorites || [];
+  const offline = getOfflineDownloadedSongsList();
+  const userPlaylists = state.library.playlists || [];
+
+  const iconSvgHistory = `<svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>`;
+  const iconSvgHeart = `<svg viewBox="0 0 24 24" width="38" height="38" fill="rgba(255,255,255,0.9)"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
+  const iconSvgOffline = `<svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="1.9"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+  const iconSvgNote = `<svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+
+  const cards = [
+    {
+      kind: 'auto-history',
+      title: 'Son eklenen',
+      count: history.length,
+      cover: (history[0] && history[0].thumbnail) || '',
+      gradient: 'linear-gradient(135deg, #272730, #17171c)',
+      iconSvg: iconSvgHistory,
+      songs: history
+    },
+    {
+      kind: 'auto-favs',
+      title: 'Beğenilenler',
+      count: favs.length,
+      cover: (favs[0] && favs[0].thumbnail) || '',
+      gradient: 'linear-gradient(135deg, #be185d, #4c0519)',
+      iconSvg: iconSvgHeart,
+      songs: favs
+    },
+    {
+      kind: 'auto-offline',
+      title: 'Çevrimdışı',
+      count: offline.length,
+      cover: (offline[0] && offline[0].thumbnail) || '',
+      gradient: 'linear-gradient(135deg, #047857, #064e3b)',
+      iconSvg: iconSvgOffline,
+      songs: offline
+    },
+    ...userPlaylists.map(pl => ({
+      kind: 'user-pl',
+      plId: pl.id,
+      title: pl.name,
+      count: (pl.songs || []).length,
+      cover: pl.cover || (pl.songs && pl.songs[0] && pl.songs[0].thumbnail) || '',
+      gradient: pl.isSpotify ? 'linear-gradient(135deg, #16a34a, #064e3b)' : ((pl.isYtMusic || pl.isYtm) ? 'linear-gradient(135deg, #dc2626, #7f1d1d)' : 'linear-gradient(135deg, #2e2e36, #18181d)'),
+      iconSvg: iconSvgNote,
+      songs: pl.songs || []
+    }))
+  ];
+
+  dynBody.innerHTML = `
+    <div style="padding-top: 10px;">
+      <div class="m-hscroll-row">
+        ${cards.map((c, idx) => `
+          <div class="m-square-card" data-pcard="${idx}">
+            <div class="m-square-cover-wrap" style="background:${c.gradient}; display:flex; align-items:center; justify-content:center;">
+              ${c.cover ? `<img src="${escapeHtml(c.cover)}" class="m-square-cover" loading="lazy">` : c.iconSvg}
+            </div>
+            <div class="m-square-title">${escapeHtml(c.title)}</div>
+            <div class="m-square-sub">${c.count} parça</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="m-oneui-empty-box" style="padding-top: ${userPlaylists.length > 0 ? '24px' : '44px'};">
+      <p>Kendi çalma listelerinizi oluşturduğunuzda burada görünürler. Spotify veya YouTube Music çalma listelerinizi de içe aktarabilirsiniz.</p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+        <button class="m-oneui-pill-cta" id="m-pl-btn-import">Listeyi içe aktar</button>
+        <button class="m-oneui-pill-cta" id="m-pl-btn-create">+ Yeni liste</button>
+      </div>
+    </div>
+  `;
+
+  dynBody.querySelectorAll('.m-square-card[data-pcard]').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.pcard, 10);
+      const item = cards[idx];
+      if (!item) return;
+      if (item.kind === 'user-pl' && item.plId) {
+        openPlaylistView(item.plId);
+      } else {
+        openMobileDetail({
+          type: 'folder',
+          title: item.title,
+          subtitle: `${item.count} parça`,
+          cover: item.cover,
+          songs: item.songs,
+          allowDelete: false,
+          showDownloadAll: item.kind !== 'auto-offline'
+        });
+      }
+    });
+  });
+
+  const btnImp = document.getElementById('m-pl-btn-import');
+  if (btnImp) btnImp.addEventListener('click', openMobileAddSheet);
+  const btnCr = document.getElementById('m-pl-btn-create');
+  if (btnCr) {
+    btnCr.addEventListener('click', () => {
+      if (elements.modalPlName) elements.modalPlName.value = '';
+      if (elements.modalPlDesc) elements.modalPlDesc.value = '';
+      if (elements.playlistModal) elements.playlistModal.style.display = 'flex';
+      if (elements.modalPlName) elements.modalPlName.focus();
+    });
+  }
+}
+
+function buildMobileAlbumsData() {
+  const albums = [];
+  (state.library.playlists || []).forEach(pl => {
+    const songs = pl.songs || [];
+    if (songs.length === 0 && !pl.cover) return;
+    albums.push({
+      title: pl.name,
+      sub: `${pl.isSpotify ? 'Spotify Listesi' : ((pl.isYtMusic || pl.isYtm) ? 'YT Music' : 'Çalma Listesi')} | ${songs.length} parça`,
+      cover: pl.cover || (songs[0] && songs[0].thumbnail) || '',
+      count: songs.length,
+      songs,
+      playlistId: pl.id,
+      allowDelete: true
+    });
+  });
+
+  M_FEATURED_COLLECTIONS.forEach(col => {
+    const cached = mobileUiState.genreCache[col.genre] || (col.genre === 'trendler' ? mobileUiState.discoverSongs : null) || BUNDLED_EXPLORE_SONGS.slice(0, 8);
+    albums.push({
+      title: col.title,
+      sub: `Müzikal | ${cached.length} parça`,
+      cover: (cached[0] && cached[0].thumbnail) || '',
+      count: cached.length,
+      genre: col.genre,
+      songs: cached,
+      allowDelete: false
+    });
+  });
+
+  // Group library/catalog songs by primary artist if >= 2 tracks
+  const byArtist = new Map();
+  getMobileAllTracksCatalog().forEach(s => {
+    const artist = stripChannelLabels(s.channel || '') || 'Müzikal';
+    if (!byArtist.has(artist)) byArtist.set(artist, []);
+    byArtist.get(artist).push(s);
+  });
+  for (const [artist, songs] of byArtist.entries()) {
+    if (songs.length >= 2) {
+      albums.push({
+        title: `${artist} Seçkisi`,
+        sub: `${artist} | ${songs.length} parça`,
+        cover: (songs[0] && songs[0].thumbnail) || '',
+        count: songs.length,
+        songs,
+        allowDelete: false
+      });
+    }
+  }
+
+  const mode = mobileUiState.sortModes.albums || 'date';
+  if (mode === 'name') {
+    albums.sort((a, b) => compareTrStrings(a.title, b.title));
+  } else if (mode === 'count') {
+    albums.sort((a, b) => b.count - a.count);
+  }
+  return albums;
+}
+
+function renderMobileAlbumsTab(dynBody) {
+  const albums = buildMobileAlbumsData();
+  updateMobileToolbar('albums', []);
+  dynBody.innerHTML = `
+    <div class="m-album-grid">
+      ${albums.map((a, idx) => `
+        <div class="m-album-card" data-alidx="${idx}">
+          <div class="m-album-cover-wrap">
+            ${a.cover ? `<img src="${escapeHtml(a.cover)}" class="m-album-cover" loading="lazy">` : ''}
+          </div>
+          <div class="m-album-title">${escapeHtml(a.title)}</div>
+          <div class="m-album-sub">${escapeHtml(a.sub)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  dynBody.querySelectorAll('.m-album-card').forEach(card => {
+    card.addEventListener('click', async () => {
+      const idx = parseInt(card.dataset.alidx, 10);
+      const item = albums[idx];
+      if (!item) return;
+      if (item.playlistId) {
+        openPlaylistView(item.playlistId);
+        return;
+      }
+      if (item.genre && !mobileUiState.genreCache[item.genre]) {
+        showToast(`${item.title} yükleniyor...`);
+        await fetchExploreGenre(item.genre);
+      }
+      const songs = (item.genre && mobileUiState.genreCache[item.genre]) ? mobileUiState.genreCache[item.genre] : item.songs;
+      openMobileDetail({
+        type: 'album',
+        title: item.title,
+        subtitle: item.sub,
+        cover: (songs[0] && songs[0].thumbnail) || item.cover,
+        songs,
+        allowDelete: false,
+        showDownloadAll: true
+      });
+    });
+  });
+}
+
+function buildMobileArtistsData() {
+  const artistMap = new Map();
+  RECOMMENDED_ARTISTS.forEach(a => {
+    artistMap.set(a.name.toLowerCase(), {
+      name: a.name,
+      img: a.img,
+      songs: []
+    });
+  });
+
+  getMobileAllTracksCatalog().forEach(s => {
+    const rawArtist = stripChannelLabels(s.channel || '');
+    if (!rawArtist || rawArtist.length < 2) return;
+    const key = rawArtist.toLowerCase();
+    if (!artistMap.has(key)) {
+      artistMap.set(key, {
+        name: rawArtist,
+        img: s.thumbnail || '',
+        songs: [s]
+      });
+    } else {
+      const entry = artistMap.get(key);
+      if (!entry.songs.some(ex => ex.id === s.id)) {
+        entry.songs.push(s);
+      }
+      if (!entry.img && s.thumbnail) entry.img = s.thumbnail;
+    }
+  });
+
+  const list = Array.from(artistMap.values());
+  const mode = mobileUiState.sortModes.artists || 'name';
+  if (mode === 'count') {
+    list.sort((a, b) => b.songs.length - a.songs.length || compareTrStrings(a.name, b.name));
+  } else {
+    list.sort((a, b) => compareTrStrings(a.name, b.name));
+  }
+  return list;
+}
+
+function renderMobileArtistsTab(dynBody) {
+  const artists = buildMobileArtistsData();
+  updateMobileToolbar('artists', []);
+  dynBody.innerHTML = `
+    <div class="m-oneui-artist-list">
+      ${artists.map((a, idx) => `
+        <div class="m-oneui-entity-row" data-artidx="${idx}" data-alpha="${getTrAlphaChar(a.name)}">
+          <div class="m-entity-thumb-wrap">
+            ${a.img
+              ? `<img src="${escapeHtml(a.img)}" class="m-entity-thumb" loading="lazy" onerror="window.handleArtistImgError(this, '${escapeHtml(a.name).replace(/'/g, "\\'")}', ${idx})">`
+              : `<div class="artist-fallback-monogram" style="background:${ARTIST_GRADIENTS[idx % ARTIST_GRADIENTS.length]};">${getArtistInitials(a.name)}</div>`}
+          </div>
+          <div class="m-entity-meta">
+            <div class="m-entity-title">${escapeHtml(a.name)}</div>
+            <div class="m-entity-sub">${a.songs.length > 0 ? `1 koleksiyon | ${a.songs.length} parça` : 'Müzikal Sanatçısı • Keşfetmek için dokun'}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  setMobileAzVisible(mobileUiState.sortModes.artists !== 'count', '.m-oneui-artist-list .m-oneui-entity-row');
+
+  dynBody.querySelectorAll('.m-oneui-entity-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const idx = parseInt(row.dataset.artidx, 10);
+      if (artists[idx]) openMobileArtistDetail(artists[idx]);
+    });
+  });
+}
+
+async function openMobileArtistDetail(artistObj) {
+  const name = artistObj.name || 'Sanatçı';
+  const localSongs = (artistObj.songs && artistObj.songs.length > 0)
+    ? [...artistObj.songs]
+    : getMobileAllTracksCatalog().filter(s => matchesAnyArtist(s.title, s.channel, [name]));
+
+  openMobileDetail({
+    type: 'artist',
+    title: name,
+    subtitle: `${localSongs.length} kayıtlı parça • Çevrimiçi aranıyor...`,
+    cover: artistObj.img || (localSongs[0] && localSongs[0].thumbnail) || '',
+    songs: localSongs,
+    allowDelete: false,
+    showDownloadAll: true
+  });
+
+  if (localSongs.length < 6) {
+    try {
+      const data = await apiFetch(`/api/search?q=${encodeURIComponent(name)}`);
+      const results = data && data.results ? data.results : (Array.isArray(data) ? data : []);
+      if (mobileUiState.detail && mobileUiState.detail.type === 'artist' && mobileUiState.detail.title === name) {
+        const merged = [...localSongs];
+        results.forEach(r => {
+          if (r && r.id && !merged.some(m => m.id === r.id)) merged.push(r);
+        });
+        mobileUiState.detail.songs = merged;
+        mobileUiState.detail.subtitle = `${merged.length} parça`;
+        if (!mobileUiState.detail.cover && merged[0]) mobileUiState.detail.cover = merged[0].thumbnail || '';
+        renderMobileDetailView();
+      }
+    } catch (e) {}
+  }
+}
+
+function buildMobileFoldersData() {
+  const offline = getOfflineDownloadedSongsList();
+  const favs = state.library.favorites || [];
+  const hist = state.library.history || [];
+  const trends = mobileUiState.discoverSongs || [];
+
+  const folders = [
+    {
+      title: 'İndirilenler (Çevrimdışı)',
+      path: '/Müzikal/Çevrimdışı',
+      songs: offline,
+      cover: (offline[0] && offline[0].thumbnail) || '',
+      showDownloadAll: false
+    },
+    {
+      title: 'Beğenilen Şarkılar',
+      path: '/Müzikal/Favoriler',
+      songs: favs,
+      cover: (favs[0] && favs[0].thumbnail) || '',
+      showDownloadAll: true
+    },
+    {
+      title: 'Dinleme Geçmişi',
+      path: '/Müzikal/Geçmiş',
+      songs: hist,
+      cover: (hist[0] && hist[0].thumbnail) || '',
+      showDownloadAll: true
+    },
+    {
+      title: 'Trendler Önbelleği',
+      path: '/Müzikal/Keşfet/Trendler',
+      songs: trends,
+      cover: (trends[0] && trends[0].thumbnail) || '',
+      showDownloadAll: true
+    },
+    ...(state.library.playlists || []).map(pl => ({
+      title: pl.name,
+      path: pl.isSpotify ? `/Müzikal/Spotify/${pl.name}` : ((pl.isYtMusic || pl.isYtm) ? `/Müzikal/YouTube Music/${pl.name}` : `/Müzikal/Listeler/${pl.name}`),
+      songs: pl.songs || [],
+      cover: pl.cover || (pl.songs && pl.songs[0] && pl.songs[0].thumbnail) || '',
+      playlistId: pl.id,
+      allowDelete: true,
+      showDownloadAll: true
+    }))
+  ];
+
+  const mode = mobileUiState.sortModes.folders || 'name';
+  if (mode === 'count') {
+    folders.sort((a, b) => b.songs.length - a.songs.length);
+  } else if (mode === 'name') {
+    folders.sort((a, b) => compareTrStrings(a.title, b.title));
+  }
+  return folders;
+}
+
+function renderMobileFoldersTab(dynBody) {
+  const folders = buildMobileFoldersData();
+  updateMobileToolbar('folders', []);
+  dynBody.innerHTML = `
+    <div class="m-oneui-folder-list">
+      ${folders.map((f, idx) => `
+        <div class="m-oneui-entity-row" data-fldidx="${idx}" data-alpha="${getTrAlphaChar(f.title)}">
+          <div class="m-entity-thumb-wrap">
+            ${f.cover
+              ? `<img src="${escapeHtml(f.cover)}" class="m-entity-thumb" loading="lazy">`
+              : `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#9ca3af" stroke-width="1.8"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>`}
+            <span class="m-folder-corner-icon">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </span>
+          </div>
+          <div class="m-entity-meta">
+            <div class="m-entity-title">${escapeHtml(f.title)}</div>
+            <div class="m-entity-sub">${escapeHtml(f.path)} • ${f.songs.length} parça</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  setMobileAzVisible(folders.length >= 8 && mobileUiState.sortModes.folders === 'name', '.m-oneui-folder-list .m-oneui-entity-row');
+
+  dynBody.querySelectorAll('.m-oneui-entity-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const idx = parseInt(row.dataset.fldidx, 10);
+      const f = folders[idx];
+      if (!f) return;
+      if (f.playlistId) {
+        openPlaylistView(f.playlistId);
+      } else {
+        openMobileDetail({
+          type: 'folder',
+          title: f.title,
+          subtitle: `${f.path} • ${f.songs.length} parça`,
+          cover: f.cover,
+          songs: f.songs,
+          allowDelete: false,
+          showDownloadAll: f.showDownloadAll
+        });
+      }
+    });
+  });
+}
+
+function renderMobileDetailView() {
+  const detail = mobileUiState.detail;
+  if (!detail) return;
+  const dynBody = document.getElementById('m-oneui-dynamic-body');
+  updateMobileHeaderChrome();
+
+  if (detail.type === 'settings') {
+    if (dynBody) dynBody.style.display = 'none';
+    setMobileAzVisible(false);
+    updateMobileToolbar('settings', []);
+    showMainSongArea(false);
+    const settingsViewEl = document.getElementById('settings-view');
+    if (settingsViewEl) settingsViewEl.style.display = 'block';
+    refreshSettingsViewUI();
+    return;
+  }
+
+  if (detail.type === 'wrapped') {
+    if (dynBody) dynBody.style.display = 'none';
+    setMobileAzVisible(false);
+    updateMobileToolbar('wrapped', []);
+    showMainSongArea(false);
+    const wrappedViewEl = document.getElementById('wrapped-view');
+    if (wrappedViewEl) wrappedViewEl.style.display = 'block';
+    renderYearEndWrappedView();
+    return;
+  }
+
+  showMainSongArea(true);
+  const songs = sortSongsList(detail.songs || [], mobileUiState.sortModes.detail || 'default');
+  if (dynBody) {
+    dynBody.style.display = 'block';
+    dynBody.innerHTML = `
+      <div class="m-detail-hero">
+        ${detail.cover
+          ? `<img src="${escapeHtml(detail.cover)}" class="m-detail-cover" alt="Kapak">`
+          : `<div class="m-detail-cover" style="display:flex;align-items:center;justify-content:center;font-size:28px;">🎵</div>`}
+        <div class="m-detail-info">
+          <div class="m-detail-title">${escapeHtml(detail.title)}</div>
+          <div class="m-detail-sub">${escapeHtml(detail.subtitle || `${songs.length} parça`)}</div>
+        </div>
+      </div>
+      <div class="m-oneui-divider"></div>
+    `;
+  }
+
+  updateMobileToolbar('detail', songs, {
+    playlistId: detail.playlistId || null,
+    allowDelete: !!detail.allowDelete,
+    showDownloadAll: !!detail.showDownloadAll
+  });
+
+  state.currentPlaylist = songs;
+  renderSongs(songs);
+  setMobileAzVisible(songs.length >= 12 && mobileUiState.sortModes.detail === 'name', '#songs-grid .song-card');
+}
+
+function openMobileDetail(detailConfig) {
+  mobileUiState.detail = detailConfig;
+  if (elements.contentScroll) elements.contentScroll.scrollTop = 0;
+  renderMobileDetailView();
+}
+
+function closeMobileDetail() {
+  mobileUiState.detail = null;
+  renderMobileTab();
+}
+
+function renderMobileTab() {
+  if (!isMobileOneUi()) return;
+  if (mobileUiState.isSearching) return;
+
+  if (mobileUiState.detail) {
+    renderMobileDetailView();
+    return;
+  }
+
+  const tab = mobileUiState.activeTab || 'tracks';
+  const dynBody = document.getElementById('m-oneui-dynamic-body');
+  const settingsViewEl = document.getElementById('settings-view');
+  const wrappedViewEl = document.getElementById('wrapped-view');
+  if (settingsViewEl) settingsViewEl.style.display = 'none';
+  if (wrappedViewEl) wrappedViewEl.style.display = 'none';
+
+  updateMobileHeaderChrome();
+  setMobileAzVisible(false);
+
+  if (tab === 'tracks') {
+    if (dynBody) dynBody.style.display = 'none';
+    showMainSongArea(true);
+    const catalog = getMobileAllTracksCatalog();
+    const sorted = sortSongsList(catalog, mobileUiState.sortModes.tracks || 'name');
+    updateMobileToolbar('tracks', sorted);
+    state.currentPlaylist = sorted;
+    renderSongs(sorted);
+    setMobileAzVisible(mobileUiState.sortModes.tracks !== 'recent' && sorted.length >= 5, '#songs-grid .song-card');
+    return;
+  }
+
+  if (tab === 'favorites') {
+    const favs = state.library.favorites || [];
+    const sortedFavs = sortSongsList(favs, mobileUiState.sortModes.favorites || 'recent');
+    const hintHtml = !mobileUiState.favHintDismissed ? `
+      <div class="m-fav-hint-banner" id="m-fav-hint-banner">
+        <div class="m-fav-hint-left">
+          <span style="color:var(--accent);">♪</span>
+          <span>Sevdiğiniz şarkıları dinleyin.</span>
+        </div>
+        <button class="m-fav-hint-close" id="m-fav-hint-close" title="Gizle">✕</button>
+      </div>
+    ` : '';
+
+    if (sortedFavs.length === 0) {
+      showMainSongArea(false);
+      updateMobileToolbar('favorites-empty', []);
+      const trendRecs = (mobileUiState.discoverSongs.length > 0 ? mobileUiState.discoverSongs : BUNDLED_EXPLORE_SONGS).slice(0, 10);
+      if (dynBody) {
+        dynBody.style.display = 'block';
+        dynBody.innerHTML = `
+          ${hintHtml}
+          <div class="m-oneui-empty-box">
+            <h3>Favori yok</h3>
+            <p>Favori şarkılarınızın, çalma listelerinizin veya sanatçılarınızın yanındaki kalp simgesine dokunduğunuzda bunlar burada görüntülenir.</p>
+          </div>
+          <div class="m-oneui-divider"></div>
+          <div class="m-section-head">
+            <span class="m-section-head-title">🔥 Popüler Trendler</span>
+          </div>
+          <div class="m-hscroll-row" id="m-fav-recs-row">
+            ${trendRecs.map((s, idx) => `
+              <div class="m-square-card" data-frec="${idx}">
+                <div class="m-square-cover-wrap">
+                  <img src="${escapeHtml(s.thumbnail || 'https://via.placeholder.com/240')}" class="m-square-cover" loading="lazy">
+                </div>
+                <div class="m-square-title">${escapeHtml(s.title)}</div>
+                <div class="m-square-sub">${escapeHtml(s.channel || '')}</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        dynBody.querySelectorAll('.m-square-card[data-frec]').forEach(el => {
+          el.addEventListener('click', () => {
+            const idx = parseInt(el.dataset.frec, 10);
+            if (trendRecs[idx]) playSong(trendRecs[idx], trendRecs, idx);
+          });
+        });
+      }
+    } else {
+      showMainSongArea(true);
+      if (dynBody) {
+        dynBody.style.display = hintHtml ? 'block' : 'none';
+        dynBody.innerHTML = hintHtml;
+      }
+      updateMobileToolbar('favorites', sortedFavs, { showDownloadAll: true });
+      state.currentPlaylist = sortedFavs;
+      renderSongs(sortedFavs);
+      setMobileAzVisible(mobileUiState.sortModes.favorites === 'name' && sortedFavs.length >= 6, '#songs-grid .song-card');
+    }
+
+    const closeHintBtn = document.getElementById('m-fav-hint-close');
+    if (closeHintBtn) {
+      closeHintBtn.addEventListener('click', () => {
+        mobileUiState.favHintDismissed = true;
+        renderMobileTab();
+      });
+    }
+    return;
+  }
+
+  // Tabs rendered purely inside #m-oneui-dynamic-body
+  showMainSongArea(false);
+  if (!dynBody) return;
+  dynBody.style.display = 'block';
+
+  if (tab === 'discover') {
+    updateMobileToolbar('discover', []);
+    renderMobileDiscoverTab(dynBody);
+  } else if (tab === 'playlists') {
+    updateMobileToolbar('playlists', []);
+    renderMobilePlaylistsTab(dynBody);
+  } else if (tab === 'albums') {
+    renderMobileAlbumsTab(dynBody);
+  } else if (tab === 'artists') {
+    renderMobileArtistsTab(dynBody);
+  } else if (tab === 'folders') {
+    renderMobileFoldersTab(dynBody);
+  }
+}
+
+function setMobileTab(tabKey) {
+  if (!MOBILE_TAB_ORDER.includes(tabKey)) tabKey = 'tracks';
+  mobileUiState.activeTab = tabKey;
+  mobileUiState.detail = null;
+  mobileUiState.isSearching = false;
+  document.body.classList.remove('m-search-open');
+  if (elements.contentScroll) elements.contentScroll.scrollTop = 0;
+  renderMobileTab();
+}
+
+function refreshMobileOneUiIfNeeded() {
+  if (!isMobileOneUi() || mobileUiState.isSearching) return;
+  if (mobileUiState.detail) {
+    if (mobileUiState.detail.type === 'playlist' && mobileUiState.detail.playlistId) {
+      const pl = (state.library.playlists || []).find(p => p.id === mobileUiState.detail.playlistId);
+      if (pl) {
+        mobileUiState.detail.songs = pl.songs || [];
+        mobileUiState.detail.subtitle = pl.description || `${(pl.songs || []).length} parça`;
+      }
+    }
+    renderMobileDetailView();
+  } else {
+    renderMobileTab();
+  }
+}
+
+function closeAllMobileSheets() {
+  const backdrop = document.getElementById('m-oneui-sheet-backdrop');
+  if (backdrop) backdrop.style.display = 'none';
+  document.querySelectorAll('.m-oneui-bottom-sheet').forEach(s => { s.style.display = 'none'; });
+  const moreMenu = document.getElementById('m-oneui-more-menu');
+  const moreBackdrop = document.getElementById('m-oneui-more-backdrop');
+  if (moreMenu) moreMenu.style.display = 'none';
+  if (moreBackdrop) moreBackdrop.style.display = 'none';
+}
+
+function openMobileTrackSheet(song) {
+  if (!song) return;
+  closeAllMobileSheets();
+  mobileUiState.currentSheetSong = song;
+
+  const backdrop = document.getElementById('m-oneui-sheet-backdrop');
+  const sheet = document.getElementById('m-oneui-track-sheet');
+  const thumb = document.getElementById('m-sheet-track-thumb');
+  const titleEl = document.getElementById('m-sheet-track-title');
+  const artistEl = document.getElementById('m-sheet-track-artist');
+  const actionsEl = document.getElementById('m-sheet-track-actions');
+  if (!sheet || !actionsEl) return;
+
+  if (thumb) thumb.src = song.thumbnail || 'https://via.placeholder.com/80';
+  if (titleEl) titleEl.textContent = song.title || 'Şarkı';
+  if (artistEl) artistEl.textContent = song.channel || 'Müzikal';
+
+  const isFav = state.library.favorites.some(f => f.id === song.id);
+  const isDl = state.downloadedIds.has(song.id);
+  const artistName = stripChannelLabels(song.channel || '');
+
+  actionsEl.innerHTML = `
+    <button class="m-sheet-action-btn" data-sact="play">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg></span>
+      <span>Hemen Çal</span>
+    </button>
+    <button class="m-sheet-action-btn" data-sact="queue">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+      <span>Sıraya Ekle</span>
+    </button>
+    <button class="m-sheet-action-btn" data-sact="addpl">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><line x1="3" y1="6" x2="17" y2="6"/><line x1="3" y1="12" x2="12" y2="12"/><line x1="3" y1="18" x2="10" y2="18"/><path d="M16 18V10l5-1.5V12"/><circle cx="14" cy="18" r="2" fill="currentColor" stroke="none"/></svg></span>
+      <span>Çalma Listesine Ekle</span>
+    </button>
+    <button class="m-sheet-action-btn" data-sact="fav">
+      <span class="m-oneui-menu-icon" style="${isFav ? 'color:#ec4899;' : ''}"><svg viewBox="0 0 24 24" width="18" height="18" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.9"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
+      <span>${isFav ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}</span>
+    </button>
+    <button class="m-sheet-action-btn" data-sact="dl">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+      <span>${isDl ? 'İndirilenlerden Kaldır' : 'Cihaza İndir'}</span>
+    </button>
+    <button class="m-sheet-action-btn" data-sact="lyrics">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+      <span>Şarkı Sözleri</span>
+    </button>
+    <button class="m-sheet-action-btn" data-sact="video">
+      <span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></span>
+      <span>Klip Modunda Aç</span>
+    </button>
+    ${artistName ? `<button class="m-sheet-action-btn" data-sact="artist"><span class="m-oneui-menu-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span>Sanatçıya Git (${escapeHtml(artistName)})</span></button>` : ''}
+  `;
+
+  actionsEl.querySelectorAll('.m-sheet-action-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const act = btn.dataset.sact;
+      closeAllMobileSheets();
+      if (act === 'play') {
+        const list = mobileUiState.activeSongs.length > 0 ? mobileUiState.activeSongs : [song];
+        const idx = list.findIndex(s => s && s.id === song.id);
+        playSong(song, list, idx >= 0 ? idx : 0);
+      } else if (act === 'queue') {
+        addToQueue(song);
+      } else if (act === 'addpl') {
+        openAddToPlaylistModal(song);
+      } else if (act === 'fav') {
+        await toggleFavorite(song);
+      } else if (act === 'dl') {
+        if (isDl) {
+          await deleteDownloadedTrack(song.id);
+        } else {
+          await triggerDownloadTrack(song);
+        }
+      } else if (act === 'lyrics') {
+        if (!state.currentSong || state.currentSong.id !== song.id) {
+          await playSong(song, mobileUiState.activeSongs.length ? mobileUiState.activeSongs : [song], 0);
+        }
+        state.isLyricsOpen = true;
+        if (elements.lyricsOverlay) elements.lyricsOverlay.classList.add('active');
+        renderLyricsForCurrentSong();
+      } else if (act === 'video') {
+        if (!state.currentSong || state.currentSong.id !== song.id) {
+          await playSong(song, mobileUiState.activeSongs.length ? mobileUiState.activeSongs : [song], 0);
+        }
+        if (elements.btnToggleVideo) elements.btnToggleVideo.click();
+      } else if (act === 'artist') {
+        const rec = RECOMMENDED_ARTISTS.find(a => a.name.toLowerCase() === artistName.toLowerCase());
+        openMobileArtistDetail(rec || { name: artistName, img: song.thumbnail || '' });
+      }
+    });
+  });
+
+  if (backdrop) backdrop.style.display = 'block';
+  sheet.style.display = 'block';
+}
+
+function openMobileAddSheet() {
+  closeAllMobileSheets();
+  const backdrop = document.getElementById('m-oneui-sheet-backdrop');
+  const sheet = document.getElementById('m-oneui-add-sheet');
+  if (backdrop) backdrop.style.display = 'block';
+  if (sheet) sheet.style.display = 'block';
+}
+
+function openMobileSortSheet() {
+  closeAllMobileSheets();
+  const context = mobileUiState.detail ? 'detail' : mobileUiState.activeTab;
+  const optionsByContext = {
+    tracks: [
+      { key: 'name', label: 'İsim (A - Z)' },
+      { key: 'name-desc', label: 'İsim (Z - A)' },
+      { key: 'recent', label: 'Önerilen / Son Eklenen' }
+    ],
+    favorites: [
+      { key: 'recent', label: 'Eklenme Sırası' },
+      { key: 'name', label: 'İsim (A - Z)' },
+      { key: 'name-desc', label: 'İsim (Z - A)' }
+    ],
+    albums: [
+      { key: 'date', label: 'Yayın & Koleksiyon' },
+      { key: 'name', label: 'İsim (A - Z)' },
+      { key: 'count', label: 'Parça Sayısı' }
+    ],
+    artists: [
+      { key: 'name', label: 'İsim (A - Z)' },
+      { key: 'count', label: 'Parça Sayısı' }
+    ],
+    folders: [
+      { key: 'name', label: 'İsim (A - Z)' },
+      { key: 'count', label: 'Parça Sayısı' }
+    ],
+    detail: [
+      { key: 'default', label: 'Varsayılan Sıra' },
+      { key: 'name', label: 'İsim (A - Z)' },
+      { key: 'name-desc', label: 'İsim (Z - A)' }
+    ]
+  };
+
+  const opts = optionsByContext[context] || optionsByContext.tracks;
+  const current = mobileUiState.sortModes[context] || opts[0].key;
+  const container = document.getElementById('m-sheet-sort-options');
+  const backdrop = document.getElementById('m-oneui-sheet-backdrop');
+  const sheet = document.getElementById('m-oneui-sort-sheet');
+  if (!container || !sheet) return;
+
+  container.innerHTML = opts.map(o => `
+    <button class="m-sheet-action-btn ${current === o.key ? 'active' : ''}" data-sortkey="${o.key}">
+      <span>${current === o.key ? '✓' : '○'}</span>
+      <span>${o.label}</span>
+    </button>
+  `).join('');
+
+  container.querySelectorAll('.m-sheet-action-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      mobileUiState.sortModes[context] = btn.dataset.sortkey;
+      closeAllMobileSheets();
+      renderMobileTab();
+    });
+  });
+
+  if (backdrop) backdrop.style.display = 'block';
+  sheet.style.display = 'block';
+}
+
+function initMobileOneUi() {
+  // Set black status bar theme color on mobile
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta && isMobileOneUi()) {
+    themeMeta.setAttribute('content', '#000000');
+  }
+
+  // Tab Clicks
+  const tabsEl = document.getElementById('m-oneui-tabs');
+  if (tabsEl) {
+    tabsEl.querySelectorAll('.m-oneui-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setMobileTab(btn.dataset.mtab);
+      });
+    });
+  }
+
+  // Back Button on Detail Views / Settings
+  const backBtn = document.getElementById('m-oneui-back-btn');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      closeMobileDetail();
+    });
+  }
+
+  // Header + (Playlist Add / Import)
+  const btnAdd = document.getElementById('m-oneui-btn-add');
+  if (btnAdd) {
+    btnAdd.addEventListener('click', openMobileAddSheet);
+  }
+
+  // Header Search Toggle & Search Back
+  const btnSearch = document.getElementById('m-oneui-btn-search');
+  if (btnSearch) {
+    btnSearch.addEventListener('click', () => {
+      document.body.classList.add('m-search-open');
+      if (elements.searchInput) {
+        elements.searchInput.focus();
+      }
+    });
+  }
+
+  const btnSearchBack = document.getElementById('m-oneui-search-back');
+  if (btnSearchBack) {
+    btnSearchBack.addEventListener('click', () => {
+      document.body.classList.remove('m-search-open');
+      mobileUiState.isSearching = false;
+      if (elements.searchInput) elements.searchInput.value = '';
+      if (elements.btnClearSearch) elements.btnClearSearch.style.display = 'none';
+      renderMobileTab();
+    });
+  }
+
+  // Header More (⋮) Popover
+  const btnMore = document.getElementById('m-oneui-btn-more');
+  const moreMenu = document.getElementById('m-oneui-more-menu');
+  const moreBackdrop = document.getElementById('m-oneui-more-backdrop');
+  const toggleMoreMenu = (force) => {
+    if (!moreMenu || !moreBackdrop) return;
+    const isOpen = (typeof force === 'boolean') ? force : (moreMenu.style.display === 'none');
+    moreMenu.style.display = isOpen ? 'flex' : 'none';
+    moreBackdrop.style.display = isOpen ? 'block' : 'none';
+    const mVer = document.getElementById('m-menu-version-label');
+    if (mVer) mVer.textContent = 'v' + CURRENT_APP_VERSION;
+  };
+  if (btnMore) btnMore.addEventListener('click', () => toggleMoreMenu(true));
+  if (moreBackdrop) moreBackdrop.addEventListener('click', () => toggleMoreMenu(false));
+
+  // More Menu Actions
+  const bindMoreItem = (id, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', () => { toggleMoreMenu(false); fn(); });
+  };
+  bindMoreItem('m-menu-account', () => openUserAccountHub());
+  bindMoreItem('m-menu-studio', () => {
+    const modal = document.getElementById('audio-studio-modal');
+    if (modal) modal.style.display = 'flex';
+  });
+  bindMoreItem('m-menu-spotify', () => {
+    if (elements.modalSpUrl) elements.modalSpUrl.value = '';
+    if (elements.spotifyModal) elements.spotifyModal.style.display = 'flex';
+  });
+  bindMoreItem('m-menu-ytm', () => {
+    if (elements.modalYtmUrl) elements.modalYtmUrl.value = '';
+    if (elements.ytmusicModal) elements.ytmusicModal.style.display = 'flex';
+  });
+  bindMoreItem('m-menu-queue', () => {
+    if (elements.queueDrawer) {
+      elements.queueDrawer.classList.add('open');
+      updateQueueDrawer();
+    }
+  });
+  bindMoreItem('m-menu-video', () => {
+    if (elements.btnToggleVideo) elements.btnToggleVideo.click();
+  });
+  bindMoreItem('m-menu-settings', () => navigateTo('settings'));
+  bindMoreItem('m-menu-updates', () => checkForAppUpdates(true));
+
+  // Add Sheet Actions
+  const sheetBackdrop = document.getElementById('m-oneui-sheet-backdrop');
+  if (sheetBackdrop) sheetBackdrop.addEventListener('click', closeAllMobileSheets);
+
+  const bindSheetBtn = (id, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', () => { closeAllMobileSheets(); fn(); });
+  };
+  bindSheetBtn('m-add-new-playlist', () => {
+    if (elements.modalPlName) elements.modalPlName.value = '';
+    if (elements.modalPlDesc) elements.modalPlDesc.value = '';
+    if (elements.playlistModal) elements.playlistModal.style.display = 'flex';
+    if (elements.modalPlName) elements.modalPlName.focus();
+  });
+  bindSheetBtn('m-add-import-spotify', () => {
+    if (elements.modalSpUrl) elements.modalSpUrl.value = '';
+    if (elements.spotifyModal) elements.spotifyModal.style.display = 'flex';
+  });
+  bindSheetBtn('m-add-import-ytm', () => {
+    if (elements.modalYtmUrl) elements.modalYtmUrl.value = '';
+    if (elements.ytmusicModal) elements.ytmusicModal.style.display = 'flex';
+  });
+  bindSheetBtn('m-add-import-json', () => {
+    if (elements.fileImportPlaylists) elements.fileImportPlaylists.click();
+  });
+
+  // Sort & Play/Shuffle Toolbar
+  const sortBtn = document.getElementById('m-oneui-sort-btn');
+  if (sortBtn) sortBtn.addEventListener('click', openMobileSortSheet);
+
+  const shufflePlayBtn = document.getElementById('m-oneui-btn-shuffle-play');
+  if (shufflePlayBtn) {
+    shufflePlayBtn.addEventListener('click', () => {
+      const list = mobileUiState.activeSongs || [];
+      if (list.length === 0) {
+        showToast('Oynatılacak parça bulunamadı.');
+        return;
+      }
+      if (state.shuffleMode === 'off') {
+        state.shuffleMode = 'standard';
+        try { localStorage.setItem('muzikal_shuffle_mode', 'standard'); } catch (e) {}
+        updateShuffleUI();
+      }
+      const randIdx = Math.floor(Math.random() * list.length);
+      playSong(list[randIdx], list, randIdx);
+      shufflePlayBtn.classList.add('active');
+    });
+  }
+
+  const playAllBtn = document.getElementById('m-oneui-btn-play-all');
+  if (playAllBtn) {
+    playAllBtn.addEventListener('click', () => {
+      const list = mobileUiState.activeSongs || [];
+      if (list.length === 0) {
+        showToast('Oynatılacak parça bulunamadı.');
+        return;
+      }
+      playSong(list[0], list, 0);
+    });
+  }
+
+  // A-Z Vertical Scroller Touch & Click
+  const azRail = document.getElementById('m-oneui-az-rail');
+  if (azRail) {
+    const handleAzPointer = (clientY) => {
+      const rect = azRail.getBoundingClientRect();
+      if (!rect.height) return;
+      const ratio = Math.max(0, Math.min(0.999, (clientY - rect.top) / rect.height));
+      const idx = Math.floor(ratio * TR_ALPHABET.length);
+      const letter = TR_ALPHABET[idx] || 'A';
+      scrollToAlphaLetter(letter, clientY);
+    };
+    azRail.addEventListener('touchstart', (e) => {
+      if (e.touches && e.touches[0]) handleAzPointer(e.touches[0].clientY);
+    }, { passive: true });
+    azRail.addEventListener('touchmove', (e) => {
+      if (e.touches && e.touches[0]) handleAzPointer(e.touches[0].clientY);
+    }, { passive: true });
+    azRail.addEventListener('touchend', () => {
+      setTimeout(() => {
+        const bubble = document.getElementById('m-oneui-az-bubble');
+        if (bubble) bubble.style.display = 'none';
+      }, 350);
+    }, { passive: true });
+    azRail.addEventListener('click', (e) => {
+      handleAzPointer(e.clientY);
+      setTimeout(() => {
+        const bubble = document.getElementById('m-oneui-az-bubble');
+        if (bubble) bubble.style.display = 'none';
+      }, 350);
+    });
+  }
+
+  // Horizontal Swipe Between One UI Tabs on #content-scroll
+  if (elements.contentScroll) {
+    let swipeStartX = 0;
+    let swipeStartY = 0;
+    let ignoreSwipe = false;
+
+    elements.contentScroll.addEventListener('touchstart', (e) => {
+      if (!isMobileOneUi() || mobileUiState.detail || mobileUiState.isSearching) {
+        ignoreSwipe = true;
+        return;
+      }
+      if (e.target.closest('.m-hscroll-row, .m-discover-chips-row, .artists-scroll-row, .m-oneui-az-rail, input, button')) {
+        ignoreSwipe = true;
+        return;
+      }
+      ignoreSwipe = false;
+      swipeStartX = e.touches[0].clientX;
+      swipeStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    elements.contentScroll.addEventListener('touchend', (e) => {
+      if (ignoreSwipe || !e.changedTouches || !e.changedTouches[0]) return;
+      const dx = e.changedTouches[0].clientX - swipeStartX;
+      const dy = e.changedTouches[0].clientY - swipeStartY;
+      if (Math.abs(dx) > 65 && Math.abs(dx) > Math.abs(dy) * 1.6) {
+        const curIdx = MOBILE_TAB_ORDER.indexOf(mobileUiState.activeTab);
+        if (dx < 0 && curIdx < MOBILE_TAB_ORDER.length - 1) {
+          setMobileTab(MOBILE_TAB_ORDER[curIdx + 1]);
+        } else if (dx > 0 && curIdx > 0) {
+          setMobileTab(MOBILE_TAB_ORDER[curIdx - 1]);
+        }
+      }
+    }, { passive: true });
+  }
+
+  // Mobile Full Player: Top Studio Button & Artwork Horizontal Swipe (Next/Prev)
+  const mfpTopStudio = document.getElementById('mfp-btn-top-studio');
+  if (mfpTopStudio) {
+    mfpTopStudio.addEventListener('click', () => {
+      const modal = document.getElementById('audio-studio-modal');
+      if (modal) modal.style.display = 'flex';
+    });
+  }
+
+  const mfpArtWrap = document.querySelector('#mobile-full-player .mfp-artwork-wrapper');
+  if (mfpArtWrap) {
+    let artStartX = 0;
+    let artStartY = 0;
+    mfpArtWrap.addEventListener('touchstart', (e) => {
+      if (e.touches && e.touches[0]) {
+        artStartX = e.touches[0].clientX;
+        artStartY = e.touches[0].clientY;
+      }
+    }, { passive: true });
+    mfpArtWrap.addEventListener('touchend', (e) => {
+      if (!e.changedTouches || !e.changedTouches[0]) return;
+      const dx = e.changedTouches[0].clientX - artStartX;
+      const dy = e.changedTouches[0].clientY - artStartY;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        if (dx < 0) playNext();
+        else playPrev();
+      }
+    }, { passive: true });
+  }
+
+  // Sync on viewport resize (desktop <-> mobile switch)
+  let resizeTimer = null;
+  let wasMobile = isMobileOneUi();
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const nowMobile = isMobileOneUi();
+      if (themeMeta) themeMeta.setAttribute('content', nowMobile ? '#000000' : '#0a0b10');
+      if (nowMobile && !wasMobile) {
+        renderMobileTab();
+      } else if (!nowMobile && wasMobile) {
+        document.body.classList.remove('m-az-visible', 'm-search-open');
+        const dynBody = document.getElementById('m-oneui-dynamic-body');
+        const toolbar = document.getElementById('m-oneui-toolbar');
+        const azRail = document.getElementById('m-oneui-az-rail');
+        if (dynBody) dynBody.style.display = 'none';
+        if (toolbar) toolbar.style.display = 'none';
+        if (azRail) azRail.style.display = 'none';
+        if (elements.songsGrid) {
+          elements.songsGrid.classList.remove('m-hidden');
+          elements.songsGrid.style.display = '';
+        }
+        mobileUiState.detail = null;
+        mobileUiState.isSearching = false;
+        closeAllMobileSheets();
+        navigateTo(state.currentView === 'playlist' ? 'home' : (state.currentView || 'home'));
+      }
+      wasMobile = nowMobile;
+    }, 180);
+  });
+
+  if (isMobileOneUi()) {
+    renderMobileTab();
+  }
+}
+
 // --- BOOTSTRAP APP ---
 window.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -7083,6 +8764,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   initSettingsView();
   initAudioStudio();
   initGoogleAuth();
+  initMobileOneUi();
   setVolume(state.volume);
   updateRepeatUI();
   updateShuffleUI();
